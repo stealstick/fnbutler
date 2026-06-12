@@ -45,6 +45,12 @@ export interface BrokerTarget {
   report_id: string;
 }
 
+export interface BrokerTargetHistory extends BrokerTarget {
+  previous_target_price: number | null;
+  target_delta: number | null;
+  target_delta_pct: number | null;
+}
+
 export interface GrowthRow {
   metric: string;
   raw_label: string | null;
@@ -151,6 +157,47 @@ export function getBrokerHistory(corpCode: string): Array<BrokerTarget> {
        ORDER BY r.report_date DESC, b.name`,
     )
     .all(corpCode) as BrokerTarget[];
+}
+
+/** 증권사별 목표주가 전체 히스토리. 직전 리포트 대비 변화율을 같이 계산한다. */
+export function getBrokerTargetHistory(corpCode: string): BrokerTargetHistory[] {
+  return getDb()
+    .prepare(
+      `WITH report_rows AS (
+         SELECT
+           b.name AS broker,
+           b.research_url,
+           r.analyst,
+           r.report_date,
+           r.target_price,
+           r.target_price_change,
+           r.rating,
+           r.rating_change,
+           r.return_rate,
+           r.price_close,
+           r.ai_summary,
+           r.report_id,
+           LAG(r.target_price) OVER (
+             PARTITION BY r.broker_id
+             ORDER BY r.report_date, r.report_id
+           ) AS previous_target_price
+         FROM consensus_reports r
+         JOIN brokers b ON b.id = r.broker_id
+         WHERE r.corp_code = ?
+       )
+       SELECT *,
+              CASE
+                WHEN previous_target_price IS NOT NULL AND target_price IS NOT NULL
+                THEN target_price - previous_target_price
+              END AS target_delta,
+              CASE
+                WHEN previous_target_price IS NOT NULL AND previous_target_price != 0 AND target_price IS NOT NULL
+                THEN (target_price - previous_target_price) * 100.0 / previous_target_price
+              END AS target_delta_pct
+       FROM report_rows
+       ORDER BY report_date DESC, broker`,
+    )
+    .all(corpCode) as BrokerTargetHistory[];
 }
 
 /** 재무 (QoQ/YoY 포함). periodType: 'Q' 분기 | 'A' 연간. 실적+추정 모두. */

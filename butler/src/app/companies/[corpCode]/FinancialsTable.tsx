@@ -51,7 +51,7 @@ export default function FinancialsTable({
           </span>
         </span>
       </h2>
-      <div className="scrollx">
+      <div className="table-scroll financial-table">
         <table className="grid">
           <thead>
             <tr>

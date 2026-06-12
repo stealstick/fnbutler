@@ -86,11 +86,20 @@ header.topbar {
 /* ----- tables ----- */
 table.grid { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 table.grid th, table.grid td { padding: 9px 10px; text-align: right; border-bottom: 1px solid var(--border); white-space: nowrap; }
-table.grid th { color: var(--muted); font-weight: 600; font-size: 12px; background: var(--panel-2); position: sticky; top: 56px; z-index: 3; box-shadow: 0 1px 0 var(--border); }
+table.grid th { color: var(--muted); font-weight: 600; font-size: 12px; background: var(--panel-2); position: sticky; top: 0; z-index: 3; box-shadow: 0 1px 0 var(--border); }
 table.grid td.l, table.grid th.l { text-align: left; }
 table.grid tbody tr:hover { background: var(--panel-2); }
 table.grid td .y { display: block; font-size: 11px; color: var(--muted); }
 .scrollx { overflow-x: auto; }
+.table-scroll {
+  overflow: auto;
+  max-height: min(68vh, 620px);
+  border-top: 1px solid var(--border);
+}
+.target-table { max-height: 460px; }
+.history-table { max-height: 360px; }
+.changes-table { max-height: 420px; }
+.financial-table { max-height: 520px; }
 
 /* ----- company list ----- */
 .toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
@@ -124,6 +133,60 @@ table.grid td .y { display: block; font-size: 11px; color: var(--muted); }
 .tp-hero { display: flex; gap: 28px; align-items: center; flex-wrap: wrap; }
 .tp-hero .big { font-size: 30px; font-weight: 800; }
 .tp-hero .lbl { font-size: 11px; color: var(--muted); }
+
+.target-chart {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px 10px;
+}
+.chart-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+.chart-title { font-weight: 700; }
+.chart-legend {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: 12px;
+}
+.chart-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.chart-legend i {
+  display: inline-block;
+  width: 18px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--muted);
+}
+.chart-legend i.avg { background: var(--up); }
+.chart-legend i.price { background: var(--accent); }
+.chart-legend i.range { background: var(--muted); }
+.target-chart svg { width: 100%; height: auto; display: block; overflow: visible; }
+.grid-line { stroke: var(--border); stroke-width: 1; }
+.axis-text { fill: var(--muted); font: 11px var(--mono); }
+.range-line { stroke: var(--muted-2); stroke-width: 4; stroke-linecap: round; opacity: 0.8; }
+.avg-line, .price-line {
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.avg-line { stroke: var(--up); }
+.price-line { stroke: var(--accent); }
+.current-line {
+  stroke: var(--text);
+  stroke-width: 1;
+  stroke-dasharray: 4 5;
+  opacity: 0.45;
+}
+.avg-dot { fill: var(--up); stroke: var(--panel-2); stroke-width: 2; }
+.price-dot { fill: var(--accent); stroke: var(--panel-2); stroke-width: 2; }
+.chart-summary { color: var(--muted); font-size: 12px; margin-top: 2px; text-align: right; }
 
 .toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
 .toggle button { background: transparent; border: none; color: var(--muted); padding: 6px 14px; cursor: pointer; font-size: 13px; }

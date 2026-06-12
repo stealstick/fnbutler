@@ -4,16 +4,19 @@ import { cookies } from "next/headers";
 import {
   getCompany,
   getBrokerTargets,
+  getBrokerTargetHistory,
   getFinancials,
   getValuationSeries,
   getChanges,
+  getTargetMonthly,
   isWatched,
 } from "@/lib/repo";
 import { getSessionUser, SESSION_COOKIE } from "@/lib/auth";
-import { won, num, pct, signClass, ratingChangeBadge } from "@/lib/format";
+import { won, num, pct, signClass } from "@/lib/format";
 import FinancialsTable from "./FinancialsTable";
 import RefreshButton from "./RefreshButton";
 import WatchStar from "@/components/WatchStar";
+import TargetPricePanel from "./TargetPricePanel";
 
 export const dynamic = "force-dynamic";
 
@@ -30,12 +33,12 @@ export default async function CompanyPage({
   const watched = user ? isWatched(user.id, corpCode) : false;
 
   const brokers = getBrokerTargets(corpCode);
+  const brokerHistory = getBrokerTargetHistory(corpCode);
+  const targetMonthly = getTargetMonthly(corpCode);
   const quarterly = getFinancials(corpCode, "Q");
   const annual = getFinancials(corpCode, "A");
   const valuations = getValuationSeries(corpCode);
   const changes = getChanges(corpCode, 40);
-
-  const maxTarget = Math.max(1, ...brokers.map((b) => b.target_price ?? 0));
 
   return (
     <>
@@ -88,105 +91,15 @@ export default async function CompanyPage({
         </div>
       </div>
 
-      {/* ---------- 목표주가 / 증권사별 비교 ---------- */}
-      <div className="panel">
-        <h2>
-          증권사별 목표주가
-          <span className="sub">각 증권사가 제시한 목표주가를 한눈에 비교 (최신 리포트 기준)</span>
-        </h2>
-
-        {company.target_price_avg ? (
-          <div className="tp-hero" style={{ marginBottom: 16 }}>
-            <div>
-              <div className="lbl">평균 목표주가</div>
-              <div className="big mono">{num(company.target_price_avg)}</div>
-            </div>
-            <div>
-              <div className="lbl">현재가</div>
-              <div className="big mono">{num(company.price)}</div>
-            </div>
-            <div>
-              <div className="lbl">평균 상승여력</div>
-              <div className={"big mono " + signClass(company.target_return_rate)}>
-                {pct(company.target_return_rate)}
-              </div>
-            </div>
-            <div>
-              <div className="lbl">커버 증권사</div>
-              <div className="big mono">{company.cover_securities ?? brokers.length}곳</div>
-            </div>
-          </div>
-        ) : null}
-
-        {brokers.length === 0 ? (
-          <div className="empty">
-            아직 수집된 컨센서스 리포트가 없습니다. “최신 새로고침”을 눌러 butler 에서 가져오세요.
-          </div>
-        ) : (
-          <div className="scrollx">
-            <table className="grid">
-              <thead>
-                <tr>
-                  <th className="l">증권사</th>
-                  <th className="l">애널리스트</th>
-                  <th>리포트일</th>
-                  <th className="l">투자의견</th>
-                  <th>목표주가</th>
-                  <th className="l">목표가 (상대)</th>
-                  <th>변경</th>
-                  <th>상승여력</th>
-                </tr>
-              </thead>
-              <tbody>
-                {brokers.map((b) => {
-                  const badge = ratingChangeBadge(b.target_price_change);
-                  const isBuy = (b.rating ?? "").match(/BUY|매수|Buy/);
-                  return (
-                    <tr key={b.report_id}>
-                      <td className="l">
-                        {b.research_url ? (
-                          <a href={b.research_url} target="_blank" rel="noreferrer">
-                            <strong>{b.broker}</strong>
-                          </a>
-                        ) : (
-                          <strong>{b.broker}</strong>
-                        )}
-                        {b.ai_summary && (
-                          <details className="ai">
-                            <summary>AI 요약</summary>
-                            <div className="body">{b.ai_summary}</div>
-                          </details>
-                        )}
-                      </td>
-                      <td className="l muted">{b.analyst || "-"}</td>
-                      <td className="mono muted">{b.report_date}</td>
-                      <td className="l">
-                        <span className={"pill " + (isBuy ? "buy" : "")}>{b.rating || "-"}</span>
-                      </td>
-                      <td className="mono">
-                        <strong>{num(b.target_price)}</strong>
-                      </td>
-                      <td className="l">
-                        <div className="bar">
-                          <span style={{ width: `${((b.target_price ?? 0) / maxTarget) * 100}%` }} />
-                        </div>
-                      </td>
-                      <td>
-                        <span className={"pill " + badge.kind}>{badge.label}</span>
-                      </td>
-                      <td className={"mono " + signClass(b.return_rate)}>{pct(b.return_rate)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-        <p className="note">
-          목표주가·투자의견은 증권사 리포트 발간 시점 기준이며 butler 가 수집·정규화합니다. AI 요약은
-          butler 생성 요약입니다.
-        </p>
-      </div>
+      <TargetPricePanel
+        brokers={brokers}
+        history={brokerHistory}
+        monthly={targetMonthly}
+        currentPrice={company.price}
+        averageTarget={company.target_price_avg}
+        averageReturn={company.target_return_rate}
+        coverCount={company.cover_securities}
+      />
 
       {/* ---------- 실적 추이 (분기/연간 + QoQ/YoY) ---------- */}
       <FinancialsTable
@@ -204,7 +117,7 @@ export default async function CompanyPage({
         {changes.length === 0 ? (
           <div className="empty">기록된 변경이 없습니다.</div>
         ) : (
-          <div className="scrollx">
+          <div className="table-scroll changes-table">
             <table className="grid">
               <thead>
                 <tr>
@@ -214,7 +127,7 @@ export default async function CompanyPage({
                   <th>이후</th>
                   <th>변화</th>
                   <th className="l">메모</th>
-                  <th>시각</th>
+                  <th>수집일</th>
                 </tr>
               </thead>
               <tbody>
