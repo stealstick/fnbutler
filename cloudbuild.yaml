@@ -44,7 +44,7 @@ steps:
       - --max-instances
       - "1"
       - --set-env-vars
-      - BUTLER_DB_PATH=/app/db/butler.db,BUTLER_BASE_URL=https://fnbutler-765232817913.asia-northeast3.run.app
+      - BUTLER_DB_PATH=/app/db/butler.db,BUTLER_BASE_URL=https://fnbutler-l3why3suea-du.a.run.app
 
 images:
   - asia-northeast3-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/fnbutler:$BUILD_ID
