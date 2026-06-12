@@ -1,0 +1,35 @@
+{
+  "name": "butler",
+  "version": "0.1.0",
+  "private": true,
+  "description": "butler.works 목표주가/컨센서스 데이터 프록시 + 자체 SQLite 정규화 DB + 기업/증권사 비교 뷰",
+  "scripts": {
+    "dev": "next dev -p 3939",
+    "build": "next build",
+    "start": "next start -p 3939",
+    "lint": "next lint",
+    "db:init": "tsx scripts/init-db.ts",
+    "ingest:companies": "tsx scripts/ingest.ts --companies",
+    "ingest:seed": "tsx scripts/ingest.ts --companies --detail --limit 40",
+    "ingest:detail": "tsx scripts/ingest.ts --detail",
+    "ingest:all": "tsx scripts/ingest.ts --companies --detail --all",
+    "backfill:sectors": "tsx scripts/backfill-sectors.ts",
+    "import:har": "tsx scripts/import-har.ts",
+    "poll": "tsx scripts/poll-daily.ts",
+    "poll:watchlist": "tsx scripts/poll-daily.ts --scope watchlist"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "next": "15.1.6",
+    "react": "19.0.0",
+    "react-dom": "19.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^20.17.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}

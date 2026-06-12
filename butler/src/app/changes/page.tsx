@@ -1,0 +1,123 @@
+import Link from "next/link";
+import { getRecentChanges, getStats } from "@/lib/repo";
+import { pct } from "@/lib/format";
+
+export const dynamic = "force-dynamic";
+
+const FILTERS = [
+  { k: "", label: "전체" },
+  { k: "target_price", label: "목표주가" },
+  { k: "consensus_avg", label: "평균목표가" },
+  { k: "financial", label: "실적 QoQ/YoY" },
+];
+
+export default async function ChangesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ type?: string }>;
+}) {
+  const { type } = await searchParams;
+  const changes = getRecentChanges(150, type || undefined) as Array<
+    Awaited<ReturnType<typeof getRecentChanges>>[number] & { corp_name?: string }
+  >;
+  const stats = getStats();
+
+  return (
+    <>
+      <div className="panel">
+        <h2>
+          변경 이력 <span className="sub">butler 재수집 시 자동 감지된 변경 (source: butler)</span>
+        </h2>
+        <div className="stat-row" style={{ marginBottom: 16 }}>
+          <S n={stats.companies} l="수집 기업" />
+          <S n={stats.withConsensus} l="컨센서스 보유" />
+          <S n={stats.reports} l="리포트" />
+          <S n={stats.changes} l="변경 로그" />
+          <S n={stats.brokers} l="증권사" />
+        </div>
+        <div className="toolbar">
+          {FILTERS.map((f) => (
+            <Link
+              key={f.k}
+              href={f.k ? `/changes?type=${f.k}` : "/changes"}
+              className={"btn ghost" + ((type || "") === f.k ? " " : "")}
+              style={(type || "") === f.k ? { borderColor: "var(--accent)", color: "var(--text)" } : {}}
+            >
+              {f.label}
+            </Link>
+          ))}
+        </div>
+
+        <div className="scrollx">
+          <table className="grid">
+            <thead>
+              <tr>
+                <th className="l">기업</th>
+                <th className="l">구분</th>
+                <th className="l">대상</th>
+                <th>이전</th>
+                <th>이후</th>
+                <th>변화</th>
+                <th className="l">메모</th>
+                <th>시각</th>
+              </tr>
+            </thead>
+            <tbody>
+              {changes.map((c) => (
+                <tr key={c.id}>
+                  <td className="l">
+                    <Link href={`/companies/${c.corp_code}`}>
+                      <strong>{c.corp_name ?? c.corp_code}</strong>
+                    </Link>
+                  </td>
+                  <td className="l">
+                    <span className="pill">{labelEntity(c.entity_type)}</span>
+                  </td>
+                  <td className="l">{c.entity_key || c.field || "-"}</td>
+                  <td className="mono muted">{c.old_value ?? "-"}</td>
+                  <td className="mono">{c.new_value ?? "-"}</td>
+                  <td className={"mono " + kindClass(c.change_kind)}>
+                    {c.delta_pct != null ? pct(c.delta_pct) : c.change_kind === "new" ? "신규" : "-"}
+                  </td>
+                  <td className="l muted" style={{ whiteSpace: "normal", maxWidth: 360 }}>
+                    {c.note || "-"}
+                  </td>
+                  <td className="mono muted">{c.observed_at.slice(0, 10)}</td>
+                </tr>
+              ))}
+              {changes.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="empty">
+                    변경 로그가 없습니다.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function S({ n, l }: { n: number; l: string }) {
+  return (
+    <div className="s">
+      <div className="n mono">{n.toLocaleString()}</div>
+      <div className="l">{l}</div>
+    </div>
+  );
+}
+function labelEntity(t: string) {
+  return (
+    { target_price: "목표주가", consensus_avg: "평균목표가", financial: "실적", report: "리포트" } as Record<
+      string,
+      string
+    >
+  )[t] ?? t;
+}
+function kindClass(k: string | null) {
+  if (k === "up" || k === "yoy") return "up";
+  if (k === "down") return "down";
+  return "flat";
+}
