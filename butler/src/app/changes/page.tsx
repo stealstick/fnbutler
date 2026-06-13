@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getRecentChanges, getStats } from "@/lib/repo";
-import { pct } from "@/lib/format";
+import { pct, num } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -103,7 +103,7 @@ export default async function ChangesPage({
 function S({ n, l }: { n: number; l: string }) {
   return (
     <div className="s">
-      <div className="n mono">{n.toLocaleString()}</div>
+      <div className="n mono">{num(n)}</div>
       <div className="l">{l}</div>
     </div>
   );

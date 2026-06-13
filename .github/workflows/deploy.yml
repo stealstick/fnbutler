@@ -1,0 +1,59 @@
+name: deploy butler.view
+
+# main 에 push 되면 자동으로 Cloud Run(fnbutler) 에 배포한다.
+# 데이터(butler.db)는 GCS 버킷에서 받아 이미지에 굽는다(일일 폴링이 GCS 를 갱신).
+on:
+  push:
+    branches: [main]
+    paths:
+      - "butler/**"
+      - "cloudbuild.yaml"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch: {} # 수동 실행도 허용
+
+env:
+  PROJECT: protein-test-469413
+  REGION: asia-northeast3
+  SERVICE: fnbutler
+  DB_BUCKET: protein-test-469413-fnbutler
+  URL: https://fnbutler-l3why3suea-du.a.run.app
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Pull production DB from GCS
+        run: |
+          mkdir -p butler/db
+          gcloud storage cp "gs://${DB_BUCKET}/butler.db" butler/db/butler.db
+          ls -lh butler/db/butler.db
+
+      - name: Build & push image
+        run: |
+          IMG="${REGION}-docker.pkg.dev/${PROJECT}/cloud-run-source-deploy/${SERVICE}:${GITHUB_SHA::12}"
+          echo "IMG=$IMG" >> "$GITHUB_ENV"
+          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+          docker build -t "$IMG" butler
+          docker push "$IMG"
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy "$SERVICE" \
+            --image "$IMG" --project "$PROJECT" --region "$REGION" \
+            --allow-unauthenticated --memory 1Gi --cpu 1 \
+            --min-instances 0 --max-instances 1 --port 8080 \
+            --set-env-vars "BUTLER_DB_PATH=/app/db/butler.db,BUTLER_BASE_URL=${URL}"
+
+      - name: Verify
+        run: |
+          sleep 5
+          curl -s -m 25 "${URL}/api/stats" | head -c 300 || true

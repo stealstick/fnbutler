@@ -1,4 +1,6 @@
-/** 숫자/라벨 포맷 유틸 (한국식 억/조 단위). 서버·클라이언트 공용. */
+/** 숫자/라벨 포맷 유틸 (한국식 억/조 단위). 서버·클라이언트 공용.
+ *  로케일을 'en-US' 로 고정 → SSR(Node)/CSR(브라우저) 결과가 동일해 hydration 불일치 방지. */
+const LC = "en-US";
 
 /** 원 단위 정수를 '조/억' 한글 단위로. 예: 21552634000000 → '21조 5,526억' */
 export function won(v: number | null | undefined, digits = 0): string {
@@ -9,22 +11,22 @@ export function won(v: number | null | undefined, digits = 0): string {
   n -= jo * 1_0000_0000_0000;
   const eok = n / 1_0000_0000;
   const parts: string[] = [];
-  if (jo > 0) parts.push(`${jo.toLocaleString()}조`);
+  if (jo > 0) parts.push(`${jo.toLocaleString(LC)}조`);
   if (eok >= 1 || jo === 0)
-    parts.push(`${eok.toLocaleString(undefined, { maximumFractionDigits: jo > 0 ? 0 : digits })}억`);
+    parts.push(`${eok.toLocaleString(LC, { maximumFractionDigits: jo > 0 ? 0 : digits })}억`);
   return (neg ? "-" : "") + parts.join(" ");
 }
 
 /** 천단위 콤마. */
 export function num(v: number | null | undefined, digits = 0): string {
   if (v == null || Number.isNaN(v)) return "-";
-  return v.toLocaleString(undefined, { maximumFractionDigits: digits });
+  return v.toLocaleString(LC, { maximumFractionDigits: digits });
 }
 
 /** 퍼센트(부호 포함). */
 export function pct(v: number | null | undefined, digits = 1): string {
   if (v == null || Number.isNaN(v)) return "-";
-  const s = v.toLocaleString(undefined, {
+  const s = v.toLocaleString(LC, {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
   });

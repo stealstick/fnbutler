@@ -121,7 +121,7 @@ export default async function Dashboard() {
 function Stat({ n, l }: { n: number; l: string }) {
   return (
     <div className="s">
-      <div className="n mono">{n.toLocaleString()}</div>
+      <div className="n mono">{num(n)}</div>
       <div className="l">{l}</div>
     </div>
   );

@@ -38,6 +38,11 @@ type MonthlyTarget = {
   cover_securities: number | null;
 };
 
+type BrokerSeries = {
+  name: string;
+  points: { date: string; value: number }[]; // 발간일 오름차순
+};
+
 export default function TargetPricePanel({
   brokers,
   history,
@@ -56,12 +61,15 @@ export default function TargetPricePanel({
   coverCount: number | null;
 }) {
   const [query, setQuery] = useState("");
+  const [selectedBroker, setSelectedBroker] = useState<string | null>(null);
   const q = query.trim().toLowerCase();
+
   const latestChangeByBroker = useMemo(() => {
     const m = new Map<string, BrokerTargetHistory>();
     for (const row of history) if (!m.has(row.broker)) m.set(row.broker, row);
     return m;
   }, [history]);
+
   const filteredBrokers = useMemo(
     () =>
       brokers.filter((b) => {
@@ -78,6 +86,16 @@ export default function TargetPricePanel({
       }),
     [history, q],
   );
+
+  // 선택한 증권사의 발간일 오름차순 목표가 시계열 (차트 오버레이용)
+  const brokerSeries: BrokerSeries | null = useMemo(() => {
+    if (!selectedBroker) return null;
+    const pts = history
+      .filter((h) => h.broker === selectedBroker && h.target_price != null)
+      .map((h) => ({ date: h.report_date, value: h.target_price as number }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+    return pts.length ? { name: selectedBroker, points: pts } : null;
+  }, [selectedBroker, history]);
 
   const maxTarget = Math.max(1, ...brokers.map((b) => b.target_price ?? 0));
 
@@ -110,7 +128,13 @@ export default function TargetPricePanel({
       ) : null}
 
       {monthly.length ? (
-        <TargetChart rows={monthly} currentPrice={currentPrice} averageTarget={averageTarget} />
+        <TargetChart
+          rows={monthly}
+          currentPrice={currentPrice}
+          averageTarget={averageTarget}
+          brokerSeries={brokerSeries}
+          onClearBroker={() => setSelectedBroker(null)}
+        />
       ) : null}
 
       <div className="toolbar" style={{ marginTop: 16 }}>
@@ -122,7 +146,14 @@ export default function TargetPricePanel({
           onInput={(e) => setQuery(e.currentTarget.value)}
         />
         <span className="muted">
-          최신 {filteredBrokers.length}/{brokers.length}곳 · 히스토리 {filteredHistory.length}건
+          {selectedBroker ? (
+            <>
+              <b style={{ color: "var(--broker)" }}>{selectedBroker}</b> 추이 표시 중 ·{" "}
+              <button className="linkbtn" onClick={() => setSelectedBroker(null)}>해제</button>
+            </>
+          ) : (
+            <>행을 클릭하면 해당 증권사 목표주가 추이가 차트에 겹쳐집니다</>
+          )}
         </span>
       </div>
 
@@ -151,18 +182,32 @@ export default function TargetPricePanel({
                 const badge = ratingChangeBadge(b.target_price_change);
                 const isBuy = (b.rating ?? "").match(/BUY|매수|Buy/);
                 const latestChange = latestChangeByBroker.get(b.broker);
+                const selected = selectedBroker === b.broker;
+                const reportCount = history.filter((h) => h.broker === b.broker).length;
                 return (
-                  <tr key={b.report_id}>
+                  <tr
+                    key={b.report_id}
+                    className={"rowlink" + (selected ? " selected" : "")}
+                    onClick={() => setSelectedBroker(selected ? null : b.broker)}
+                    title={`${b.broker} 목표주가 추이 ${selected ? "숨기기" : "차트에 표시"} (리포트 ${reportCount}건)`}
+                  >
                     <td className="l">
+                      <span className="brokmark" aria-hidden style={{ opacity: selected ? 1 : 0 }} />
                       {b.research_url ? (
-                        <a href={b.research_url} target="_blank" rel="noreferrer">
+                        <a
+                          href={b.research_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <strong>{b.broker}</strong>
                         </a>
                       ) : (
                         <strong>{b.broker}</strong>
                       )}
+                      {reportCount > 1 ? <span className="hist-badge">{reportCount}</span> : null}
                       {b.ai_summary && (
-                        <details className="ai">
+                        <details className="ai" onClick={(e) => e.stopPropagation()}>
                           <summary>AI 요약</summary>
                           <div className="body">{b.ai_summary}</div>
                         </details>
@@ -199,7 +244,10 @@ export default function TargetPricePanel({
       {history.length ? (
         <>
           <h2 style={{ marginTop: 18 }}>
-            목표주가 히스토리 <span className="sub">리포트 발간일 기준, 직전 리포트 대비 변화율</span>
+            목표주가 히스토리{" "}
+            <span className="sub">
+              리포트 발간일 기준, 직전 리포트 대비 변화율{selectedBroker ? ` · ${selectedBroker} 강조` : ""}
+            </span>
           </h2>
           <div className="table-scroll history-table">
             <table className="grid">
@@ -216,7 +264,13 @@ export default function TargetPricePanel({
               </thead>
               <tbody>
                 {filteredHistory.map((h) => (
-                  <tr key={h.report_id}>
+                  <tr
+                    key={h.report_id}
+                    className={
+                      "rowlink" + (selectedBroker === h.broker ? " selected" : "")
+                    }
+                    onClick={() => setSelectedBroker(selectedBroker === h.broker ? null : h.broker)}
+                  >
                     <td className="mono muted">{h.report_date}</td>
                     <td className="l">{h.broker}</td>
                     <td className="l muted">{h.analyst || "-"}</td>
@@ -246,15 +300,47 @@ function TargetChart({
   rows,
   currentPrice,
   averageTarget,
+  brokerSeries,
+  onClearBroker,
 }: {
   rows: MonthlyTarget[];
   currentPrice: number | null;
   averageTarget: number | null;
+  brokerSeries: BrokerSeries | null;
+  onClearBroker: () => void;
 }) {
-  const chartRows = rows.filter((r) => r.price != null || r.tp_avg != null || r.tp_max != null || r.tp_min != null);
+  const chartRows = rows.filter(
+    (r) => r.price != null || r.tp_avg != null || r.tp_max != null || r.tp_min != null,
+  );
+
+  // 'YY.MM' → 'YYYY-MM' (오버레이 정렬용)
+  const monthKey = (m: string) => "20" + m.replace(".", "-");
+
+  // 선택 증권사 목표가를 각 차트 월에 carry-forward (해당 월까지의 최신 목표가)
+  const brokerByMonth = useMemo(() => {
+    if (!brokerSeries) return null;
+    return chartRows.map((r) => {
+      const mk = monthKey(r.month);
+      let carried: number | null = null;
+      let isNew = false;
+      for (const p of brokerSeries.points) {
+        const pm = p.date.slice(0, 7);
+        if (pm <= mk) {
+          carried = p.value;
+          isNew = pm === mk; // 그 달에 새 리포트가 나왔나
+        } else break;
+      }
+      return { value: carried, isNew };
+    });
+  }, [brokerSeries, chartRows]);
+
   if (chartRows.length === 0) return null;
-  const values = chartRows.flatMap((r) => [r.price, r.tp_avg, r.tp_max, r.tp_min]).filter((v): v is number => v != null);
+  const values = chartRows
+    .flatMap((r) => [r.price, r.tp_avg, r.tp_max, r.tp_min])
+    .filter((v): v is number => v != null);
+  if (brokerByMonth) values.push(...brokerByMonth.map((b) => b.value).filter((v): v is number => v != null));
   if (values.length === 0) return null;
+
   const min = Math.min(...values) * 0.92;
   const max = Math.max(...values) * 1.04;
   const width = 920;
@@ -268,6 +354,9 @@ function TargetChart({
       .map((r, i) => (typeof r[key] === "number" ? `${x(i)},${y(r[key] as number)}` : ""))
       .filter(Boolean)
       .join(" ");
+  const brokerLinePts = brokerByMonth
+    ? brokerByMonth.map((b, i) => (b.value != null ? `${x(i)},${y(b.value)}` : "")).filter(Boolean).join(" ")
+    : "";
   const last = chartRows[chartRows.length - 1];
 
   return (
@@ -275,12 +364,19 @@ function TargetChart({
       <div className="chart-head">
         <div>
           <div className="chart-title">월별 목표주가 추이</div>
-          <div className="muted">평균 목표가, 고저 범위, 월말 주가</div>
+          <div className="muted">평균 목표가, 고저 범위, 월말 주가{brokerSeries ? ` · ${brokerSeries.name} 추이 겹침` : ""}</div>
         </div>
         <div className="chart-legend">
           <span><i className="avg" />평균 목표</span>
           <span><i className="price" />주가</span>
           <span><i className="range" />고저 범위</span>
+          {brokerSeries ? (
+            <span className="brk">
+              <i className="broker" />
+              {brokerSeries.name}
+              <button className="linkbtn" onClick={onClearBroker} style={{ marginLeft: 4 }}>✕</button>
+            </span>
+          ) : null}
         </div>
       </div>
       <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="월별 목표주가 차트">
@@ -303,6 +399,7 @@ function TargetChart({
         )}
         <polyline points={line("tp_avg")} className="avg-line" />
         <polyline points={line("price")} className="price-line" />
+        {brokerLinePts ? <polyline points={brokerLinePts} className="broker-line" /> : null}
         {currentPrice != null ? (
           <line x1={pad.left} x2={width - pad.right} y1={y(currentPrice)} y2={y(currentPrice)} className="current-line" />
         ) : null}
@@ -310,6 +407,14 @@ function TargetChart({
           <g key={`${r.month}-dot`}>
             {r.tp_avg != null ? <circle cx={x(i)} cy={y(r.tp_avg)} r="3.5" className="avg-dot" /> : null}
             {r.price != null ? <circle cx={x(i)} cy={y(r.price)} r="3" className="price-dot" /> : null}
+            {brokerByMonth && brokerByMonth[i].value != null ? (
+              <circle
+                cx={x(i)}
+                cy={y(brokerByMonth[i].value as number)}
+                r={brokerByMonth[i].isNew ? 4.5 : 3}
+                className={"broker-dot" + (brokerByMonth[i].isNew ? " new" : "")}
+              />
+            ) : null}
             <text x={x(i)} y={height - 10} textAnchor="middle" className="axis-text">
               {r.month}
             </text>
@@ -317,8 +422,17 @@ function TargetChart({
         ))}
       </svg>
       <div className="chart-summary">
-        최신 {last.full_date ?? last.month} · 평균 목표 {num(last.tp_avg ?? averageTarget)} · 현재/월말 주가{" "}
-        {num(currentPrice ?? last.price)}
+        {brokerSeries && brokerByMonth ? (
+          <>
+            {brokerSeries.name} 최신 목표 {num([...brokerByMonth].reverse().find((b) => b.value != null)?.value ?? null)} ·{" "}
+            평균 목표 {num(last.tp_avg ?? averageTarget)} · 주가 {num(currentPrice ?? last.price)}
+          </>
+        ) : (
+          <>
+            최신 {last.full_date ?? last.month} · 평균 목표 {num(last.tp_avg ?? averageTarget)} · 현재/월말 주가{" "}
+            {num(currentPrice ?? last.price)}
+          </>
+        )}
       </div>
     </div>
   );
