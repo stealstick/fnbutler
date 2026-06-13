@@ -127,7 +127,7 @@ export default async function CompanyPage({
                   <th>이후</th>
                   <th>변화</th>
                   <th className="l">메모</th>
-                  <th>수집일</th>
+                  <th>발생일</th>
                 </tr>
               </thead>
               <tbody>
@@ -149,7 +149,7 @@ export default async function CompanyPage({
                     <td className="l muted" style={{ whiteSpace: "normal", maxWidth: 360 }}>
                       {c.note || "-"}
                     </td>
-                    <td className="mono muted">{c.observed_at.slice(0, 10)}</td>
+                    <td className="mono muted">{(c.occurred_at ?? c.observed_at).slice(0, 10)}</td>
                   </tr>
                 ))}
               </tbody>

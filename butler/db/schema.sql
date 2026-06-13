@@ -165,10 +165,11 @@ CREATE TABLE IF NOT EXISTS change_logs (
     change_kind TEXT,
     note        TEXT,
     source      TEXT NOT NULL DEFAULT 'butler',
-    observed_at TEXT NOT NULL
+    occurred_at TEXT,                                -- 실제 발생일(리포트일/분기말) — 원본 기준
+    observed_at TEXT NOT NULL                         -- 우리가 수집/감지한 시각
 );
-CREATE INDEX IF NOT EXISTS idx_changes_corp ON change_logs(corp_code, observed_at DESC);
-CREATE INDEX IF NOT EXISTS idx_changes_type ON change_logs(entity_type, observed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_changes_corp ON change_logs(corp_code, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_changes_type ON change_logs(entity_type, occurred_at DESC);
 
 -- ----------------------------------------------------------------------------
 -- 수집 실행 로그 — 멱등 재실행 추적

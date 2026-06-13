@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { listSectorAggs } from "@/lib/repo";
 import { won, num, pct, signClass } from "@/lib/format";
+import InfoTip from "@/components/InfoTip";
+
+const UPSIDE_TIP =
+  "상승여력 = 섹터 내 컨센서스 보유 기업들의 (평균 목표주가 ÷ 현재가 − 1) 평균. 애널리스트 목표주가까지의 기대 상승률(괴리율).";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +27,7 @@ export default function SectorsPage() {
               <th>시가총액 합</th>
               <th>평균 PER</th>
               <th>평균 PBR</th>
-              <th>평균 상승여력</th>
+              <th>평균 상승여력<InfoTip text={UPSIDE_TIP} /></th>
               <th className="l">상승여력 분포</th>
             </tr>
           </thead>

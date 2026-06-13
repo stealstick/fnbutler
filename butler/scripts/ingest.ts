@@ -33,6 +33,7 @@ async function main() {
   if (has("detail")) {
     const corp = arg("corp");
     const limit = Number(arg("limit") || (has("all") ? "0" : "40"));
+    const feedPages = Number(arg("feed-pages") || "6"); // 과거 리포트 깊이 (페이지×15건)
     const onlyConsensus = has("only-consensus");
 
     let targets: string[];
@@ -56,7 +57,7 @@ async function main() {
     for (const cc of targets) {
       i++;
       try {
-        const r = await ingestDetail(db, cc);
+        const r = await ingestDetail(db, cc, { feedPages });
         totalChanges += r.changes;
         process.stdout.write(
           `   [${i}/${targets.length}] ${cc}  리포트 +${r.reports}  분기 ${r.quarters}  변경 +${r.changes}\n`,

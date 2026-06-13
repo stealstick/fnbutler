@@ -56,15 +56,17 @@ interface ChangeRow {
   delta_pct?: number | null;
   change_kind?: string;
   note?: string;
+  occurred_at?: string; // 실제 발생일 (리포트일/분기말). 없으면 관측일.
 }
 
-function logChange(db: Database.Database, c: ChangeRow) {
+export function logChange(db: Database.Database, c: ChangeRow) {
+  const observed = nowIso();
   db.prepare(
     `INSERT INTO change_logs
        (corp_code, entity_type, entity_key, field, old_value, new_value,
-        delta, delta_pct, change_kind, note, source, observed_at)
+        delta, delta_pct, change_kind, note, source, occurred_at, observed_at)
      VALUES (@corp_code, @entity_type, @entity_key, @field, @old_value, @new_value,
-        @delta, @delta_pct, @change_kind, @note, 'butler', @observed_at)`,
+        @delta, @delta_pct, @change_kind, @note, 'butler', @occurred_at, @observed_at)`,
   ).run({
     entity_key: c.entity_key ?? null,
     field: c.field ?? null,
@@ -76,8 +78,16 @@ function logChange(db: Database.Database, c: ChangeRow) {
     entity_type: c.entity_type,
     old_value: c.old_value == null ? null : String(c.old_value),
     new_value: c.new_value == null ? null : String(c.new_value),
-    observed_at: nowIso(),
+    occurred_at: c.occurred_at ?? observed.slice(0, 10),
+    observed_at: observed,
   });
+}
+
+/** 분기/연도 → 분기말 날짜 (실적 변경의 발생일). quarter 0 = 연간. */
+export function periodEndDate(year: number, quarter: number): string {
+  if (!quarter) return `${year}-12-31`;
+  const md = ["03-31", "06-30", "09-30", "12-31"][quarter - 1] ?? "12-31";
+  return `${year}-${md}`;
 }
 
 function getBrokerId(db: Database.Database, name: string, url?: string): number {
@@ -457,6 +467,7 @@ export function upsertFinancials(
       delta_pct: row.yoy_pct ?? row.qoq_pct,
       change_kind: row.yoy_pct != null ? "yoy" : "qoq",
       note: `QoQ ${row.qoq_pct ?? "-"}% / YoY ${row.yoy_pct ?? "-"}%`,
+      occurred_at: periodEndDate(row.fiscal_year, row.quarter),
     });
     logged++;
   }
@@ -579,6 +590,7 @@ export function writeConsensusReports(
           delta_pct: oldTp ? (delta / oldTp) * 100 : null,
           change_kind: delta > 0 ? "up" : "down",
           note: `${v.securitiesCompany} 목표주가 ${v.targetPriceChange ?? ""} (${v.analyst ?? ""})`,
+          occurred_at: date, // 리포트 발행일 = 실제 목표가 수정일
         });
       } else if (newTp != null && oldTp == null) {
         logChange(db, {
@@ -589,6 +601,7 @@ export function writeConsensusReports(
           new_value: newTp,
           change_kind: "new",
           note: `${v.securitiesCompany} 신규 커버리지 (${v.analyst ?? ""})`,
+          occurred_at: date,
         });
       }
     });

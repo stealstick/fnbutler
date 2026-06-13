@@ -43,6 +43,15 @@ export function migrate(db = getDb()): void {
     if (!cols.has("sector_code")) db.exec("ALTER TABLE companies ADD COLUMN sector_code TEXT");
     if (!cols.has("sector_name")) db.exec("ALTER TABLE companies ADD COLUMN sector_name TEXT");
   }
+  // change_logs.occurred_at (실제 발생일) 추가
+  const clCols = new Set(
+    (db.prepare("PRAGMA table_info(change_logs)").all() as Array<{ name: string }>).map((c) => c.name),
+  );
+  if (clCols.size > 0 && !clCols.has("occurred_at")) {
+    db.exec("ALTER TABLE change_logs ADD COLUMN occurred_at TEXT");
+    // 기존 행은 발생일을 모르므로 일단 관측시각 날짜로 채움(백필 스크립트가 재생성)
+    db.exec("UPDATE change_logs SET occurred_at = substr(observed_at,1,10) WHERE occurred_at IS NULL");
+  }
   const sql = readFileSync(SCHEMA_PATH, "utf8");
   db.exec(sql);
 }

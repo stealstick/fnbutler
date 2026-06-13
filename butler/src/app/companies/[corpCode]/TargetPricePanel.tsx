@@ -2,6 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { num, pct, ratingChangeBadge, signClass } from "@/lib/format";
+import InfoTip from "@/components/InfoTip";
+
+const UPSIDE_TIP =
+  "상승여력 = 증권사 컨센서스 평균 목표주가 ÷ 현재가 − 1. 애널리스트들이 제시한 목표주가까지의 기대 상승률(괴리율)입니다. 개별 행은 해당 증권사 목표주가 기준.";
 
 type BrokerTarget = {
   broker: string;
@@ -95,7 +99,7 @@ export default function TargetPricePanel({
             <div className="big mono">{num(currentPrice)}</div>
           </div>
           <div>
-            <div className="lbl">평균 상승여력</div>
+            <div className="lbl">평균 상승여력<InfoTip text={UPSIDE_TIP} /></div>
             <div className={"big mono " + signClass(averageReturn)}>{pct(averageReturn)}</div>
           </div>
           <div>
@@ -139,7 +143,7 @@ export default function TargetPricePanel({
                 <th>직전 대비</th>
                 <th className="l">목표가 (상대)</th>
                 <th>변경</th>
-                <th>상승여력</th>
+                <th>상승여력<InfoTip text={UPSIDE_TIP} /></th>
               </tr>
             </thead>
             <tbody>
@@ -207,7 +211,7 @@ export default function TargetPricePanel({
                   <th>직전</th>
                   <th>목표주가</th>
                   <th>변화</th>
-                  <th>상승여력</th>
+                  <th>상승여력<InfoTip text={UPSIDE_TIP} /></th>
                 </tr>
               </thead>
               <tbody>

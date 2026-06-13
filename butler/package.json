@@ -14,6 +14,7 @@
     "ingest:detail": "tsx scripts/ingest.ts --detail",
     "ingest:all": "tsx scripts/ingest.ts --companies --detail --all",
     "backfill:sectors": "tsx scripts/backfill-sectors.ts",
+    "backfill:changes": "tsx scripts/backfill-changes.ts",
     "import:har": "tsx scripts/import-har.ts",
     "poll": "tsx scripts/poll-daily.ts",
     "poll:watchlist": "tsx scripts/poll-daily.ts --scope watchlist"

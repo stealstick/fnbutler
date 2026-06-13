@@ -76,7 +76,9 @@ export interface ChangeRow {
   delta_pct: number | null;
   change_kind: string | null;
   note: string | null;
+  occurred_at: string | null;
   observed_at: string;
+  corp_name?: string;
 }
 
 export function getCompany(corpCode: string): CompanyRow | undefined {
@@ -245,7 +247,8 @@ export function getTargetMonthly(corpCode: string): Array<{
 export function getChanges(corpCode: string, limit = 100): ChangeRow[] {
   return getDb()
     .prepare(
-      "SELECT * FROM change_logs WHERE corp_code = ? ORDER BY observed_at DESC, id DESC LIMIT ?",
+      `SELECT * FROM change_logs WHERE corp_code = ?
+       ORDER BY COALESCE(occurred_at, observed_at) DESC, id DESC LIMIT ?`,
     )
     .all(corpCode, limit) as ChangeRow[];
 }
@@ -257,7 +260,8 @@ export function getRecentChanges(limit = 100, entityType?: string): ChangeRow[] 
       .prepare(
         `SELECT c.*, co.name AS corp_name FROM change_logs c
          JOIN companies co ON co.corp_code = c.corp_code
-         WHERE c.entity_type = ? ORDER BY c.observed_at DESC, c.id DESC LIMIT ?`,
+         WHERE c.entity_type = ?
+         ORDER BY COALESCE(c.occurred_at, c.observed_at) DESC, c.id DESC LIMIT ?`,
       )
       .all(entityType, limit) as ChangeRow[];
   }
@@ -265,7 +269,7 @@ export function getRecentChanges(limit = 100, entityType?: string): ChangeRow[] 
     .prepare(
       `SELECT c.*, co.name AS corp_name FROM change_logs c
        JOIN companies co ON co.corp_code = c.corp_code
-       ORDER BY c.observed_at DESC, c.id DESC LIMIT ?`,
+       ORDER BY COALESCE(c.occurred_at, c.observed_at) DESC, c.id DESC LIMIT ?`,
     )
     .all(limit) as ChangeRow[];
 }
@@ -305,14 +309,15 @@ export function getSectorCompanies(code: string, sort = "market_cap"): CompanyRo
 
 /** 섹터 내 증권사별 목표가 상향/하향 카운트 (최근 N일). */
 export function getSectorMomentum(code: string, days = 90) {
-  const since = new Date(Date.now() - days * 86400_000).toISOString();
+  const since = new Date(Date.now() - days * 86400_000).toISOString().slice(0, 10);
   return getDb()
     .prepare(
       `SELECT
          SUM(CASE WHEN cl.change_kind='up' THEN 1 ELSE 0 END)   AS ups,
          SUM(CASE WHEN cl.change_kind='down' THEN 1 ELSE 0 END) AS downs
        FROM change_logs cl JOIN companies c ON c.corp_code = cl.corp_code
-       WHERE c.sector_code = ? AND cl.entity_type='target_price' AND cl.observed_at >= ?`,
+       WHERE c.sector_code = ? AND cl.entity_type='target_price'
+         AND COALESCE(cl.occurred_at, cl.observed_at) >= ?`,
     )
     .get(code, since) as { ups: number | null; downs: number | null };
 }

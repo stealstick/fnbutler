@@ -33,12 +33,20 @@ npm run ingest:seed
 # 4) 전종목 섹터(업종) 백필  (companies/{corpCode} 호출, ~30분, 멱등/재개가능)
 npm run backfill:sectors
 
+# 5) 변경이력을 원본 리포트일(발생일) 기준으로 재생성 — 과거까지 백필
+npm run backfill:changes
+
+# (선택) 컨센서스 기업 과거 리포트를 더 깊이 (피드 25페이지)
+npm run ingest:detail -- --only-consensus --feed-pages 25
+
 # (선택) 로그인 HAR 로 최신 재무(2024~2026) 백필
 npx tsx scripts/import-har.ts ~/Downloads/www.butler.works.har
 
-# 5) 개발 서버
+# 6) 개발 서버
 npm run dev            # → http://localhost:3939
 ```
+
+> 배포·이전은 [DEPLOYMENT.md](./DEPLOYMENT.md) 참고 (영속 디스크/도커/크론/호스팅).
 
 > 섹터 분류 규칙(src/lib/sectors.ts)을 바꾼 뒤엔 API 호출 없이 재분류만:
 > `npx tsx -e "import {getDb} from './src/lib/db';import {reclassifySectors} from './src/lib/ingest';reclassifySectors(getDb())"`
@@ -147,7 +155,9 @@ db/schema.sql                정규화 스키마 (아래)
 - `target_price_monthly` — 월별 목표가 min/avg/max 집계 스냅샷
 - `financials` — long-format 재무 (metric × year × quarter × period_type × is_estimate)
 - `valuations` — PER/PBR 분기 시계열
-- `change_logs` — 재수집 시 diff (목표가 상향/하향, QoQ/YoY, 신규 커버리지) — `observed_at` 날짜 포함
+- `change_logs` — 변경 이력 (목표가 상향/하향, QoQ/YoY, 신규 커버리지).
+  **`occurred_at`=실제 발생일(리포트 발행일/분기말, 원본 기준)** + `observed_at`=우리가 감지한 시각.
+  화면·정렬은 `occurred_at` 기준
 - `daily_snapshots` — 매일 폴링이 기록하는 기업별 핵심 지표(가격/평균목표가/PER/PBR) 일별 스냅샷
 - `users` / `sessions` / `watchlist` / `notifications` — 로그인·관심목록·알림(멱등 발송)
 - 뷰: `v_latest_broker_target`(증권사별 최신 목표가) · `v_financials_growth`(QoQ·YoY, window LAG) ·
@@ -165,7 +175,10 @@ db/schema.sql                정규화 스키마 (아래)
 ## 멱등성 / 변경 로깅
 
 - `consensus_reports.report_id`, `financials` 복합 PK 로 **같은 기간을 다시 수집해도 중복 없음**.
-- 재수집 때 직전 상태와 비교해 바뀐 것만 `change_logs` 에 기록:
-  - 증권사가 목표가를 바꾼 새 리포트 → `target_price` up/down (직전 리포트 대비 delta)
+- 재수집 때 직전 상태와 비교해 바뀐 것만 `change_logs` 에 기록(변경 있을 때만):
+  - 증권사가 목표가를 바꾼 새 리포트 → `target_price` up/down (직전 리포트 대비 delta), `occurred_at`=리포트 발행일
   - 평균 목표주가 변동 → `consensus_avg`
-  - 새 분기 실적 유입 → `financial` (QoQ/YoY %)
+  - 새 분기 실적 유입 → `financial` (QoQ/YoY %), `occurred_at`=분기말
+- **raw 보존**: `consensus_reports` 가 증권사 리포트 원본(불변)을 그대로 보관 → "어느 증권사가
+  언제 목표가를 얼마로 수정했는지"를 영구 추적. `change_logs` 는 그로부터 파생된 변경 타임라인.
+- `npm run backfill:changes` — 원본 리포트일 기준으로 과거 변경 타임라인 전체 재생성(멱등).

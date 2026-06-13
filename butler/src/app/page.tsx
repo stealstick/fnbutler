@@ -2,6 +2,7 @@ import Link from "next/link";
 import { listSectorAggs, getRecentChanges, getStats } from "@/lib/repo";
 import { butler } from "@/lib/butler";
 import { won, num, pct, signClass } from "@/lib/format";
+import InfoTip from "@/components/InfoTip";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -75,7 +76,8 @@ export default async function Dashboard() {
       {/* 섹터 상승여력 리본 */}
       <div className="panel">
         <h2>
-          섹터별 평균 상승여력{" "}
+          섹터별 평균 상승여력
+          <InfoTip text="상승여력 = 증권사 컨센서스 평균 목표주가 ÷ 현재가 − 1. 섹터 내 컨센서스 보유 기업 평균. 애널리스트 목표주가까지의 기대 상승률(괴리율)." />{" "}
           <span className="sub">컨센서스 평균 목표가 / 현재가 (커버 2개사 이상)</span>
           <Link href="/sectors" className="btn ghost" style={{ marginLeft: "auto", fontSize: 12 }}>
             섹터 전체 →
@@ -149,7 +151,7 @@ function MoverList({
               <span className={kind}>{c.new_value ? num(Number(c.new_value)) : "-"}</span>
             </td>
             <td className={"mono " + kind}>{c.delta_pct != null ? pct(c.delta_pct) : ""}</td>
-            <td className="mono muted" style={{ fontSize: 11 }}>{c.observed_at.slice(5, 10)}</td>
+            <td className="mono muted" style={{ fontSize: 11 }}>{(c.occurred_at ?? c.observed_at).slice(5, 10)}</td>
           </tr>
         ))}
       </tbody>
