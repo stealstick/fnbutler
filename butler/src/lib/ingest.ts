@@ -610,3 +610,126 @@ export function writeConsensusReports(
   }
   return inserted;
 }
+
+/* ---------------------------------------------------------------------------
+ * 3) 증분(incremental) + 멱등(idempotent) 일일 갱신
+ *    - 피드는 최신순 → 이미 가진 report_id 를 만나면 즉시 중단(그 이후는 다 보유).
+ *      → 매일 돌리면 보통 1페이지만 받고 끝(최근 신규 리포트만).
+ *    - 시세/목표가는 값이 바뀐 경우에만 UPDATE(같은 데이터면 안 씀).
+ * ------------------------------------------------------------------------- */
+
+/** 신규 컨센서스 리포트만 증분 수집 (이미 가진 리포트를 만나면 중단). */
+export async function ingestNewReports(
+  db: Database.Database,
+  corpCode: string,
+  maxPages = 20,
+): Promise<number> {
+  const known = db.prepare("SELECT 1 FROM consensus_reports WHERE report_id = ?");
+  const fresh: CollectedReport[] = [];
+  let cursor = "";
+  let hitKnown = false;
+  for (let page = 0; page < maxPages && !hitKnown; page++) {
+    const res = await butler.feed(corpCode, cursor, 15);
+    for (const it of res.data) {
+      if (it.type !== "CONSENSUS" || !it.contents?.reportId || !it.contents.values) continue;
+      if (known.get(it.contents.reportId)) {
+        hitKnown = true; // 최신순이므로 이후는 모두 보유분 → 중단
+        break;
+      }
+      fresh.push({ reportId: it.contents.reportId, values: it.contents.values });
+    }
+    if (!res.hasNext || !res.nextCursor) break;
+    cursor = res.nextCursor;
+  }
+  if (fresh.length === 0) return 0; // 신규 없음 → DB 무변경
+  return writeConsensusReports(db, corpCode, fresh);
+}
+
+const approxEq = (a: number | null, b: number | null) => {
+  if (a == null && b == null) return true;
+  if (a == null || b == null) return false;
+  return Math.abs(a - b) < 1e-6;
+};
+
+/** 숫자/숫자문자열 → number | null. "N/A"·""·NaN 등은 null (NaN 저장/오탐 방지). */
+const toNum = (x: unknown): number | null => {
+  if (x == null || x === "") return null;
+  const n = Number(x);
+  return Number.isFinite(n) ? n : null;
+};
+
+/**
+ * 시세/밸류/목표가 스냅샷을 갱신하되 **값이 바뀐 경우에만** companies 를 UPDATE.
+ * 같은 데이터로 여러 번 실행해도 updated_at 조차 바뀌지 않는다(완전 멱등).
+ * @returns 'updated' | 'unchanged'
+ */
+export async function refreshCompanyQuote(
+  db: Database.Database,
+  corpCode: string,
+): Promise<"updated" | "unchanged"> {
+  const detail = await butler.company(corpCode);
+  let tp: Awaited<ReturnType<typeof butler.targetPrices>> | null = null;
+  try {
+    tp = await butler.targetPrices(corpCode);
+  } catch {
+    /* 커버리지 없음 */
+  }
+  const p = detail.priceInfo;
+  const t = tp?.tables;
+  const next = {
+    price: toNum(p?.price),
+    fluctuation_rate: toNum(p?.fluctuationRate),
+    market_cap: toNum(p?.marketCapital),
+    per: toNum(p?.per),
+    pbr: toNum(p?.pbr),
+    fper: toNum(p?.fper),
+    eps: toNum(p?.eps),
+    feps: toNum(p?.feps),
+    bps: toNum(p?.bps),
+    dps: toNum(p?.dps),
+    dividend_yield: toNum(p?.marketDividendYield),
+    target_price_avg: toNum(t?.targetPriceAvg),
+    target_return_rate: toNum(t?.returnRate),
+    cover_securities: toNum(t?.coverSecurities),
+  };
+
+  const cur = db
+    .prepare(
+      `SELECT price, fluctuation_rate, market_cap, per, pbr, fper, eps, feps, bps, dps,
+              dividend_yield, target_price_avg, target_return_rate, cover_securities
+       FROM companies WHERE corp_code = ?`,
+    )
+    .get(corpCode) as Record<string, number | null> | undefined;
+
+  const changed =
+    !cur || (Object.keys(next) as (keyof typeof next)[]).some((k) => !approxEq(next[k], cur[k] ?? null));
+  if (!changed) return "unchanged";
+
+  // 평균 목표주가 변동은 별도 변경이력으로(발생일=오늘)
+  if (cur && next.target_price_avg != null && cur.target_price_avg != null &&
+      !approxEq(next.target_price_avg, cur.target_price_avg)) {
+    const delta = next.target_price_avg - cur.target_price_avg;
+    logChange(db, {
+      corp_code: corpCode,
+      entity_type: "consensus_avg",
+      field: "target_price_avg",
+      old_value: cur.target_price_avg,
+      new_value: next.target_price_avg,
+      delta,
+      delta_pct: cur.target_price_avg ? (delta / cur.target_price_avg) * 100 : null,
+      change_kind: delta > 0 ? "up" : "down",
+      note: "평균 목표주가 변동",
+      occurred_at: nowIso().slice(0, 10),
+    });
+  }
+
+  if (tp) upsertTargetPriceMonthly(db, corpCode, tp);
+  db.prepare(
+    `UPDATE companies SET price=@price, fluctuation_rate=@fluctuation_rate, market_cap=@market_cap,
+        per=@per, pbr=@pbr, fper=@fper, eps=@eps, feps=@feps, bps=@bps, dps=@dps,
+        dividend_yield=@dividend_yield, target_price_avg=@target_price_avg,
+        target_return_rate=@target_return_rate, cover_securities=@cover_securities,
+        updated_at=@updated_at WHERE corp_code=@corp_code`,
+  ).run({ ...next, updated_at: nowIso(), corp_code: corpCode });
+  return "updated";
+}

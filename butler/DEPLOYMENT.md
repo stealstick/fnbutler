@@ -76,19 +76,24 @@ standalone 출력은 `.next/standalone/` 에 self-contained 번들을 만든다.
 **better-sqlite3 네이티브 바이너리**와 `db/schema.sql`, `db/butler.db` 는 별도로
 포함시켜야 한다(아래 Docker 참고).
 
-## 6. 일일 폴링 크론
+## 6. 일일 갱신 크론 (증분 + 멱등)
 
-장 마감 후 1회 권장. 변경이 있을 때만 `change_logs` 에 발생일과 함께 기록하고,
-관심목록 보유 유저에게 텔레그램 알림을 보낸다.
+장 마감 후 1회 권장. **`scripts/refresh-daily.ts`** 를 쓴다:
+- **증분**: 피드가 최신순이라 이미 가진 리포트를 만나면 중단 → 최근 신규분만 받음(빠름).
+- **멱등**: 시세/목표가는 값이 바뀐 경우에만 UPDATE. 같은 데이터면 DB 무변경.
+- 변경 없으면 GCS 업로드·재배포까지 건너뜀(불필요한 배포 방지).
+- 변경이 있을 때만 `change_logs` 에 발생일과 함께 기록 + 관심목록 유저에게 텔레그램 알림.
 
 ```cron
-# 매 영업일(월~금) 18:30 KST
-30 18 * * 1-5  cd /app/butler && BUTLER_DB_PATH=/data/butler.db /usr/local/bin/npx tsx scripts/poll-daily.ts >> /var/log/butler-poll.log 2>&1
+# 매 영업일(월~금) 18:30 KST — 자체 DB 갱신 후, 변경 있으면 GCS 업로드 + Cloud Run 재배포
+30 18 * * 1-5  cd /app/butler && BUTLER_DB_PATH=/data/butler.db npx tsx scripts/refresh-daily.ts --push --redeploy >> /var/log/butler-refresh.log 2>&1
 ```
 
-- `--scope watchlist` 를 붙이면 관심목록 기업만(빠름).
+- 플래그: `--scope watchlist`(관심목록만) · `--push`(변경 시 GCS 업로드) · `--redeploy`(변경 시 Actions 재배포 트리거).
+- `--push`/`--redeploy` 는 gcloud·gh 인증이 있는 환경에서만(없으면 자체 DB 갱신까지만).
+- 전체 재수집(과거 깊이 보강)이 필요하면 `scripts/poll-daily.ts` 또는
+  `ingest:detail --feed-pages N` 을 가끔 수동 실행.
 - 크론과 웹은 **같은 `BUTLER_DB_PATH`** 를 봐야 한다.
-- 컨테이너 환경이면 별도 CronJob(K8s) / Cloud Scheduler→job / sidecar 로 분리.
 
 ## 7. Docker (권장 배포 형태)
 
@@ -173,8 +178,8 @@ sqlite3 /data/butler.db ".backup '/data/backup/butler-$(date +%F).db'"
 2. `gcloud storage cp butler/db/butler.db gs://protein-test-469413-fnbutler/butler.db`
 3. 재배포(빈 커밋 push 또는 Actions 수동 실행) → 새 DB 가 구워짐
 
-매일 자동 갱신하려면 폴링 + 업로드 + 재배포를 **스케줄드 워크플로**(cron)로 묶으면 된다
-(`schedule:` 트리거 + 위 1~3을 한 잡에서 수행, 또는 `poll-daily.ts` 뒤에 gcloud cp + run deploy).
+매일 자동 갱신은 위 1~3을 한 번에 하는 **`scripts/refresh-daily.ts --push --redeploy`** 를
+크론에 걸면 된다(§6). 변경 없으면 업로드·재배포를 건너뛰어 같은 데이터로 여러 번 돌려도 안전.
 
 ### ⚠️ Cloud Run + SQLite 영속성 한계
 

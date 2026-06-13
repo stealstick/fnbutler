@@ -17,7 +17,9 @@
     "backfill:changes": "tsx scripts/backfill-changes.ts",
     "import:har": "tsx scripts/import-har.ts",
     "poll": "tsx scripts/poll-daily.ts",
-    "poll:watchlist": "tsx scripts/poll-daily.ts --scope watchlist"
+    "poll:watchlist": "tsx scripts/poll-daily.ts --scope watchlist",
+    "refresh": "tsx scripts/refresh-daily.ts",
+    "refresh:push": "tsx scripts/refresh-daily.ts --push --redeploy"
   },
   "dependencies": {
     "better-sqlite3": "^11.8.1",

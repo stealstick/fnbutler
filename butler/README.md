@@ -87,22 +87,27 @@ npx tsx scripts/ingest.ts --companies --detail --all              # 전종목 (�
    - chat_id 확인: 봇에게 메시지 후 `https://api.telegram.org/bot<TOKEN>/getUpdates`
 4. 매일 폴링이 관심 기업의 **목표주가 변경**을 감지하면 텔레그램으로 발송(중복 발송 없음).
 
-## 매일 폴링 (크론)
+## 매일 갱신 (크론) — 증분 + 멱등
 
 ```bash
-# 관심목록 ∪ 컨센서스 보유 기업 재수집 → 변경 감지/로깅 → 일별 스냅샷 → 알림
-npx tsx scripts/poll-daily.ts                  # 전체
-npx tsx scripts/poll-daily.ts --scope watchlist  # 관심목록만(빠름)
+npm run refresh            # 자체 DB 만 갱신 (증분 신규 리포트 + 변경된 시세만)
+npm run refresh:push       # 변경 있으면 GCS 업로드 + Cloud Run 재배포까지
+npx tsx scripts/refresh-daily.ts --scope watchlist   # 관심목록만
 ```
+
+- **증분**: 피드 최신순 → 이미 가진 리포트를 만나면 중단 → 최근 신규분만 받음.
+- **멱등**: 시세/목표가는 값이 바뀐 경우에만 UPDATE. 같은 데이터로 여러 번 돌려도 DB 무변경
+  (`updated_at` 도 그대로), 변경 없으면 GCS 업로드·재배포도 건너뜀.
+- 변경이 있을 때만 `change_logs`(발생일 포함) + 텔레그램 알림(이번 실행 신규분만, 중복 없음).
 
 crontab (매 영업일 18:30, 장 마감 후):
 
 ```
-30 18 * * 1-5  cd /path/to/butler && BUTLER_TELEGRAM_BOT_TOKEN=xxx BUTLER_BASE_URL=https://your.host \
-  $(which npx) tsx scripts/poll-daily.ts >> /tmp/butler-poll.log 2>&1
+30 18 * * 1-5  cd /path/to/butler && npx tsx scripts/refresh-daily.ts --push --redeploy >> /tmp/butler-refresh.log 2>&1
 ```
 
-알림은 **이번 실행에서 새로 생긴 변경만** 대상이라, 과거 변경이 한꺼번에 쏟아지지 않는다.
+> 전체 재수집(과거 깊이 보강)은 가끔 `npm run ingest:detail -- --only-consensus --feed-pages 25`
+> + `npm run backfill:changes` 로. 자세한 배포·운영은 [DEPLOYMENT.md](./DEPLOYMENT.md).
 
 ## 데이터 출처와 게이팅 (중요)
 
