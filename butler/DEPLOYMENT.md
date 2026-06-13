@@ -149,6 +149,44 @@ sqlite3 /data/butler.db ".backup '/data/backup/butler-$(date +%F).db'"
 - 헬스체크: `GET /api/stats` → `{ companies, reports, changes, ... }`.
 - rate limit 429 발생 시 `BUTLER_RATE_PER_MIN` 을 낮춘다(기본 80).
 
+## 12. 자동배포 (GitHub Actions — 현재 설정)
+
+`main` 에 push 하면 자동으로 Cloud Run 에 배포된다. 사람이 로그인할 필요 없음.
+
+- 워크플로: [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) (저장소 루트 기준)
+- 인증: GCP 서비스계정 `gh-deployer@protein-test-469413.iam.gserviceaccount.com`
+  의 키를 GitHub 시크릿 **`GCP_SA_KEY`** 로 저장. 부여 역할:
+  `run.admin`, `artifactregistry.writer`, `storage.objectViewer`,
+  런타임 SA(`<projnum>-compute`)에 대한 `iam.serviceAccountUser`.
+- 동작: GCS `butler.db` pull → `docker build butler` → Artifact Registry push →
+  `gcloud run deploy fnbutler`. `butler/**` 또는 `cloudbuild.yaml` 변경 시에만 발동.
+- 수동 실행: GitHub Actions 탭 → "deploy butler.view" → Run workflow.
+
+> 키 교체: `gcloud iam service-accounts keys create k.json --iam-account=gh-deployer@…`
+> → `gh secret set GCP_SA_KEY --repo stealstick/fnbutler < k.json` → `rm k.json`.
+
+### 데이터 갱신 흐름 (중요)
+
+배포 이미지는 **GCS 의 butler.db 를 구워서** 만든다. 따라서 라이브 데이터를 바꾸려면:
+
+1. 로컬/CI 에서 수집·폴링으로 `butler/db/butler.db` 갱신
+2. `gcloud storage cp butler/db/butler.db gs://protein-test-469413-fnbutler/butler.db`
+3. 재배포(빈 커밋 push 또는 Actions 수동 실행) → 새 DB 가 구워짐
+
+매일 자동 갱신하려면 폴링 + 업로드 + 재배포를 **스케줄드 워크플로**(cron)로 묶으면 된다
+(`schedule:` 트리거 + 위 1~3을 한 잡에서 수행, 또는 `poll-daily.ts` 뒤에 gcloud cp + run deploy).
+
+### ⚠️ Cloud Run + SQLite 영속성 한계
+
+Cloud Run 컨테이너 파일시스템은 **휘발성**이다. 즉 라이브에서 발생한 쓰기
+(회원가입/관심목록/폴링 변경)는 **콜드스타트·재배포 시 사라진다**. 읽기 전용
+스냅샷(목표주가/재무 조회)에는 문제없지만, 사용자 데이터를 영속하려면:
+- **Fly.io + volume** (`/data` 마운트) 로 옮기거나,
+- **Cloud SQL(Postgres)** 로 DB 이전(§9) — 다중 인스턴스/동시쓰기까지 해결.
+
+개인 데스크/데모 용도면 현재 구조로 충분하고, 관심목록·알림을 여러 사용자가
+영속적으로 써야 하면 위 둘 중 하나로 전환할 것.
+
 ## 11. 트러블슈팅
 
 | 증상 | 원인/해결 |

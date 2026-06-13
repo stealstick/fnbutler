@@ -7,6 +7,7 @@ on:
     branches: [main]
     paths:
       - "butler/**"
+      - "!butler/**/*.md" # 문서만 바뀌면 배포 안 함
       - "cloudbuild.yaml"
       - ".github/workflows/deploy.yml"
   workflow_dispatch: {} # 수동 실행도 허용
