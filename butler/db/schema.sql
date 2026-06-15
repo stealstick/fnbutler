@@ -238,6 +238,14 @@ CREATE TABLE IF NOT EXISTS notifications (
     UNIQUE (user_id, change_log_id, channel)
 );
 
+-- 텔레그램 자동 연결용 일회성 토큰. /settings 에서 발급 → 봇 딥링크(/start <token>)로 소비.
+CREATE TABLE IF NOT EXISTS telegram_link_tokens (
+    token      TEXT PRIMARY KEY,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
 -- ============================================================================
 -- 뷰: "최신값"과 파생지표(QoQ/YoY)는 저장하지 않고 계산한다.
 -- ============================================================================

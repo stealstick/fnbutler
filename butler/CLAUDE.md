@@ -105,9 +105,21 @@ long-format 지표, 최신값·파생지표는 뷰로 계산, 모든 적재 `sou
 | `BUTLER_USERSTORE` | `firestore`(prod) / 미설정(로컬 SQLite) |
 | `BUTLER_DB_PATH` | SQLite 경로 (prod `/app/db/butler.db`) |
 | `BUTLER_BASE_URL` | 알림 링크 도메인 |
-| `BUTLER_TELEGRAM_BOT_TOKEN` | 텔레그램 봇(없으면 알림 비활성) |
+| `BUTLER_TELEGRAM_BOT_TOKEN` | 텔레그램 봇(없으면 알림·웹훅 비활성) |
+| `BUTLER_TELEGRAM_WEBHOOK_SECRET` | 웹훅 위조 검증 시크릿(선택, setWebhook secret_token 과 동일) |
+| `BUTLER_TELEGRAM_BOT_USERNAME` | 봇 username 강제(선택, 미설정 시 getMe 자동 조회) |
 | `BUTLER_RATE_PER_MIN` | 업스트림 분당 호출 상한(기본 80) |
 | `GOOGLE_APPLICATION_CREDENTIALS` | 로컬에서 Firestore 테스트 시 SA 키 경로 |
+
+### 텔레그램 자동 연결(딥링크)
+
+`/settings` 의 **텔레그램 연결** 버튼이 일회성 토큰을 발급(`/api/auth/telegram/link`) →
+`https://t.me/<bot>?start=<token>` 딥링크로 봇을 시작하면 웹훅(`/api/telegram/webhook`)이
+그 토큰으로 계정을 찾아 `chat_id` 를 자동 바인딩한다(수동 입력 불필요). 토큰은 SQLite
+`telegram_link_tokens` / Firestore `tg_link_tokens` 에 저장(15분 만료·일회용). 최초 1회
+`npm run telegram:setup`(env: 토큰·BASE_URL·시크릿) 으로 setWebhook 등록이 필요하다.
+봇 토큰/웹훅 시크릿은 GitHub Secrets(`BUTLER_TELEGRAM_BOT_TOKEN`,
+`BUTLER_TELEGRAM_WEBHOOK_SECRET`) → 두 워크플로의 Cloud Run `--set-env-vars` 로 주입된다.
 
 ## 10. 화면 (3계층 IA)
 

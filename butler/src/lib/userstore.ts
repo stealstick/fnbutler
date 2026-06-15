@@ -116,6 +116,20 @@ const firestoreBackend = {
       .doc(notifId(userId, changeId))
       .set({ userId, changeId, status, sentAt: nowIso() });
   },
+  async createLinkToken(token: string, userId: string, expiresAt: string) {
+    await fs().collection("tg_link_tokens").doc(token).set({ userId, expiresAt, createdAt: nowIso() });
+  },
+  // 일회성: 존재하면 즉시 삭제하고, 만료 전이면 userId 반환(아니면 null).
+  async consumeLinkToken(token: string): Promise<string | null> {
+    const ref = fs().collection("tg_link_tokens").doc(token);
+    return fs().runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) return null;
+      const d = snap.data()!;
+      tx.delete(ref);
+      return new Date(d.expiresAt) < new Date() ? null : (d.userId as string);
+    });
+  },
 };
 
 /* ============================== SQLite 백엔드 ============================== */
@@ -220,6 +234,18 @@ const sqliteBackend = {
         "INSERT INTO notifications (user_id, change_log_id, channel, status, sent_at) VALUES (?, ?, 'telegram', ?, ?) ON CONFLICT DO NOTHING",
       )
       .run(Number(userId), changeId, status, nowIso());
+  },
+  async createLinkToken(token: string, userId: string, expiresAt: string) {
+    getDb()
+      .prepare("INSERT INTO telegram_link_tokens (token, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)")
+      .run(token, Number(userId), expiresAt, nowIso());
+  },
+  async consumeLinkToken(token: string): Promise<string | null> {
+    const db = getDb();
+    const r = db.prepare("SELECT user_id, expires_at FROM telegram_link_tokens WHERE token = ?").get(token) as any;
+    if (!r) return null;
+    db.prepare("DELETE FROM telegram_link_tokens WHERE token = ?").run(token);
+    return new Date(r.expires_at) < new Date() ? null : String(r.user_id);
   },
 };
 

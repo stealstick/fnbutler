@@ -47,12 +47,16 @@ jobs:
           docker push "$IMG"
 
       - name: Deploy to Cloud Run
+        env:
+          TG_TOKEN: ${{ secrets.BUTLER_TELEGRAM_BOT_TOKEN }}
+          TG_WEBHOOK_SECRET: ${{ secrets.BUTLER_TELEGRAM_WEBHOOK_SECRET }}
         run: |
+          # ^@^ 구분자: 값에 콤마가 섞여도 안전 (gcloud --set-env-vars escaping)
           gcloud run deploy "$SERVICE" \
             --image "$IMG" --project "$PROJECT" --region "$REGION" \
             --allow-unauthenticated --memory 1Gi --cpu 1 \
             --min-instances 0 --max-instances 1 --port 8080 \
-            --set-env-vars "BUTLER_DB_PATH=/app/db/butler.db,BUTLER_USERSTORE=firestore,BUTLER_BASE_URL=${URL}"
+            --set-env-vars "^@^BUTLER_DB_PATH=/app/db/butler.db@BUTLER_USERSTORE=firestore@BUTLER_BASE_URL=${URL}@BUTLER_TELEGRAM_BOT_TOKEN=${TG_TOKEN}@BUTLER_TELEGRAM_WEBHOOK_SECRET=${TG_WEBHOOK_SECRET}"
 
       - name: Verify
         run: |

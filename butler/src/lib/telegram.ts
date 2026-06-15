@@ -6,6 +6,27 @@ export function telegramConfigured(): boolean {
   return !!TOKEN;
 }
 
+/** 웹훅 진위 검증용 시크릿(setWebhook 의 secret_token 과 동일). 미설정이면 검증 생략. */
+export function webhookSecret(): string | undefined {
+  return process.env.BUTLER_TELEGRAM_WEBHOOK_SECRET || undefined;
+}
+
+/** 봇 username(@ 제외). 딥링크 https://t.me/<username>?start=... 생성용. getMe 결과를 캐시. */
+let _botUsername: string | null | undefined;
+export async function getBotUsername(): Promise<string | null> {
+  const override = process.env.BUTLER_TELEGRAM_BOT_USERNAME;
+  if (override) return override.replace(/^@/, "");
+  if (_botUsername !== undefined) return _botUsername;
+  if (!TOKEN) return (_botUsername = null);
+  try {
+    const j = await (await fetch(`https://api.telegram.org/bot${TOKEN}/getMe`)).json();
+    _botUsername = j?.ok ? (j.result?.username ?? null) : null;
+  } catch {
+    _botUsername = null;
+  }
+  return _botUsername ?? null;
+}
+
 export async function sendTelegram(chatId: string, text: string): Promise<boolean> {
   if (!TOKEN) return false;
   try {
