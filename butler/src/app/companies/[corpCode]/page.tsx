@@ -99,6 +99,8 @@ export default async function CompanyPage({
         averageTarget={company.target_price_avg}
         averageReturn={company.target_return_rate}
         coverCount={company.cover_securities}
+        hasConsensus={!!company.has_consensus}
+        detailIngested={!!company.detail_ingested_at}
       />
 
       {/* ---------- 실적 추이 (분기/연간 + QoQ/YoY) ---------- */}

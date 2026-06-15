@@ -645,6 +645,32 @@ export async function ingestNewReports(
   return writeConsensusReports(db, corpCode, fresh);
 }
 
+/**
+ * 목표가만 경량 수집 (재무 생략). 호출 ≈ 목표주가(1) + 피드(maxPages).
+ * 커버리지 전종목 일괄 채우기용 — 재무는 나중에 별도 패스.
+ */
+export async function ingestTargetsOnly(
+  db: Database.Database,
+  corpCode: string,
+  feedPages = 2,
+): Promise<{ reports: number; cover: number }> {
+  const now = nowIso();
+  let cover = 0;
+  try {
+    const tp = await butler.targetPrices(corpCode);
+    cover = tp.tables?.coverSecurities ?? 0;
+    upsertTargetPriceMonthly(db, corpCode, tp);
+    updateCompanyConsensusSummary(db, corpCode, tp, now);
+  } catch {
+    /* 커버리지 없음 */
+  }
+  const reports = await ingestNewReports(db, corpCode, feedPages);
+  db.prepare(
+    "UPDATE companies SET detail_ingested_at = ?, has_consensus = ?, updated_at = ? WHERE corp_code = ?",
+  ).run(now, reports > 0 || cover > 0 ? 1 : 0, now, corpCode);
+  return { reports, cover };
+}
+
 const approxEq = (a: number | null, b: number | null) => {
   if (a == null && b == null) return true;
   if (a == null || b == null) return false;

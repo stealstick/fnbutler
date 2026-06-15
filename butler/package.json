@@ -19,7 +19,8 @@
     "poll": "tsx scripts/poll-daily.ts",
     "poll:watchlist": "tsx scripts/poll-daily.ts --scope watchlist",
     "refresh": "tsx scripts/refresh-daily.ts",
-    "refresh:push": "tsx scripts/refresh-daily.ts --push --redeploy"
+    "refresh:push": "tsx scripts/refresh-daily.ts --push --redeploy",
+    "ingest:covered": "tsx scripts/ingest-covered.ts"
   },
   "dependencies": {
     "better-sqlite3": "^11.8.1",

@@ -51,6 +51,8 @@ export default function TargetPricePanel({
   averageTarget,
   averageReturn,
   coverCount,
+  hasConsensus,
+  detailIngested,
 }: {
   brokers: BrokerTarget[];
   history: BrokerTargetHistory[];
@@ -59,6 +61,8 @@ export default function TargetPricePanel({
   averageTarget: number | null;
   averageReturn: number | null;
   coverCount: number | null;
+  hasConsensus: boolean;
+  detailIngested: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [selectedBroker, setSelectedBroker] = useState<string | null>(null);
@@ -159,7 +163,13 @@ export default function TargetPricePanel({
 
       {brokers.length === 0 ? (
         <div className="empty">
-          아직 수집된 컨센서스 리포트가 없습니다. “최신 새로고침”을 눌러 butler 에서 가져오세요.
+          {!hasConsensus ? (
+            <>이 기업은 증권사 애널리스트 커버리지가 없어 목표주가가 제공되지 않습니다.</>
+          ) : detailIngested ? (
+            <>최근 1년 내 신규 목표주가 리포트가 없습니다. (커버리지는 있으나 최신 리포트 미발간)</>
+          ) : (
+            <>목표주가 데이터 수집 전입니다. “↻ 최신 새로고침”을 누르면 butler 에서 증권사별 목표가를 가져옵니다.</>
+          )}
         </div>
       ) : (
         <div className="table-scroll target-table">
