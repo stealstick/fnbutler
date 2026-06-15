@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getSectorAgg, getSectorCompanies, getSectorMomentum } from "@/lib/repo";
 import { won, num, pct, signClass } from "@/lib/format";
 import InfoTip from "@/components/InfoTip";
+import SectorCompaniesTable from "./SectorCompaniesTable";
 
 const UPSIDE_TIP =
   "상승여력 = 증권사 컨센서스 평균 목표주가 ÷ 현재가 − 1. 애널리스트 목표주가까지의 기대 상승률(괴리율).";
@@ -45,45 +46,9 @@ export default async function SectorDetail({
 
       <div className="panel">
         <h2>
-          구성 기업 <span className="sub">상승여력 높은 순 · 컨센서스 보유 기업 우선</span>
+          구성 기업 <span className="sub">헤더(시가총액·PER·상승여력 등)를 클릭하면 그 기준으로 정렬</span>
         </h2>
-        <div className="scrollx">
-          <table className="grid">
-            <thead>
-              <tr>
-                <th className="l">종목</th>
-                <th>현재가</th>
-                <th>시가총액</th>
-                <th>PER</th>
-                <th>PBR</th>
-                <th>평균 목표주가</th>
-                <th>상승여력</th>
-                <th>커버</th>
-              </tr>
-            </thead>
-            <tbody>
-              {companies.map((c) => (
-                <tr key={c.corp_code}>
-                  <td className="l">
-                    <Link href={`/companies/${c.corp_code}`}>
-                      <strong>{c.name}</strong>{" "}
-                      <span className="muted mono" style={{ fontSize: 12 }}>{c.stock_code}</span>
-                    </Link>
-                  </td>
-                  <td className="mono">{num(c.price)}</td>
-                  <td className="mono">{won(c.market_cap)}</td>
-                  <td className="mono">{c.per != null ? num(c.per, 1) : "-"}</td>
-                  <td className="mono">{c.pbr != null ? num(c.pbr, 2) : "-"}</td>
-                  <td className="mono">{c.target_price_avg ? num(c.target_price_avg) : "-"}</td>
-                  <td className={"mono " + signClass(c.target_return_rate)}>
-                    {c.target_return_rate != null ? pct(c.target_return_rate) : "-"}
-                  </td>
-                  <td className="mono">{c.cover_securities ? <span className="pill">{c.cover_securities}</span> : "-"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <SectorCompaniesTable companies={companies} />
       </div>
     </>
   );

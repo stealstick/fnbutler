@@ -92,6 +92,10 @@ table.grid td.l, table.grid th.l { text-align: left; }
 table.grid tbody tr:hover { background: var(--panel-2); }
 table.grid td .y { display: block; font-size: 11px; color: var(--muted); }
 .scrollx { overflow-x: auto; }
+table.grid th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+table.grid th.sortable:hover { color: var(--text); }
+table.grid th.sortable.active { color: var(--accent); }
+.sort-ind { display: inline-block; width: 1em; font-size: 9px; vertical-align: middle; margin-left: 1px; }
 .table-scroll {
   overflow: auto;
   max-height: min(68vh, 620px);
