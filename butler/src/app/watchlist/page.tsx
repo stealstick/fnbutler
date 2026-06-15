@@ -2,12 +2,17 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { won, num, pct, signClass } from "@/lib/format";
+import { num, pct, signClass } from "@/lib/format";
+import { useTableSort, SortTh } from "@/components/sortable";
 import type { CompanyRow } from "@/lib/repo";
+
+const getVal = (c: CompanyRow, k: string) =>
+  k === "name" ? c.name : ((c as unknown as Record<string, number | null>)[k] ?? null);
 
 export default function WatchlistPage() {
   const [rows, setRows] = useState<CompanyRow[] | null>(null);
   const [auth, setAuth] = useState<boolean | null>(null);
+  const { sorted, sortKey, dir, onSort } = useTableSort(rows ?? [], getVal, "target_return_rate");
 
   async function load() {
     const r = await fetch("/api/watchlist");
@@ -16,8 +21,7 @@ export default function WatchlistPage() {
       return;
     }
     setAuth(true);
-    const j = await r.json();
-    setRows(j.results);
+    setRows((await r.json()).results);
   }
   useEffect(() => {
     load();
@@ -27,6 +31,10 @@ export default function WatchlistPage() {
     await fetch(`/api/watchlist?corpCode=${corpCode}`, { method: "DELETE" });
     load();
   }
+
+  const th = (label: string, k: string, align?: "l", defaultDir?: "asc" | "desc") => (
+    <SortTh label={label} k={k} sortKey={sortKey} dir={dir} onSort={onSort} align={align} defaultDir={defaultDir} />
+  );
 
   if (auth === false)
     return (
@@ -42,7 +50,7 @@ export default function WatchlistPage() {
   return (
     <div className="panel">
       <h2>
-        관심목록 <span className="sub">목표주가 변경 시 텔레그램 알림 대상 · <Link href="/settings" style={{ color: "var(--accent)" }}>알림 설정</Link></span>
+        관심목록 <span className="sub">헤더 클릭 정렬 · 목표주가 변경 시 텔레그램 알림 대상 · <Link href="/settings" style={{ color: "var(--accent)" }}>알림 설정</Link></span>
       </h2>
       {!rows ? (
         <div className="empty">불러오는 중…</div>
@@ -55,17 +63,17 @@ export default function WatchlistPage() {
           <table className="grid">
             <thead>
               <tr>
-                <th className="l">종목</th>
-                <th>현재가</th>
-                <th>등락</th>
-                <th>평균 목표주가</th>
-                <th>상승여력</th>
-                <th>커버</th>
+                {th("종목", "name", "l", "asc")}
+                {th("현재가", "price")}
+                {th("등락", "fluctuation_rate")}
+                {th("평균 목표주가", "target_price_avg")}
+                {th("상승여력", "target_return_rate")}
+                {th("커버", "cover_securities")}
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((c) => (
+              {sorted.map((c) => (
                 <tr key={c.corp_code}>
                   <td className="l">
                     <Link href={`/companies/${c.corp_code}`}>

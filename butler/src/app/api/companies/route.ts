@@ -9,6 +9,7 @@ export function GET(req: NextRequest) {
     market: sp.get("market") ?? undefined,
     onlyConsensus: sp.get("consensus") === "1",
     sort: (sp.get("sort") as ListOpts["sort"]) ?? "market_cap",
+    dir: sp.get("dir") === "asc" ? "asc" : "desc",
     limit: sp.get("limit") ? Number(sp.get("limit")) : 50,
     offset: sp.get("offset") ? Number(sp.get("offset")) : 0,
   };

@@ -88,11 +88,36 @@ export function getCompany(corpCode: string): CompanyRow | undefined {
     .get(corpCode) as CompanyRow | undefined;
 }
 
+export type SortCol =
+  | "market_cap"
+  | "target_return_rate"
+  | "cover_securities"
+  | "name"
+  | "price"
+  | "fluctuation_rate"
+  | "per"
+  | "pbr"
+  | "target_price_avg";
+
+// 정렬 허용 컬럼 화이트리스트 (SQL 인젝션 방지)
+const SORT_WHITELIST: Record<SortCol, string> = {
+  market_cap: "market_cap",
+  target_return_rate: "target_return_rate",
+  cover_securities: "cover_securities",
+  name: "name",
+  price: "price",
+  fluctuation_rate: "fluctuation_rate",
+  per: "per",
+  pbr: "pbr",
+  target_price_avg: "target_price_avg",
+};
+
 export interface ListOpts {
   q?: string;
   market?: string;
   onlyConsensus?: boolean;
-  sort?: "market_cap" | "target_return_rate" | "cover_securities" | "name";
+  sort?: SortCol;
+  dir?: "asc" | "desc";
   limit?: number;
   offset?: number;
 }
@@ -112,14 +137,9 @@ export function listCompanies(opts: ListOpts = {}): { total: number; rows: Compa
   if (opts.onlyConsensus) where.push("has_consensus = 1");
   const w = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
-  const sortCol =
-    opts.sort === "target_return_rate"
-      ? "target_return_rate DESC"
-      : opts.sort === "cover_securities"
-        ? "cover_securities DESC"
-        : opts.sort === "name"
-          ? "name ASC"
-          : "market_cap DESC";
+  const col = SORT_WHITELIST[opts.sort as SortCol] ?? "market_cap";
+  const dir = opts.dir === "asc" ? "ASC" : "DESC";
+  const sortCol = `${col} ${dir}`;
 
   const total = (
     db.prepare(`SELECT COUNT(*) c FROM companies ${w}`).get(params) as { c: number }

@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { num, pct, ratingChangeBadge, signClass } from "@/lib/format";
 import InfoTip from "@/components/InfoTip";
+import { useTableSort, SortTh } from "@/components/sortable";
 
 const UPSIDE_TIP =
   "상승여력 = 증권사 컨센서스 평균 목표주가 ÷ 현재가 − 1. 애널리스트들이 제시한 목표주가까지의 기대 상승률(괴리율)입니다. 개별 행은 해당 증권사 목표주가 기준.";
@@ -74,6 +75,21 @@ export default function TargetPricePanel({
     return m;
   }, [history]);
 
+  const getBrokerVal = useCallback(
+    (b: BrokerTarget, k: string): number | string | null => {
+      switch (k) {
+        case "broker": return b.broker;
+        case "analyst": return b.analyst ?? "";
+        case "report_date": return b.report_date;
+        case "target_price": return b.target_price;
+        case "delta": return latestChangeByBroker.get(b.broker)?.target_delta_pct ?? null;
+        case "return_rate": return b.return_rate;
+        default: return null;
+      }
+    },
+    [latestChangeByBroker],
+  );
+
   const filteredBrokers = useMemo(
     () =>
       brokers.filter((b) => {
@@ -81,6 +97,11 @@ export default function TargetPricePanel({
         return `${b.broker} ${b.analyst ?? ""} ${b.rating ?? ""}`.toLowerCase().includes(q);
       }),
     [brokers, q],
+  );
+  const { sorted: sortedBrokers, sortKey, dir, onSort } = useTableSort(
+    filteredBrokers,
+    getBrokerVal,
+    "target_price",
   );
   const filteredHistory = useMemo(
     () =>
@@ -176,19 +197,27 @@ export default function TargetPricePanel({
           <table className="grid">
             <thead>
               <tr>
-                <th className="l">증권사</th>
-                <th className="l">애널리스트</th>
-                <th>리포트일</th>
+                <SortTh label="증권사" k="broker" align="l" defaultDir="asc" sortKey={sortKey} dir={dir} onSort={onSort} />
+                <SortTh label="애널리스트" k="analyst" align="l" defaultDir="asc" sortKey={sortKey} dir={dir} onSort={onSort} />
+                <SortTh label="리포트일" k="report_date" sortKey={sortKey} dir={dir} onSort={onSort} />
                 <th className="l">투자의견</th>
-                <th>목표주가</th>
-                <th>직전 대비</th>
+                <SortTh label="목표주가" k="target_price" sortKey={sortKey} dir={dir} onSort={onSort} />
+                <SortTh label="직전 대비" k="delta" sortKey={sortKey} dir={dir} onSort={onSort} />
                 <th className="l">목표가 (상대)</th>
                 <th>변경</th>
-                <th>상승여력<InfoTip text={UPSIDE_TIP} /></th>
+                <th
+                  className={"sortable" + (sortKey === "return_rate" ? " active" : "")}
+                  onClick={() => onSort("return_rate", "desc")}
+                  title="상승여력 기준 정렬"
+                >
+                  상승여력
+                  <InfoTip text={UPSIDE_TIP} />
+                  <span className="sort-ind">{sortKey === "return_rate" ? (dir === "asc" ? "▲" : "▼") : ""}</span>
+                </th>
               </tr>
             </thead>
             <tbody>
-              {filteredBrokers.map((b) => {
+              {sortedBrokers.map((b) => {
                 const badge = ratingChangeBadge(b.target_price_change);
                 const isBuy = (b.rating ?? "").match(/BUY|매수|Buy/);
                 const latestChange = latestChangeByBroker.get(b.broker);

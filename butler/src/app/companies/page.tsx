@@ -11,11 +11,14 @@ interface ApiResp {
   results: CompanyRow[];
 }
 
+type Dir = "asc" | "desc";
+
 export default function CompaniesPage() {
   const [q, setQ] = useState("");
   const [market, setMarket] = useState("");
   const [onlyConsensus, setOnlyConsensus] = useState(false);
   const [sort, setSort] = useState("market_cap");
+  const [dir, setDir] = useState<Dir>("desc");
   const [data, setData] = useState<ApiResp | null>(null);
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -27,6 +30,7 @@ export default function CompaniesPage() {
       q,
       market,
       sort,
+      dir,
       limit: String(limit),
       offset: String(page * limit),
     });
@@ -34,13 +38,31 @@ export default function CompaniesPage() {
     const r = await fetch(`/api/companies?${sp}`);
     setData(await r.json());
     setLoading(false);
-  }, [q, market, sort, onlyConsensus, page]);
+  }, [q, market, sort, dir, onlyConsensus, page]);
 
   useEffect(() => {
     const t = setTimeout(load, 200);
     return () => clearTimeout(t);
   }, [load]);
-  useEffect(() => setPage(0), [q, market, sort, onlyConsensus]);
+  useEffect(() => setPage(0), [q, market, sort, dir, onlyConsensus]);
+
+  function clickSort(key: string, defaultDir: Dir = "desc") {
+    if (sort === key) setDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSort(key);
+      setDir(defaultDir);
+    }
+  }
+  const Th = ({ label, k, align, dd = "desc" }: { label: string; k: string; align?: "l"; dd?: Dir }) => (
+    <th
+      className={(align === "l" ? "l " : "") + "sortable" + (sort === k ? " active" : "")}
+      onClick={() => clickSort(k, dd)}
+      title={`${label} 기준 정렬`}
+    >
+      {label}
+      <span className="sort-ind">{sort === k ? (dir === "asc" ? "▲" : "▼") : ""}</span>
+    </th>
+  );
 
   const total = data?.total ?? 0;
   const pages = Math.ceil(total / limit);
@@ -48,7 +70,7 @@ export default function CompaniesPage() {
   return (
     <div className="panel">
       <h2>
-        전체 기업 <span className="sub">전종목에서 검색·필터·정렬 ({num(total)}개)</span>
+        전체 기업 <span className="sub">검색·필터 + 헤더 클릭 정렬 ({num(total)}개)</span>
       </h2>
       <div className="toolbar">
         <input
@@ -62,10 +84,19 @@ export default function CompaniesPage() {
           <option value="KOSPI">KOSPI</option>
           <option value="KOSDAQ">KOSDAQ</option>
         </select>
-        <select className="input" value={sort} onChange={(e) => setSort(e.target.value)}>
+        <select
+          className="input"
+          value={sort}
+          onChange={(e) => {
+            setSort(e.target.value);
+            setDir(e.target.value === "name" ? "asc" : "desc");
+          }}
+        >
           <option value="market_cap">시가총액순</option>
           <option value="target_return_rate">상승여력순</option>
           <option value="cover_securities">커버 증권사순</option>
+          <option value="per">PER순</option>
+          <option value="pbr">PBR순</option>
           <option value="name">가나다순</option>
         </select>
         <label className="muted" style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -79,16 +110,16 @@ export default function CompaniesPage() {
         <table className="grid">
           <thead>
             <tr>
-              <th className="l">종목</th>
+              <Th label="종목" k="name" align="l" dd="asc" />
               <th className="l">섹터</th>
-              <th>현재가</th>
-              <th>등락</th>
-              <th>시가총액</th>
-              <th>PER</th>
-              <th>PBR</th>
-              <th>평균 목표주가</th>
-              <th>상승여력</th>
-              <th>커버</th>
+              <Th label="현재가" k="price" />
+              <Th label="등락" k="fluctuation_rate" />
+              <Th label="시가총액" k="market_cap" />
+              <Th label="PER" k="per" dd="asc" />
+              <Th label="PBR" k="pbr" dd="asc" />
+              <Th label="평균 목표주가" k="target_price_avg" />
+              <Th label="상승여력" k="target_return_rate" />
+              <Th label="커버" k="cover_securities" />
             </tr>
           </thead>
           <tbody>

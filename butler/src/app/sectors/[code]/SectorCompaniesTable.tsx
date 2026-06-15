@@ -1,77 +1,32 @@
 "use client";
 
-import { useMemo, useState } from "react";
 import Link from "next/link";
 import { won, num, pct, signClass } from "@/lib/format";
+import { useTableSort, SortTh } from "@/components/sortable";
 import type { CompanyRow } from "@/lib/repo";
 
-type Key =
-  | "name"
-  | "price"
-  | "market_cap"
-  | "per"
-  | "pbr"
-  | "target_price_avg"
-  | "target_return_rate"
-  | "cover_securities";
-
-const COLS: Array<{ key: Key; label: string; align?: "l"; defaultDir: "asc" | "desc" }> = [
-  { key: "name", label: "종목", align: "l", defaultDir: "asc" },
-  { key: "price", label: "현재가", defaultDir: "desc" },
-  { key: "market_cap", label: "시가총액", defaultDir: "desc" },
-  { key: "per", label: "PER", defaultDir: "asc" },
-  { key: "pbr", label: "PBR", defaultDir: "asc" },
-  { key: "target_price_avg", label: "평균 목표주가", defaultDir: "desc" },
-  { key: "target_return_rate", label: "상승여력", defaultDir: "desc" },
-  { key: "cover_securities", label: "커버", defaultDir: "desc" },
-];
+const getVal = (c: CompanyRow, k: string) =>
+  k === "name" ? c.name : ((c as unknown as Record<string, number | null>)[k] ?? null);
 
 export default function SectorCompaniesTable({ companies }: { companies: CompanyRow[] }) {
-  const [sortKey, setSortKey] = useState<Key>("target_return_rate");
-  const [dir, setDir] = useState<"asc" | "desc">("desc");
-
-  function clickHeader(col: (typeof COLS)[number]) {
-    if (col.key === sortKey) setDir((d) => (d === "asc" ? "desc" : "asc"));
-    else {
-      setSortKey(col.key);
-      setDir(col.defaultDir);
-    }
-  }
-
-  const sorted = useMemo(() => {
-    const rows = [...companies];
-    rows.sort((a, b) => {
-      if (sortKey === "name") {
-        const r = a.name.localeCompare(b.name, "ko");
-        return dir === "asc" ? r : -r;
-      }
-      const va = a[sortKey] as number | null;
-      const vb = b[sortKey] as number | null;
-      // null 은 항상 맨 아래
-      if (va == null && vb == null) return 0;
-      if (va == null) return 1;
-      if (vb == null) return -1;
-      return dir === "asc" ? va - vb : vb - va;
-    });
-    return rows;
-  }, [companies, sortKey, dir]);
+  const { sorted, sortKey, dir, onSort } = useTableSort(companies, getVal, "target_return_rate");
+  const th = (label: string, k: string, align?: "l", defaultDir?: "asc" | "desc") => (
+    <SortTh label={label} k={k} sortKey={sortKey} dir={dir} onSort={onSort} align={align} defaultDir={defaultDir} />
+  );
 
   return (
     <div className="scrollx">
       <table className="grid">
         <thead>
           <tr>
-            {COLS.map((c) => (
-              <th
-                key={c.key}
-                className={(c.align === "l" ? "l " : "") + "sortable" + (sortKey === c.key ? " active" : "")}
-                onClick={() => clickHeader(c)}
-                title={`${c.label} 기준 정렬`}
-              >
-                {c.label}
-                <span className="sort-ind">{sortKey === c.key ? (dir === "asc" ? "▲" : "▼") : ""}</span>
-              </th>
-            ))}
+            {th("종목", "name", "l", "asc")}
+            {th("현재가", "price")}
+            {th("시가총액", "market_cap")}
+            {th("PER", "per", undefined, "asc")}
+            {th("PBR", "pbr", undefined, "asc")}
+            {th("평균 목표주가", "target_price_avg")}
+            {th("상승여력", "target_return_rate")}
+            {th("커버", "cover_securities")}
           </tr>
         </thead>
         <tbody>
