@@ -9,7 +9,7 @@ const nextConfig = {
   outputFileTracingRoot: __dirname,
   // better-sqlite3 is a native module — keep it out of the bundler so route
   // handlers / server components can `require` it at runtime.
-  serverExternalPackages: ["better-sqlite3"],
+  serverExternalPackages: ["better-sqlite3", "@google-cloud/firestore"],
 };
 
 export default nextConfig;

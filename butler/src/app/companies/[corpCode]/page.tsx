@@ -9,9 +9,9 @@ import {
   getValuationSeries,
   getChanges,
   getTargetMonthly,
-  isWatched,
 } from "@/lib/repo";
 import { getSessionUser, SESSION_COOKIE } from "@/lib/auth";
+import { userStore } from "@/lib/userstore";
 import { won, num, pct, signClass } from "@/lib/format";
 import FinancialsTable from "./FinancialsTable";
 import RefreshButton from "./RefreshButton";
@@ -29,8 +29,8 @@ export default async function CompanyPage({
   const company = getCompany(corpCode);
   if (!company) notFound();
 
-  const user = getSessionUser((await cookies()).get(SESSION_COOKIE)?.value);
-  const watched = user ? isWatched(user.id, corpCode) : false;
+  const user = await getSessionUser((await cookies()).get(SESSION_COOKIE)?.value);
+  const watched = user ? await userStore.isWatched(user.id, corpCode) : false;
 
   const brokers = getBrokerTargets(corpCode);
   const brokerHistory = getBrokerTargetHistory(corpCode);

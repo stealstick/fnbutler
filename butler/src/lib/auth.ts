@@ -1,7 +1,7 @@
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
-import { getDb, nowIso } from "./db";
+import { userStore, type StoredUser } from "./userstore";
 
-/** 경량 인증 — scrypt 해시 + sessions 테이블 토큰(httpOnly 쿠키). */
+/** 경량 인증 — scrypt 해시 + 세션 토큰(httpOnly 쿠키). 저장은 userStore(Firestore/SQLite). */
 
 export const SESSION_COOKIE = "butler_session";
 const SESSION_DAYS = 30;
@@ -21,61 +21,53 @@ export function verifyPassword(pw: string, stored: string): boolean {
 }
 
 export interface User {
-  id: number;
+  id: string;
   email: string;
   telegram_chat_id: string | null;
   alerts_enabled: number;
 }
 
-export function createUser(email: string, password: string): User {
-  const db = getDb();
-  const info = db
-    .prepare("INSERT INTO users (email, password_hash, created_at) VALUES (?, ?, ?)")
-    .run(email.toLowerCase().trim(), hashPassword(password), nowIso());
-  return getUserById(Number(info.lastInsertRowid))!;
+const toUser = (u: StoredUser): User => ({
+  id: u.id,
+  email: u.email,
+  telegram_chat_id: u.telegramChatId,
+  alerts_enabled: u.alertsEnabled ? 1 : 0,
+});
+
+export async function createUser(email: string, password: string): Promise<User> {
+  return toUser(await userStore.createUser(email, hashPassword(password)));
 }
 
-export function getUserById(id: number): User | undefined {
-  return getDb()
-    .prepare("SELECT id, email, telegram_chat_id, alerts_enabled FROM users WHERE id = ?")
-    .get(id) as User | undefined;
+export async function getUserById(id: string): Promise<User | undefined> {
+  const u = await userStore.getUserById(id);
+  return u ? toUser(u) : undefined;
 }
 
-export function authenticate(email: string, password: string): User | null {
-  const row = getDb()
-    .prepare("SELECT * FROM users WHERE email = ?")
-    .get(email.toLowerCase().trim()) as
-    | { id: number; password_hash: string }
-    | undefined;
-  if (!row || !verifyPassword(password, row.password_hash)) return null;
-  return getUserById(row.id)!;
+export async function authenticate(email: string, password: string): Promise<User | null> {
+  const u = await userStore.getUserByEmail(email);
+  if (!u || !verifyPassword(password, u.passwordHash)) return null;
+  return toUser(u);
 }
 
-export function createSession(userId: number): string {
+export function createSession(userId: string): Promise<string> {
   const token = randomBytes(32).toString("hex");
-  const now = new Date();
-  const exp = new Date(now.getTime() + SESSION_DAYS * 86400_000);
-  getDb()
-    .prepare("INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)")
-    .run(token, userId, now.toISOString(), exp.toISOString());
-  return token;
+  const exp = new Date(Date.now() + SESSION_DAYS * 86400_000).toISOString();
+  return userStore.createSession(token, userId, exp).then(() => token);
 }
 
-export function getSessionUser(token?: string | null): User | null {
+export async function getSessionUser(token?: string | null): Promise<User | null> {
   if (!token) return null;
-  const row = getDb()
-    .prepare("SELECT user_id, expires_at FROM sessions WHERE token = ?")
-    .get(token) as { user_id: number; expires_at: string } | undefined;
-  if (!row) return null;
-  if (new Date(row.expires_at) < new Date()) {
-    destroySession(token);
+  const s = await userStore.getSession(token);
+  if (!s) return null;
+  if (new Date(s.expiresAt) < new Date()) {
+    await userStore.deleteSession(token);
     return null;
   }
-  return getUserById(row.user_id) ?? null;
+  return (await getUserById(s.userId)) ?? null;
 }
 
-export function destroySession(token: string): void {
-  getDb().prepare("DELETE FROM sessions WHERE token = ?").run(token);
+export async function destroySession(token: string): Promise<void> {
+  await userStore.deleteSession(token);
 }
 
 export const sessionCookieMaxAge = SESSION_DAYS * 86400;

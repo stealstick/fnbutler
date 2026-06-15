@@ -12,8 +12,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "이메일과 6자 이상 비밀번호 필요" }, { status: 400 });
   }
   try {
-    const user = createUser(email, password);
-    const token = createSession(user.id);
+    const user = await createUser(email, password);
+    const token = await createSession(user.id);
     const res = NextResponse.json({ user });
     res.cookies.set(SESSION_COOKIE, token, {
       httpOnly: true,

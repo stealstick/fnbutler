@@ -1,4 +1,5 @@
 import { getDb } from "./db";
+import { userStore } from "./userstore";
 
 /* 기업/컨센서스/재무 조회 — API 라우트와 서버 컴포넌트 공용 데이터 접근 계층. */
 
@@ -323,28 +324,14 @@ export function getSectorMomentum(code: string, days = 90) {
 }
 
 /* --------------------------- 관심목록 --------------------------- */
-export function addWatch(userId: number, corpCode: string) {
-  getDb()
-    .prepare(
-      "INSERT INTO watchlist (user_id, corp_code, created_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING",
-    )
-    .run(userId, corpCode, new Date().toISOString());
-}
-export function removeWatch(userId: number, corpCode: string) {
-  getDb().prepare("DELETE FROM watchlist WHERE user_id = ? AND corp_code = ?").run(userId, corpCode);
-}
-export function isWatched(userId: number, corpCode: string): boolean {
-  return !!getDb()
-    .prepare("SELECT 1 FROM watchlist WHERE user_id = ? AND corp_code = ?")
-    .get(userId, corpCode);
-}
-export function getWatchlist(userId: number): CompanyRow[] {
+/** 관심목록 보유 corpCode(userStore)로 companies(SQLite) 조회 → 시총순. */
+export async function getWatchlistCompanies(userId: string): Promise<CompanyRow[]> {
+  const codes = await userStore.listWatchCorpCodes(userId);
+  if (codes.length === 0) return [];
+  const ph = codes.map(() => "?").join(",");
   return getDb()
-    .prepare(
-      `SELECT c.* FROM watchlist w JOIN companies c ON c.corp_code = w.corp_code
-       WHERE w.user_id = ? ORDER BY c.market_cap DESC NULLS LAST`,
-    )
-    .all(userId) as CompanyRow[];
+    .prepare(`SELECT * FROM companies WHERE corp_code IN (${ph}) ORDER BY market_cap DESC NULLS LAST`)
+    .all(...codes) as CompanyRow[];
 }
 
 export function getStats() {

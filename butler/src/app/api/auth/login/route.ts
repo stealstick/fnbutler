@@ -8,9 +8,9 @@ export async function POST(req: NextRequest) {
     email?: string;
     password?: string;
   };
-  const user = email && password ? authenticate(email, password) : null;
+  const user = email && password ? await authenticate(email, password) : null;
   if (!user) return NextResponse.json({ error: "이메일 또는 비밀번호 오류" }, { status: 401 });
-  const token = createSession(user.id);
+  const token = await createSession(user.id);
   const res = NextResponse.json({ user });
   res.cookies.set(SESSION_COOKIE, token, {
     httpOnly: true,

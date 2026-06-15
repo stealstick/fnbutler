@@ -32,7 +32,7 @@ gcloud run deploy "$SERVICE" \
   --image "$IMG" --project "$PROJECT" --region "$REGION" \
   --allow-unauthenticated --memory 1Gi --cpu 1 \
   --min-instances 0 --max-instances 1 --port 8080 \
-  --set-env-vars "BUTLER_DB_PATH=/app/db/butler.db,BUTLER_BASE_URL=${URL}"
+  --set-env-vars "BUTLER_DB_PATH=/app/db/butler.db,BUTLER_USERSTORE=firestore,BUTLER_BASE_URL=${URL}"
 
 echo "▶ 5/5 라이브 검증"
 sleep 5

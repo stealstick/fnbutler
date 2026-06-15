@@ -23,6 +23,7 @@
     "ingest:covered": "tsx scripts/ingest-covered.ts"
   },
   "dependencies": {
+    "@google-cloud/firestore": "^8.6.0",
     "better-sqlite3": "^11.8.1",
     "next": "^15.5.19",
     "react": "19.0.0",

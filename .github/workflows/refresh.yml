@@ -41,6 +41,7 @@ jobs:
           BUTLER_TELEGRAM_BOT_TOKEN: ${{ secrets.BUTLER_TELEGRAM_BOT_TOKEN }}
           BUTLER_BASE_URL: https://fnbutler-l3why3suea-du.a.run.app
           BUTLER_RATE_PER_MIN: "80"
+          BUTLER_USERSTORE: firestore # 알림 대상(관심목록)은 Firestore 에서 조회
         run: cd butler && npx tsx scripts/refresh-daily.ts
 
       - name: Detect change
@@ -67,7 +68,7 @@ jobs:
             --image "$IMG" --project "$PROJECT" --region "$REGION" \
             --allow-unauthenticated --memory 1Gi --cpu 1 \
             --min-instances 0 --max-instances 1 --port 8080 \
-            --set-env-vars "BUTLER_DB_PATH=/app/db/butler.db,BUTLER_BASE_URL=${URL}"
+            --set-env-vars "BUTLER_DB_PATH=/app/db/butler.db,BUTLER_USERSTORE=firestore,BUTLER_BASE_URL=${URL}"
 
       - name: No change
         if: steps.chg.outputs.changed == 'false'
