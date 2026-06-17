@@ -230,6 +230,9 @@ export interface AnalysisSummary {
     targetPrices: TargetPricesResponse["charts"]["targetPrices"];
     consensusRevenueAvg?: Series;
     consensusOperatingProfitLossAvg?: Series;
+    // 최근 분기 실적(isPreliminary=false)+추정(isEstimate=true). fs.* 의 ~2023 마스킹보다 신선.
+    isRevenueForComparison?: Series;
+    isOperatingProfitLossForComparison?: Series;
     [k: string]: unknown;
   };
 }
