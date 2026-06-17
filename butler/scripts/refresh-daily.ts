@@ -36,20 +36,26 @@ async function main() {
   const runStart = nowIso();
   const today = runStart.slice(0, 10);
   const scope = argOf("scope") ?? "all";
+  // 캘린더만 빠르게 갱신(회사 시세/리포트 루프 생략) — prod 캘린더 즉시 채우기/경량 크론용.
+  const calendarOnly = has("calendar-only");
 
   const targets = (
-    scope === "watchlist"
-      ? (db.prepare("SELECT DISTINCT corp_code FROM watchlist").all() as { corp_code: string }[])
-      : (db
-          .prepare(
-            `SELECT corp_code FROM companies
-             WHERE has_consensus = 1 OR corp_code IN (SELECT corp_code FROM watchlist)
-             ORDER BY market_cap DESC NULLS LAST`,
-          )
-          .all() as { corp_code: string }[])
+    calendarOnly
+      ? ([] as { corp_code: string }[])
+      : scope === "watchlist"
+        ? (db.prepare("SELECT DISTINCT corp_code FROM watchlist").all() as { corp_code: string }[])
+        : (db
+            .prepare(
+              `SELECT corp_code FROM companies
+               WHERE has_consensus = 1 OR corp_code IN (SELECT corp_code FROM watchlist)
+               ORDER BY market_cap DESC NULLS LAST`,
+            )
+            .all() as { corp_code: string }[])
   ).map((r) => r.corp_code);
 
-  process.stdout.write(`[${runStart}] 일일 갱신 시작 — 대상 ${targets.length}개 (scope=${scope})\n`);
+  process.stdout.write(
+    `[${runStart}] ${calendarOnly ? "캘린더 전용" : "일일"} 갱신 시작 — 대상 ${targets.length}개 (scope=${scope})\n`,
+  );
 
   let newReports = 0,
     quoteUpdated = 0,
@@ -89,7 +95,10 @@ async function main() {
 
   // 캘린더는 매 갱신 시 윈도우를 다시 적재하므로(실제값 채움/신규 일정) 성공하면 변경으로 취급.
   const changed = newReports > 0 || quoteUpdated > 0 || calendarOk;
-  const { sent } = await dispatchAlerts(db, { sinceIso: runStart, baseUrl: BASE_URL });
+  // 캘린더 전용 모드는 신규 리포트가 없으므로 알림 발송 생략.
+  const { sent } = calendarOnly
+    ? { sent: 0 }
+    : await dispatchAlerts(db, { sinceIso: runStart, baseUrl: BASE_URL });
 
   db.prepare(
     "INSERT INTO ingest_runs (kind, started_at, finished_at, ok, note) VALUES ('refresh-daily', ?, ?, 1, ?)",

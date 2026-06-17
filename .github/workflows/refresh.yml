@@ -5,7 +5,13 @@ name: daily refresh & deploy
 on:
   schedule:
     - cron: "30 9 * * 1-5"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "refresh mode"
+        type: choice
+        default: full
+        options: [full, calendar-only]
 
 env:
   PROJECT: protein-test-469413
@@ -44,7 +50,7 @@ jobs:
           BUTLER_USERSTORE: firestore # 알림 대상(관심목록)은 Firestore 에서 조회
           # 캘린더 국내 실적발표(잠정실적 공시) 수집용. 미설정 시 국내실적만 비활성(나머지는 정상).
           DART_API_KEY: ${{ secrets.DART_API_KEY }}
-        run: cd butler && npx tsx scripts/refresh-daily.ts
+        run: cd butler && npx tsx scripts/refresh-daily.ts ${{ github.event.inputs.mode == 'calendar-only' && '--calendar-only' || '' }}
 
       - name: Detect change
         id: chg
