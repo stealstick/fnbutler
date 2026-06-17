@@ -115,6 +115,7 @@ const SORT_WHITELIST: Record<SortCol, string> = {
 export interface ListOpts {
   q?: string;
   market?: string;
+  sector?: string;
   onlyConsensus?: boolean;
   sort?: SortCol;
   dir?: "asc" | "desc";
@@ -133,6 +134,10 @@ export function listCompanies(opts: ListOpts = {}): { total: number; rows: Compa
   if (opts.market) {
     where.push("market = @market");
     params.market = opts.market;
+  }
+  if (opts.sector) {
+    where.push("sector_code = @sector");
+    params.sector = opts.sector;
   }
   if (opts.onlyConsensus) where.push("has_consensus = 1");
   const w = where.length ? `WHERE ${where.join(" AND ")}` : "";

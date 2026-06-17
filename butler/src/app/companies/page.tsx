@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { won, num, pct, signClass } from "@/lib/format";
-import type { CompanyRow } from "@/lib/repo";
+import type { CompanyRow, SectorAgg } from "@/lib/repo";
 
 interface ApiResp {
   total: number;
@@ -16,13 +16,23 @@ type Dir = "asc" | "desc";
 export default function CompaniesPage() {
   const [q, setQ] = useState("");
   const [market, setMarket] = useState("");
+  const [sector, setSector] = useState("");
   const [onlyConsensus, setOnlyConsensus] = useState(false);
   const [sort, setSort] = useState("market_cap");
   const [dir, setDir] = useState<Dir>("desc");
   const [data, setData] = useState<ApiResp | null>(null);
+  const [sectors, setSectors] = useState<SectorAgg[]>([]);
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(false);
   const limit = 50;
+
+  // 섹터 탭 목록(기업수 배지) — 1회 로드
+  useEffect(() => {
+    fetch("/api/sectors")
+      .then((r) => r.json())
+      .then((d) => setSectors(d.results ?? []))
+      .catch(() => {});
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -34,17 +44,18 @@ export default function CompaniesPage() {
       limit: String(limit),
       offset: String(page * limit),
     });
+    if (sector) sp.set("sector", sector);
     if (onlyConsensus) sp.set("consensus", "1");
     const r = await fetch(`/api/companies?${sp}`);
     setData(await r.json());
     setLoading(false);
-  }, [q, market, sort, dir, onlyConsensus, page]);
+  }, [q, market, sector, sort, dir, onlyConsensus, page]);
 
   useEffect(() => {
     const t = setTimeout(load, 200);
     return () => clearTimeout(t);
   }, [load]);
-  useEffect(() => setPage(0), [q, market, sort, dir, onlyConsensus]);
+  useEffect(() => setPage(0), [q, market, sector, sort, dir, onlyConsensus]);
 
   function clickSort(key: string, defaultDir: Dir = "desc") {
     if (sort === key) setDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -104,6 +115,29 @@ export default function CompaniesPage() {
           컨센서스 보유만
         </label>
         <span className="muted" style={{ marginLeft: "auto" }}>{loading ? "불러오는 중…" : `${num(total)}개`}</span>
+      </div>
+
+      <div className="tabs" role="tablist" aria-label="섹터 필터">
+        <button
+          className={"tab" + (sector === "" ? " active" : "")}
+          onClick={() => setSector("")}
+          role="tab"
+          aria-selected={sector === ""}
+        >
+          전체
+        </button>
+        {sectors.map((s) => (
+          <button
+            key={s.sector_code}
+            className={"tab" + (sector === s.sector_code ? " active" : "")}
+            onClick={() => setSector(s.sector_code)}
+            role="tab"
+            aria-selected={sector === s.sector_code}
+          >
+            {s.sector_name}
+            <span className="tab-count">{num(s.company_count)}</span>
+          </button>
+        ))}
       </div>
 
       <div className="scrollx">

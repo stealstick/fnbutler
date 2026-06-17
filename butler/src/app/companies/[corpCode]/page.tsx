@@ -91,6 +91,14 @@ export default async function CompanyPage({
         </div>
       </div>
 
+      {/* ---------- 실적 추이 (분기/연간 + QoQ/YoY) ---------- */}
+      <FinancialsTable
+        quarterly={quarterly}
+        annual={annual}
+        valuations={valuations}
+        isFinancial={!!company.is_financial}
+      />
+
       <TargetPricePanel
         brokers={brokers}
         history={brokerHistory}
@@ -101,14 +109,6 @@ export default async function CompanyPage({
         coverCount={company.cover_securities}
         hasConsensus={!!company.has_consensus}
         detailIngested={!!company.detail_ingested_at}
-      />
-
-      {/* ---------- 실적 추이 (분기/연간 + QoQ/YoY) ---------- */}
-      <FinancialsTable
-        quarterly={quarterly}
-        annual={annual}
-        valuations={valuations}
-        isFinancial={!!company.is_financial}
       />
 
       {/* ---------- 변경 이력 ---------- */}

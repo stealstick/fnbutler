@@ -122,6 +122,30 @@ table.grid th.sortable.active { color: var(--accent); }
 .btn.ghost { background: transparent; }
 .btn[disabled] { opacity: 0.5; cursor: default; }
 
+/* ----- 섹터 탭 ----- */
+.tabs {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin-bottom: 14px; padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.tab {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: transparent; border: 1px solid var(--border); color: var(--muted);
+  border-radius: 999px; padding: 5px 12px; font-size: 12.5px; cursor: pointer;
+  transition: color .12s, border-color .12s, background .12s;
+}
+.tab:hover { color: var(--text); border-color: var(--muted-2); }
+.tab.active {
+  color: var(--text); font-weight: 600;
+  background: var(--accent-soft); border-color: var(--accent);
+}
+.tab-count {
+  font-size: 10.5px; font-variant-numeric: tabular-nums;
+  color: var(--muted-2); background: var(--panel-2);
+  border-radius: 999px; padding: 0 6px; min-width: 18px; text-align: center;
+}
+.tab.active .tab-count { color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, transparent); }
+
 .rowlink { cursor: pointer; }
 table.grid tbody tr.selected { background: color-mix(in srgb, var(--broker) 14%, transparent); box-shadow: inset 3px 0 0 var(--broker); }
 table.grid tbody tr.selected:hover { background: color-mix(in srgb, var(--broker) 20%, transparent); }

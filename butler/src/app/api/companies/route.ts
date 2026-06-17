@@ -7,6 +7,7 @@ export function GET(req: NextRequest) {
   const opts: ListOpts = {
     q: sp.get("q") ?? undefined,
     market: sp.get("market") ?? undefined,
+    sector: sp.get("sector") ?? undefined,
     onlyConsensus: sp.get("consensus") === "1",
     sort: (sp.get("sort") as ListOpts["sort"]) ?? "market_cap",
     dir: sp.get("dir") === "asc" ? "asc" : "desc",
