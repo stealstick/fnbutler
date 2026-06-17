@@ -417,13 +417,19 @@ export function upsertFinancials(
         writeRow(metric, label, pq.year, 0, "A", it.value, 0, it.date ?? null);
       }
     }
-    // (3) consensus.is* = 분기 단독 시계열(인증 시 최신 분기까지 완전).
-    //     REVENUE / OPERATING_PROFIT 만 제공. isPreliminary 로 실적/추정 구분:
-    //     false|true = 확정/잠정 실적(is_estimate=0), null/없음 = 미래 추정치(=1).
-    //     (2) 의 quarter fs 보다 최신이므로 ON CONFLICT 로 덮어쓴다.
+    // (3) consensus 분기 시계열 — REVENUE / OPERATING_PROFIT 만 제공.
+    //     isPreliminary 로 실적/추정 구분: false|true = 확정/잠정 실적(is_estimate=0),
+    //     null/없음 = 미래 추정치(=1). (2) 의 quarter fs 보다 최신이므로 ON CONFLICT 덮어씀.
+    //     - is* (isRevenue …): 확정/잠정 실적값. 인증 세션이면 최신 분기까지 완전,
+    //       비로그인이면 ~2023 까지만(value 마스킹).
+    //     - consensus*Avg (consensusRevenueAvg …): 애널리스트 컨센서스 평균 추정치로
+    //       비로그인에도 향후 분기(예: 2025) 값이 옴 → is* 와 별개 데이터(is_estimate=1)
+    //       라 PK 충돌 없이 함께 적재. 둘 중 하나만 읽으면 추정치 계층이 비므로 둘 다 본다.
     const consMap: Array<[string, string, string]> = [
       ["isRevenue", "REVENUE", "매출액"],
       ["isOperatingProfitLoss", "OPERATING_PROFIT", "영업이익"],
+      ["consensusRevenueAvg", "REVENUE", "매출액"],
+      ["consensusOperatingProfitLossAvg", "OPERATING_PROFIT", "영업이익"],
     ];
     for (const [key, metric, label] of consMap) {
       for (const it of ((acc.consensus as any)?.[key] as any[]) ?? []) {
