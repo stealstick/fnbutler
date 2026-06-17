@@ -26,6 +26,19 @@ export interface AlertTarget {
   corpCodes: string[];
 }
 
+/** 계정별 캘린더 필터. */
+export interface CalendarPrefsData {
+  categories?: string[]; // macro / earnings_intl / earnings_kr
+  countries?: string[]; // US/CN/JP/KR
+  subcategories?: string[]; // central_bank/inflation/employment/activity/other
+  minImportance?: number; // 1..3
+}
+export interface CalendarPrefsRecord {
+  userId: string;
+  prefs: CalendarPrefsData;
+  feedToken: string | null;
+}
+
 const useFirestore = process.env.BUTLER_USERSTORE === "firestore";
 
 /* ============================ Firestore 백엔드 ============================ */
@@ -129,6 +142,25 @@ const firestoreBackend = {
       tx.delete(ref);
       return new Date(d.expiresAt) < new Date() ? null : (d.userId as string);
     });
+  },
+  async getCalendarPrefs(userId: string): Promise<CalendarPrefsRecord | null> {
+    const doc = await fs().collection("calendar_prefs").doc(userId).get();
+    if (!doc.exists) return null;
+    const d = doc.data()!;
+    return { userId, prefs: (d.prefs as CalendarPrefsData) ?? {}, feedToken: d.feedToken ?? null };
+  },
+  async upsertCalendarPrefs(userId: string, prefs: CalendarPrefsData, feedToken: string): Promise<void> {
+    await fs()
+      .collection("calendar_prefs")
+      .doc(userId)
+      .set({ prefs, feedToken, updatedAt: nowIso() }, { merge: true });
+  },
+  async getCalendarPrefsByToken(token: string): Promise<CalendarPrefsRecord | null> {
+    const snap = await fs().collection("calendar_prefs").where("feedToken", "==", token).limit(1).get();
+    if (snap.empty) return null;
+    const doc = snap.docs[0];
+    const d = doc.data();
+    return { userId: doc.id, prefs: (d.prefs as CalendarPrefsData) ?? {}, feedToken: d.feedToken ?? null };
   },
 };
 
@@ -246,6 +278,31 @@ const sqliteBackend = {
     if (!r) return null;
     db.prepare("DELETE FROM telegram_link_tokens WHERE token = ?").run(token);
     return new Date(r.expires_at) < new Date() ? null : String(r.user_id);
+  },
+  async getCalendarPrefs(userId: string): Promise<CalendarPrefsRecord | null> {
+    const r = getDb()
+      .prepare("SELECT prefs_json, feed_token FROM calendar_prefs WHERE user_id = ?")
+      .get(String(userId)) as any;
+    return r
+      ? { userId: String(userId), prefs: JSON.parse(r.prefs_json || "{}"), feedToken: r.feed_token }
+      : null;
+  },
+  async upsertCalendarPrefs(userId: string, prefs: CalendarPrefsData, feedToken: string): Promise<void> {
+    getDb()
+      .prepare(
+        "INSERT INTO calendar_prefs (user_id, prefs_json, feed_token, updated_at) VALUES (?, ?, ?, ?) " +
+          "ON CONFLICT(user_id) DO UPDATE SET prefs_json = excluded.prefs_json, " +
+          "feed_token = excluded.feed_token, updated_at = excluded.updated_at",
+      )
+      .run(String(userId), JSON.stringify(prefs), feedToken, nowIso());
+  },
+  async getCalendarPrefsByToken(token: string): Promise<CalendarPrefsRecord | null> {
+    const r = getDb()
+      .prepare("SELECT user_id, prefs_json, feed_token FROM calendar_prefs WHERE feed_token = ?")
+      .get(token) as any;
+    return r
+      ? { userId: String(r.user_id), prefs: JSON.parse(r.prefs_json || "{}"), feedToken: r.feed_token }
+      : null;
   },
 };
 

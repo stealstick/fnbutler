@@ -246,6 +246,51 @@ CREATE TABLE IF NOT EXISTS telegram_link_tokens (
     created_at TEXT NOT NULL
 );
 
+-- 계정별 캘린더 필터 저장 + 개인 구독 피드 토큰.
+--   prefs_json: {categories:[], countries:[], minImportance:int, subcategories:[]}
+--   feed_token: 개인 ICS 구독 URL(/api/calendar/ics?u=<token>)용 불투명 토큰.
+-- (prod 는 Firestore 의 calendar_prefs 컬렉션 사용 — 이 테이블은 로컬 SQLite 폴백)
+CREATE TABLE IF NOT EXISTS calendar_prefs (
+    user_id    TEXT PRIMARY KEY,
+    prefs_json TEXT NOT NULL,
+    feed_token TEXT UNIQUE,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_calprefs_token ON calendar_prefs(feed_token);
+
+-- ----------------------------------------------------------------------------
+-- 경제/실적 캘린더 — FOMC·BOJ·한국은행 금리결정, 미국 CPI/PPI/고용/소매,
+--   중국 경기·물가·소비 지표(거시), 해외 실적발표(시총 상위), 국내 실적발표.
+-- 출처별(source) 멱등 적재. id 는 (category|country|date|title|symbol) 결정적 해시.
+--   재수집 시 actual/consensus/previous 가 채워지면 UPSERT 로 갱신된다.
+-- category   : 'macro' | 'earnings_intl' | 'earnings_kr'
+-- subcategory: 거시 = 'central_bank'|'inflation'|'employment'|'activity'|'other'
+-- country    : 'US' | 'CN' | 'JP' | 'KR' | 'EZ' (ISO 유사 슬러그)
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS calendar_events (
+    id          TEXT PRIMARY KEY,
+    category    TEXT NOT NULL,
+    subcategory TEXT,
+    country     TEXT,
+    event_date  TEXT NOT NULL,                 -- 'YYYY-MM-DD'
+    event_time  TEXT,                           -- 'HH:MM' (tz 기준) | NULL=종일
+    tz          TEXT,                           -- 'GMT' 등
+    title       TEXT NOT NULL,                  -- 지표명 / 기업명
+    symbol      TEXT,                           -- 티커(실적) / 종목코드
+    importance  INTEGER NOT NULL DEFAULT 1,     -- 1..3 (3=최상)
+    actual      TEXT,
+    consensus   TEXT,
+    previous    TEXT,
+    market_cap  REAL,                           -- 실적 랭킹용(원/USD)
+    url         TEXT,                           -- 상세 링크(선택)
+    note        TEXT,
+    source      TEXT NOT NULL,                  -- 'nasdaq' | 'dart' | ...
+    updated_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_calevt_date ON calendar_events(event_date);
+CREATE INDEX IF NOT EXISTS idx_calevt_cat  ON calendar_events(category, event_date);
+CREATE INDEX IF NOT EXISTS idx_calevt_ctry ON calendar_events(country, event_date);
+
 -- ============================================================================
 -- 뷰: "최신값"과 파생지표(QoQ/YoY)는 저장하지 않고 계산한다.
 -- ============================================================================

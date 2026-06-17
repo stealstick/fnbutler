@@ -396,3 +396,84 @@ table.cmp-table tbody tr:hover .cmp-rowlabel { background: var(--panel-2); }
   border: 6px solid transparent; border-top-color: var(--border);
 }
 .infotip:hover .infotip-bubble, .infotip:focus .infotip-bubble { opacity: 1; visibility: visible; }
+
+/* ===== 경제·실적 캘린더 (/calendar) ===== */
+.cal-swatch { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 2px; vertical-align: middle; }
+
+/* 구글 연동 바 */
+.cal-gbar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 10px 12px; background: var(--panel-2);
+  border: 1px solid var(--border); border-radius: 10px;
+}
+.cal-gbar-title { font-weight: 700; font-size: 13px; margin-right: 4px; }
+.cal-flash { font-size: 12px; color: #16c784; }
+
+/* 월 네비게이션 */
+.cal-monthbar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.cal-monthlabel { font-size: 16px; font-weight: 800; min-width: 110px; text-align: center; }
+
+/* 달력 그리드 */
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.cal-wh { background: var(--panel-2); color: var(--muted); font-size: 11.5px; font-weight: 700; text-align: center; padding: 7px 0; }
+.cal-wh.sun { color: var(--up); }
+.cal-wh.sat { color: var(--down); }
+.cal-cell {
+  background: var(--panel); border: none; text-align: left; cursor: pointer;
+  min-height: 96px; padding: 5px 6px 6px; display: flex; flex-direction: column; gap: 3px;
+  font: inherit; color: inherit; transition: background .1s;
+}
+.cal-cell:hover { background: var(--panel-2); }
+.cal-cell.out { opacity: 0.4; }
+.cal-cell.today { box-shadow: inset 0 0 0 1px var(--accent); }
+.cal-cell.sel { background: color-mix(in srgb, var(--accent) 16%, transparent); box-shadow: inset 0 0 0 1px var(--accent); }
+.cal-daynum { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--muted); }
+.cal-daynum.sun { color: var(--up); }
+.cal-daynum.sat { color: var(--down); }
+.cal-chips { display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
+.cal-chip {
+  display: inline-flex; align-items: center; gap: 3px; max-width: 100%;
+  font-size: 10.5px; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  border: 1px solid var(--border); border-radius: 4px; padding: 0 3px; background: var(--panel-2);
+}
+.cal-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; flex: none; }
+.cal-more { font-size: 10px; color: var(--muted-2); padding-left: 2px; }
+
+/* 선택일/리스트 상세 */
+.cal-day-detail { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 12px; }
+.cal-detail-h { font-size: 14px; margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
+.cal-listgroup + .cal-listgroup { margin-top: 18px; }
+.cal-todaytag { font-size: 10.5px; font-weight: 700; color: var(--accent); border: 1px solid var(--accent); border-radius: 999px; padding: 0 7px; }
+.cal-evlist { display: flex; flex-direction: column; gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+
+.cal-ev { display: flex; align-items: stretch; gap: 10px; background: var(--panel); padding: 9px 12px 9px 0; }
+.cal-ev:hover { background: var(--panel-2); }
+.cal-ev-bar { width: 3px; flex: none; border-radius: 0 3px 3px 0; }
+.cal-ev-time { width: 58px; flex: none; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; }
+.cal-ev-kst { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.cal-ev-tz { font-size: 9.5px; color: var(--muted-2); }
+.cal-ev-allday { font-size: 11px; color: var(--muted-2); }
+.cal-ev-main { flex: 1; min-width: 0; }
+.cal-ev-title { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; font-size: 13.5px; font-weight: 600; }
+.cal-ev-ctry { color: var(--muted); font-weight: 700; font-size: 12px; }
+.cal-ev-sym { font-family: var(--mono); font-size: 11px; color: var(--muted); background: var(--panel-2); border-radius: 4px; padding: 0 5px; }
+.cal-ev-kind { font-size: 11px; font-weight: 700; }
+.cal-ev-sub { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 3px; }
+.cal-ev-sub b { color: var(--text); font-variant-numeric: tabular-nums; }
+.cal-ev-add { flex: none; align-self: center; font-size: 11.5px; color: var(--muted); border: 1px solid var(--border); border-radius: 7px; padding: 4px 9px; white-space: nowrap; }
+.cal-ev-add:hover { border-color: var(--accent); color: var(--accent); }
+
+/* 중요도 점 */
+.cal-imp { display: inline-flex; gap: 2px; align-items: center; }
+.cal-impdot { width: 5px; height: 5px; border-radius: 50%; background: var(--border); }
+.cal-impdot.on { background: var(--broker); }
+
+/* 범례 */
+.cal-legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.cal-leg { display: inline-flex; align-items: center; gap: 6px; }
+
+@media (max-width: 720px) {
+  .cal-cell { min-height: 76px; }
+  .cal-chip { font-size: 9.5px; }
+  .cal-ev-sub { gap: 8px; }
+}

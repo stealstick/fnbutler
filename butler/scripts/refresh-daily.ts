@@ -18,6 +18,7 @@ import { execSync } from "node:child_process";
 import { getDb, migrate, nowIso } from "../src/lib/db";
 import { ingestNewReports, refreshCompanyQuote } from "../src/lib/ingest";
 import { recordDailySnapshot, dispatchAlerts } from "../src/lib/poll";
+import { ingestCalendar } from "../src/lib/calendar";
 
 const has = (f: string) => process.argv.includes(`--${f}`);
 const argOf = (f: string) => {
@@ -71,7 +72,23 @@ async function main() {
     }
   }
 
-  const changed = newReports > 0 || quoteUpdated > 0;
+  // 경제·실적 캘린더 갱신 (비치명적). DART_API_KEY 있으면 국내실적 포함.
+  let calendarOk = false;
+  let calendarMsg = "skip";
+  if (!has("no-calendar")) {
+    try {
+      const cr = await ingestCalendar(db, { dartKey: process.env.DART_API_KEY || undefined });
+      calendarMsg = `거시 ${cr.macro}·해외 ${cr.earningsIntl}·국내 ${cr.earningsKr}`;
+      calendarOk = true;
+      process.stdout.write(`   📅 캘린더 갱신 — ${calendarMsg}\n`);
+    } catch (e) {
+      calendarMsg = `error: ${(e as Error).message}`;
+      process.stdout.write(`   📅 캘린더 갱신 실패 — ${(e as Error).message}\n`);
+    }
+  }
+
+  // 캘린더는 매 갱신 시 윈도우를 다시 적재하므로(실제값 채움/신규 일정) 성공하면 변경으로 취급.
+  const changed = newReports > 0 || quoteUpdated > 0 || calendarOk;
   const { sent } = await dispatchAlerts(db, { sinceIso: runStart, baseUrl: BASE_URL });
 
   db.prepare(
@@ -79,7 +96,7 @@ async function main() {
   ).run(
     runStart,
     nowIso(),
-    `targets=${targets.length} newReports=${newReports} quoteUpdated=${quoteUpdated} unchanged=${unchanged} alerts=${sent} errors=${errors}`,
+    `targets=${targets.length} newReports=${newReports} quoteUpdated=${quoteUpdated} unchanged=${unchanged} alerts=${sent} errors=${errors} calendar=${calendarMsg}`,
   );
 
   process.stdout.write(

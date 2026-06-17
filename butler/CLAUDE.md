@@ -77,7 +77,8 @@ long-format 지표, 최신값·파생지표는 뷰로 계산, 모든 적재 `sou
 | `npm run backfill:sectors` | 섹터(업종) 분류 백필 |
 | `npm run backfill:changes` | 변경이력을 원본 리포트일 기준 재생성 |
 | `npm run import:har -- <file.har>` | 로그인 HAR로 최신 재무 백필 |
-| `npm run refresh` / `refresh:push` | **일일 증분·멱등 갱신** (+ 변경 시 GCS 업로드/재배포) |
+| `npm run ingest:calendar` | 경제·실적 캘린더 수집(Nasdaq 경제/실적 + BOK 큐레이션, `--back N --ahead N`) |
+| `npm run refresh` / `refresh:push` | **일일 증분·멱등 갱신** (+ 변경 시 GCS 업로드/재배포; 캘린더도 함께 갱신, `--no-calendar`로 제외) |
 
 **증분·멱등 핵심**: `ingestNewReports`(피드 최신순, 이미 가진 report_id 만나면 중단 → 신규분만),
 `refreshCompanyQuote`(시세/목표가 값이 바뀐 경우에만 UPDATE; `toNum`으로 "N/A"→null NaN오탐 방지).
@@ -110,6 +111,7 @@ long-format 지표, 최신값·파생지표는 뷰로 계산, 모든 적재 `sou
 | `BUTLER_TELEGRAM_BOT_USERNAME` | 봇 username 강제(선택, 미설정 시 getMe 자동 조회) |
 | `BUTLER_RATE_PER_MIN` | 업스트림 분당 호출 상한(기본 80) |
 | `GOOGLE_APPLICATION_CREDENTIALS` | 로컬에서 Firestore 테스트 시 SA 키 경로 |
+| `DART_API_KEY` | (선택) 캘린더 **국내 실적발표**(잠정실적 공시) 수집용 DART Open API 키. 없으면 국내실적만 비활성 |
 
 ### 텔레그램 자동 연결(딥링크)
 
@@ -125,7 +127,25 @@ long-format 지표, 최신값·파생지표는 뷰로 계산, 모든 적재 `sou
 
 `/`(데스크 개요) · `/companies`(전체) · `/sectors`+`/sectors/[code]`(섹터) ·
 `/companies/[corpCode]`(증권사별 목표가 비교+차트오버레이+분기/연간 재무+변경이력) ·
-`/watchlist` `/settings` `/login` `/changes`. API 명세: `public/docs/openapi.yaml`.
+`/calendar`(경제·실적 캘린더) · `/watchlist` `/settings` `/login` `/changes`. API 명세: `public/docs/openapi.yaml`.
+
+### 경제·실적 캘린더 (`/calendar`)
+
+FOMC·BoJ·한국은행 금리결정, 미국 CPI/PPI/고용/소매, 중국 경기·물가·소비, 해외/국내 실적발표를
+한 화면(월간 그리드 + 리스트)에 모은다. 데이터는 `calendar_events` 테이블, 출처별 멱등 적재.
+
+- **거시 일정**: Nasdaq 경제 캘린더(`api.nasdaq.com/api/calendar/economicevents`, 무인증) — 국가
+  US/CN/JP/KR 필터, 지표명으로 소분류(통화정책/물가/고용/경기·소비/기타)+중요도 분류. 유의미한 지표는
+  모두 적재하고 화면/계정에서 거른다.
+- **한국은행 금리결정**: Nasdaq 미제공 → `src/lib/calendar.ts` 의 `BOK_RATE_DECISIONS` 큐레이션
+  시드(연 1회 공식 공시로 갱신). source='bok'.
+- **해외 실적(TOP100)**: Nasdaq 실적 캘린더 — 수집 윈도우 내 marketCap 상위 100.
+- **국내 실적**: `DART_API_KEY` 있을 때만 DART 잠정실적 공시(시총 TOP100 교집합) 적재. 없으면 비활성.
+- **계정별 필터 저장**: 로그인 시 카테고리/국가/중요도 필터를 `calendar_prefs`(Firestore/SQLite)에 저장.
+  개인 구독 토큰(`feed_token`) → `/api/calendar/ics?u=<token>` 이 그 필터를 적용한 개인 피드.
+- **구글 캘린더 연동**: `/api/calendar/ics`(ICS 구독 피드, 6h 갱신힌트) + 이벤트별 TEMPLATE 추가 링크.
+  익명 사용자는 필터를 localStorage 에 보존, 구독 URL 에 쿼리 필터가 반영된다.
+- 멱등: 매 수집마다 윈도우(±N일) 안의 nasdaq/bok 행을 지우고 다시 넣는다(재일정/실제값 반영).
 
 ## 11. 컨벤션 / 주의
 

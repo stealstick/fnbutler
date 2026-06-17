@@ -20,6 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <nav>
               <Link href="/companies">기업</Link>
               <Link href="/sectors">섹터</Link>
+              <Link href="/calendar">캘린더</Link>
               <Link href="/changes">변경이력</Link>
               <a href="/docs/openapi.yaml">API</a>
             </nav>

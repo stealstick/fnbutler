@@ -49,6 +49,8 @@ tags:
     description: 섹터 집계 (로컬)
   - name: auth
     description: 로그인 / 관심목록 / 알림 (로컬)
+  - name: calendar
+    description: 경제·실적 캘린더 / ICS 구독 / 계정별 필터 (로컬)
 
 paths:
   # ===================== 업스트림: 스크리너 =====================
@@ -480,6 +482,43 @@ paths:
       servers: [{ url: "http://localhost:3939/api" }]
       parameters: [{ name: corpCode, in: query, required: true, schema: { type: string } }]
       responses: { "200": { description: OK }, "401": { description: 로그인 필요 } }
+
+  /calendar/ics:
+    get:
+      tags: [calendar]
+      summary: 경제·실적 캘린더 ICS 구독 피드 (Google/Apple 캘린더 URL 구독)
+      description: >
+        text/calendar(.ics) 피드. category/country 쿼리로 필터링하거나, ?u=<feedToken> 으로
+        계정에 저장한 필터(개인 피드)를 적용한다. 6시간 갱신 힌트 포함.
+      servers: [{ url: "http://localhost:3939/api" }]
+      parameters:
+        - { name: category, in: query, required: false, schema: { type: string }, description: "macro,earnings_intl,earnings_kr (콤마 구분)" }
+        - { name: country, in: query, required: false, schema: { type: string }, description: "US,CN,JP,KR (콤마 구분)" }
+        - { name: u, in: query, required: false, schema: { type: string }, description: "개인 구독 토큰(계정 저장 필터 적용)" }
+        - { name: download, in: query, required: false, schema: { type: string }, description: "값이 있으면 첨부파일로 내려받기" }
+      responses: { "200": { description: "text/calendar 본문" } }
+
+  /calendar/prefs:
+    get:
+      tags: [calendar]
+      summary: 내 캘린더 필터 조회
+      servers: [{ url: "http://localhost:3939/api" }]
+      responses: { "200": { description: "{ authed, prefs, feedToken }" }, "401": { description: 로그인 필요 } }
+    put:
+      tags: [calendar]
+      summary: 내 캘린더 필터 저장 (+ 개인 구독 토큰 발급)
+      servers: [{ url: "http://localhost:3939/api" }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                categories: { type: array, items: { type: string } }
+                countries: { type: array, items: { type: string } }
+                subcategories: { type: array, items: { type: string } }
+                minImportance: { type: integer, minimum: 1, maximum: 3 }
+      responses: { "200": { description: "{ authed, prefs, feedToken }" }, "401": { description: 로그인 필요 } }
 
 components:
   parameters:

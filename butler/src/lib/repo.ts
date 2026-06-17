@@ -442,3 +442,83 @@ export function getStats() {
     changes: one("SELECT COUNT(*) c FROM change_logs"),
   };
 }
+
+/* ----- 경제/실적 캘린더 ----- */
+
+export interface CalendarEventRow {
+  id: string;
+  category: string;
+  subcategory: string | null;
+  country: string | null;
+  event_date: string;
+  event_time: string | null;
+  tz: string | null;
+  title: string;
+  symbol: string | null;
+  importance: number;
+  actual: string | null;
+  consensus: string | null;
+  previous: string | null;
+  market_cap: number | null;
+  url: string | null;
+  note: string | null;
+  source: string;
+}
+
+export interface CalendarQuery {
+  from?: string; // YYYY-MM-DD (포함)
+  to?: string; // YYYY-MM-DD (포함)
+  categories?: string[]; // macro / earnings_intl / earnings_kr
+  countries?: string[]; // US/CN/JP/KR
+  minImportance?: number;
+}
+
+/** 캘린더 이벤트 조회 (날짜·카테고리·국가·중요도 필터). */
+export function getCalendarEvents(q: CalendarQuery = {}): CalendarEventRow[] {
+  const db = getDb();
+  const where: string[] = [];
+  const params: Record<string, unknown> = {};
+  if (q.from) {
+    where.push("event_date >= @from");
+    params.from = q.from;
+  }
+  if (q.to) {
+    where.push("event_date <= @to");
+    params.to = q.to;
+  }
+  if (q.categories?.length) {
+    where.push(`category IN (${q.categories.map((_, i) => `@cat${i}`).join(",")})`);
+    q.categories.forEach((c, i) => (params[`cat${i}`] = c));
+  }
+  if (q.countries?.length) {
+    where.push(`country IN (${q.countries.map((_, i) => `@ctry${i}`).join(",")})`);
+    q.countries.forEach((c, i) => (params[`ctry${i}`] = c));
+  }
+  if (q.minImportance != null) {
+    where.push("importance >= @minImp");
+    params.minImp = q.minImportance;
+  }
+  // 같은 날짜 내 표시 우선순위: 통화정책(0) > 그 외 거시(1) > 실적(2), 그다음 중요도/시각/시총.
+  // UI(CalendarView)와 ICS 피드(DB 순서 사용)가 동일한 우선순위를 갖도록 SQL 에서 정렬.
+  const sql =
+    `SELECT * FROM calendar_events ${where.length ? "WHERE " + where.join(" AND ") : ""}` +
+    ` ORDER BY event_date ASC,
+       CASE WHEN category='macro' AND subcategory='central_bank' THEN 0
+            WHEN category='macro' THEN 1 ELSE 2 END ASC,
+       importance DESC, COALESCE(event_time,'99:99') ASC, market_cap DESC`;
+  return db.prepare(sql).all(params) as CalendarEventRow[];
+}
+
+/** 캘린더 적재 현황. */
+export function getCalendarStats() {
+  const db = getDb();
+  const one = (sql: string) => ((db.prepare(sql).get() as { c: number } | undefined)?.c ?? 0);
+  return {
+    total: one("SELECT COUNT(*) c FROM calendar_events"),
+    macro: one("SELECT COUNT(*) c FROM calendar_events WHERE category='macro'"),
+    earningsIntl: one("SELECT COUNT(*) c FROM calendar_events WHERE category='earnings_intl'"),
+    earningsKr: one("SELECT COUNT(*) c FROM calendar_events WHERE category='earnings_kr'"),
+    minDate: (db.prepare("SELECT MIN(event_date) d FROM calendar_events").get() as { d: string | null }).d,
+    maxDate: (db.prepare("SELECT MAX(event_date) d FROM calendar_events").get() as { d: string | null }).d,
+  };
+}
