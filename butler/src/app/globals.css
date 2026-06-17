@@ -237,7 +237,13 @@ table.grid tbody tr.selected:hover { background: color-mix(in srgb, var(--broker
 details.ai { margin-top: 4px; }
 details.ai summary { cursor: pointer; color: var(--muted); font-size: 12px; list-style: none; }
 details.ai summary::-webkit-details-marker { display: none; }
-details.ai .body { white-space: pre-wrap; color: var(--muted); font-size: 12.5px; margin-top: 8px; padding: 10px 12px; background: var(--panel-2); border-radius: 8px; border: 1px solid var(--border); }
+details.ai .body { color: var(--muted); font-size: 12.5px; margin-top: 8px; padding: 10px 12px; background: var(--panel-2); border-radius: 8px; border: 1px solid var(--border); max-width: 520px; line-height: 1.6; }
+.ai-md { display: flex; flex-direction: column; gap: 4px; }
+.ai-li { display: flex; gap: 6px; margin-top: 4px; color: var(--text); }
+.ai-li:first-child { margin-top: 0; }
+.ai-li .ai-bullet { color: var(--accent); flex: none; }
+.ai-li strong { color: var(--text); }
+.ai-p { padding-left: 14px; }
 
 .empty { color: var(--muted); padding: 40px; text-align: center; }
 .note { font-size: 12px; color: var(--muted-2); margin-top: 8px; }
@@ -297,10 +303,24 @@ table.cmp-table tbody tr:hover .cmp-rowlabel { background: var(--panel-2); }
 .cmp-x { color: var(--muted-2); font-size: 11px; line-height: 1; }
 .cmp-x:hover { color: var(--up); }
 .cmp-table tr.cmp-group td {
-  background: var(--bg); color: var(--muted); font-weight: 700; font-size: 11.5px;
+  background: var(--bg); color: var(--accent); font-weight: 700; font-size: 11.5px;
   letter-spacing: 0.02em; text-transform: none; padding-top: 12px; padding-bottom: 6px;
   position: sticky; left: 0;
 }
+
+/* 시점 progression 셀 (직전 → 현재 → 다음) */
+.prog { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+.prog-top { display: flex; align-items: baseline; gap: 6px; justify-content: flex-end; }
+.prog-val { font-size: 14px; font-weight: 700; }
+.prog-val.est { color: var(--est); font-style: italic; }
+.prog-period { font-size: 10.5px; color: var(--muted-2); font-variant-numeric: tabular-nums; }
+.prog-chg {
+  font-size: 13px; font-weight: 800; line-height: 1.1;
+  border-radius: 6px; padding: 1px 6px; font-variant-numeric: tabular-nums;
+}
+.prog-chg.up { color: var(--up); background: color-mix(in srgb, var(--up) 16%, transparent); }
+.prog-chg.down { color: var(--down); background: color-mix(in srgb, var(--down) 16%, transparent); }
+.prog-chg.flat { color: var(--flat); background: color-mix(in srgb, var(--flat) 16%, transparent); }
 
 /* 비교 추가 검색 드롭다운 */
 .cmp-suggest {
