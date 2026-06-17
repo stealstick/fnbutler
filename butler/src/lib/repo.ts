@@ -20,6 +20,7 @@ export interface CompanyRow {
   pbr: number | null;
   fper: number | null;
   eps: number | null;
+  feps: number | null;
   bps: number | null;
   dps: number | null;
   dividend_yield: number | null;
@@ -86,6 +87,75 @@ export function getCompany(corpCode: string): CompanyRow | undefined {
   return getDb()
     .prepare("SELECT * FROM companies WHERE corp_code = ?")
     .get(corpCode) as CompanyRow | undefined;
+}
+
+/** 여러 기업을 corp_code 로 한 번에 조회 (기업 비교). 입력한 codes 순서를 보존한다. */
+export function getCompaniesByCodes(codes: string[]): CompanyRow[] {
+  if (codes.length === 0) return [];
+  const ph = codes.map(() => "?").join(",");
+  const rows = getDb()
+    .prepare(`SELECT * FROM companies WHERE corp_code IN (${ph})`)
+    .all(...codes) as CompanyRow[];
+  const byCode = new Map(rows.map((r) => [r.corp_code, r]));
+  return codes.map((c) => byCode.get(c)).filter((r): r is CompanyRow => !!r);
+}
+
+export interface CompareGrowthRow {
+  corp_code: string;
+  metric: string;
+  period_type: "Q" | "A";
+  fiscal_year: number;
+  quarter: number;
+  value: number;
+  is_estimate: number;
+  qoq_pct: number | null;
+  yoy_pct: number | null;
+}
+
+/**
+ * 기업 비교용 재무 성장률. v_financials_growth 와 달리 실적(is_estimate=0)과
+ * 추정치(=1)를 **한 시계열로 합쳐** QoQ/YoY 를 계산한다 → 실적→추정 경계를 넘어
+ * "이번분기→다음분기(E)", "전년→올해(E)", "올해(E)→다음년도(E)" 증감률이 나온다.
+ * 같은 (연,분기)에 실적·추정이 둘 다 있으면 실적을 택한다(realized 우선).
+ */
+export function getCompareGrowth(codes: string[]): CompareGrowthRow[] {
+  if (codes.length === 0) return [];
+  const ph = codes.map(() => "?").join(",");
+  return getDb()
+    .prepare(
+      // 달력 기준 매칭(위치 기반 LAG 금지): 시계열에 공백이 있어도 직전 분기/전년
+      // 동분기가 실제로 존재할 때만 증감률을 계산한다. 없으면 NULL → 화면에 '-'.
+      `WITH picked AS (
+         SELECT corp_code, metric, period_type, fiscal_year, quarter, value, is_estimate,
+                ROW_NUMBER() OVER (
+                  PARTITION BY corp_code, metric, period_type, fiscal_year, quarter
+                  ORDER BY is_estimate ASC
+                ) AS rn
+         FROM financials
+         WHERE corp_code IN (${ph}) AND value IS NOT NULL
+       ),
+       u AS (SELECT * FROM picked WHERE rn = 1)
+       SELECT u.corp_code, u.metric, u.period_type, u.fiscal_year, u.quarter, u.value, u.is_estimate,
+              CASE WHEN u.period_type = 'Q' THEN (
+                SELECT CASE WHEN p.value <> 0
+                            THEN ROUND((u.value - p.value) / ABS(p.value) * 100.0, 1) END
+                FROM u p
+                WHERE p.corp_code = u.corp_code AND p.metric = u.metric AND p.period_type = 'Q'
+                  AND ((u.quarter > 1 AND p.fiscal_year = u.fiscal_year     AND p.quarter = u.quarter - 1)
+                    OR (u.quarter = 1 AND p.fiscal_year = u.fiscal_year - 1 AND p.quarter = 4))
+              ) END AS qoq_pct,
+              (
+                SELECT CASE WHEN p.value <> 0
+                            THEN ROUND((u.value - p.value) / ABS(p.value) * 100.0, 1) END
+                FROM u p
+                WHERE p.corp_code = u.corp_code AND p.metric = u.metric
+                  AND p.period_type = u.period_type AND p.fiscal_year = u.fiscal_year - 1
+                  AND (u.period_type = 'A' OR p.quarter = u.quarter)
+              ) AS yoy_pct
+       FROM u
+       ORDER BY u.corp_code, u.metric, u.period_type, u.fiscal_year, u.quarter`,
+    )
+    .all(...codes) as CompareGrowthRow[];
 }
 
 export type SortCol =

@@ -2,8 +2,11 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { won, num, pct, signClass } from "@/lib/format";
 import type { CompanyRow, SectorAgg } from "@/lib/repo";
+
+const MAX_COMPARE = 10;
 
 interface ApiResp {
   total: number;
@@ -14,6 +17,7 @@ interface ApiResp {
 type Dir = "asc" | "desc";
 
 export default function CompaniesPage() {
+  const router = useRouter();
   const [q, setQ] = useState("");
   const [market, setMarket] = useState("");
   const [sector, setSector] = useState("");
@@ -24,7 +28,19 @@ export default function CompaniesPage() {
   const [sectors, setSectors] = useState<SectorAgg[]>([]);
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(false);
+  // 비교 선택 — 페이지/필터가 바뀌어도 유지(코드+이름을 들고 다님)
+  const [sel, setSel] = useState<{ code: string; name: string }[]>([]);
   const limit = 50;
+
+  const selCodes = new Set(sel.map((s) => s.code));
+  const toggleSel = (c: CompanyRow) =>
+    setSel((prev) =>
+      prev.some((s) => s.code === c.corp_code)
+        ? prev.filter((s) => s.code !== c.corp_code)
+        : prev.length >= MAX_COMPARE
+          ? prev
+          : [...prev, { code: c.corp_code, name: c.name }],
+    );
 
   // 섹터 탭 목록(기업수 배지) — 1회 로드
   useEffect(() => {
@@ -144,6 +160,7 @@ export default function CompaniesPage() {
         <table className="grid">
           <thead>
             <tr>
+              <th title="비교 선택" style={{ width: 34, textAlign: "center" }}>비교</th>
               <Th label="종목" k="name" align="l" dd="asc" />
               <th className="l">섹터</th>
               <Th label="현재가" k="price" />
@@ -158,7 +175,17 @@ export default function CompaniesPage() {
           </thead>
           <tbody>
             {data?.results.map((c) => (
-              <tr key={c.corp_code}>
+              <tr key={c.corp_code} className={selCodes.has(c.corp_code) ? "selected" : undefined}>
+                <td style={{ textAlign: "center" }}>
+                  <input
+                    type="checkbox"
+                    className="cmp-check"
+                    checked={selCodes.has(c.corp_code)}
+                    disabled={!selCodes.has(c.corp_code) && sel.length >= MAX_COMPARE}
+                    onChange={() => toggleSel(c)}
+                    aria-label={`${c.name} 비교 선택`}
+                  />
+                </td>
                 <td className="l">
                   <Link href={`/companies/${c.corp_code}`}>
                     <strong>{c.name}</strong>{" "}
@@ -179,7 +206,7 @@ export default function CompaniesPage() {
               </tr>
             ))}
             {data && data.results.length === 0 && (
-              <tr><td colSpan={10} className="empty">검색 결과가 없습니다.</td></tr>
+              <tr><td colSpan={11} className="empty">검색 결과가 없습니다.</td></tr>
             )}
           </tbody>
         </table>
@@ -190,6 +217,37 @@ export default function CompaniesPage() {
           <button className="btn ghost" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>← 이전</button>
           <span className="muted">{page + 1} / {pages}</span>
           <button className="btn ghost" disabled={page >= pages - 1} onClick={() => setPage((p) => p + 1)}>다음 →</button>
+        </div>
+      )}
+
+      {sel.length > 0 && (
+        <div className="cmp-actionbar">
+          <strong style={{ whiteSpace: "nowrap" }}>
+            비교 {sel.length}
+            {sel.length >= MAX_COMPARE ? ` (최대 ${MAX_COMPARE})` : ""}
+          </strong>
+          <div className="chips">
+            {sel.map((s) => (
+              <span key={s.code} className="cmp-chip">
+                {s.name}
+                <button
+                  onClick={() => setSel((prev) => prev.filter((x) => x.code !== s.code))}
+                  aria-label={`${s.name} 제거`}
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
+          </div>
+          <button className="btn ghost" onClick={() => setSel([])}>전체 해제</button>
+          <button
+            className="btn"
+            disabled={sel.length < 2}
+            onClick={() => router.push(`/compare?codes=${sel.map((s) => s.code).join(",")}`)}
+            title={sel.length < 2 ? "2개 이상 선택하세요" : "선택한 기업 비교"}
+          >
+            기업 비교하기 →
+          </button>
         </div>
       )}
     </div>

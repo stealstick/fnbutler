@@ -276,6 +276,68 @@ details.ai .body { white-space: pre-wrap; color: var(--muted); font-size: 12.5px
 .navlogin { font-size: 13px; color: var(--accent); }
 code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
 
+/* ----- 기업 비교 (/compare) ----- */
+table.cmp-table td, table.cmp-table th { vertical-align: top; }
+/* 첫 컬럼(지표 라벨) 가로 스크롤 시 고정 */
+.cmp-table .cmp-corner {
+  position: sticky; left: 0; z-index: 6; text-align: left;
+  background: var(--panel-2); min-width: 116px;
+}
+.cmp-table .cmp-rowlabel {
+  position: sticky; left: 0; z-index: 2;
+  background: var(--panel); color: var(--muted); font-weight: 600;
+  white-space: nowrap;
+}
+table.cmp-table tbody tr:hover .cmp-rowlabel { background: var(--panel-2); }
+.cmp-table .cmp-co { text-align: right; min-width: 132px; }
+.cmp-co-head { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+.cmp-co-name { font-size: 13px; font-weight: 700; color: var(--text); }
+.cmp-co-name:hover { color: var(--accent); }
+.cmp-co-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
+.cmp-x { color: var(--muted-2); font-size: 11px; line-height: 1; }
+.cmp-x:hover { color: var(--up); }
+.cmp-table tr.cmp-group td {
+  background: var(--bg); color: var(--muted); font-weight: 700; font-size: 11.5px;
+  letter-spacing: 0.02em; text-transform: none; padding-top: 12px; padding-bottom: 6px;
+  position: sticky; left: 0;
+}
+
+/* 비교 추가 검색 드롭다운 */
+.cmp-suggest {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 60;
+  min-width: 280px; max-height: 320px; overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5); padding: 4px;
+}
+.cmp-suggest-item {
+  display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+  background: transparent; border: none; color: var(--text); cursor: pointer;
+  padding: 8px 10px; border-radius: 6px; font-size: 13px;
+}
+.cmp-suggest-item:hover:not([disabled]) { background: var(--panel-2); }
+.cmp-suggest-item[disabled] { opacity: 0.45; cursor: default; }
+
+/* 전체기업 리스트 선택 → 비교 액션바 */
+.cmp-actionbar {
+  position: sticky; bottom: 16px; z-index: 20;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin-top: 14px; padding: 10px 14px;
+  background: var(--panel-2); border: 1px solid var(--accent); border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+}
+.cmp-actionbar .chips { display: flex; gap: 6px; flex-wrap: wrap; flex: 1; min-width: 0; }
+.cmp-chip {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 12px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 999px;
+  padding: 2px 4px 2px 9px; white-space: nowrap;
+}
+.cmp-chip button {
+  background: none; border: none; color: var(--muted-2); cursor: pointer;
+  font-size: 12px; line-height: 1; padding: 2px 4px;
+}
+.cmp-chip button:hover { color: var(--up); }
+.cmp-check { width: 15px; height: 15px; cursor: pointer; accent-color: var(--accent); vertical-align: middle; }
+
 /* ----- info tooltip (물음표 호버) ----- */
 .infotip { position: relative; display: inline-flex; vertical-align: middle; margin-left: 5px; cursor: help; outline: none; }
 .infotip-icon {
