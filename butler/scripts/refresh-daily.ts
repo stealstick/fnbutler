@@ -101,6 +101,13 @@ async function main() {
     ? { sent: 0 }
     : await dispatchAlerts(db, { sinceIso: runStart, baseUrl: BASE_URL });
 
+  // 캘린더 전용 모드: 캘린더는 Firestore 에 적재돼 SQLite(butler.db)를 건드리지 않으므로,
+  // 감사 로그(ingest_runs)·WAL 체크포인트도 생략해 butler.db 를 무변경으로 둔다 → 워크플로 재배포 없음.
+  if (calendarOnly) {
+    process.stdout.write(`✅ 캘린더 전용 갱신 완료 — ${calendarMsg} (Firestore 라이브, 재배포 없음)\n`);
+    return;
+  }
+
   db.prepare(
     "INSERT INTO ingest_runs (kind, started_at, finished_at, ok, note) VALUES ('refresh-daily', ?, ?, 1, ?)",
   ).run(
