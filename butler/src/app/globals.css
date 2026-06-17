@@ -322,6 +322,22 @@ table.cmp-table tbody tr:hover .cmp-rowlabel { background: var(--panel-2); }
 .prog-chg.down { color: var(--down); background: color-mix(in srgb, var(--down) 16%, transparent); }
 .prog-chg.flat { color: var(--flat); background: color-mix(in srgb, var(--flat) 16%, transparent); }
 
+/* 기업 비교 그리드 (기업=행, 증감=열, 헤더 클릭 정렬) */
+.cg-table td, .cg-table th { white-space: nowrap; }
+.cg-table .cg-corner { position: sticky; left: 0; z-index: 6; }
+.cg-table td.cg-namecol { position: sticky; left: 0; z-index: 2; background: var(--panel); }
+.cg-table tbody tr:hover td.cg-namecol { background: var(--panel-2); }
+.cg-namecell { display: inline-flex; align-items: center; gap: 7px; }
+.cg-name { font-weight: 700; color: var(--text); }
+.cg-name:hover { color: var(--accent); }
+.cg-code { font-size: 11px; }
+.cg-x { background: none; border: none; color: var(--muted-2); cursor: pointer; font-size: 11px; line-height: 1; padding: 0 2px; }
+.cg-x:hover { color: var(--up); }
+.gnum { font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.gnum.up { color: var(--up); }
+.gnum.down { color: var(--down); }
+.gnum.flat { color: var(--flat); }
+
 /* 비교 추가 검색 드롭다운 */
 .cmp-suggest {
   position: absolute; top: calc(100% + 4px); left: 0; z-index: 60;
