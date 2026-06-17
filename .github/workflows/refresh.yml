@@ -42,6 +42,8 @@ jobs:
           BUTLER_BASE_URL: https://fnbutler-l3why3suea-du.a.run.app
           BUTLER_RATE_PER_MIN: "80"
           BUTLER_USERSTORE: firestore # 알림 대상(관심목록)은 Firestore 에서 조회
+          # 캘린더 국내 실적발표(잠정실적 공시) 수집용. 미설정 시 국내실적만 비활성(나머지는 정상).
+          DART_API_KEY: ${{ secrets.DART_API_KEY }}
         run: cd butler && npx tsx scripts/refresh-daily.ts
 
       - name: Detect change

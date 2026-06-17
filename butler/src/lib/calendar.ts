@@ -356,6 +356,15 @@ export async function ingestCalendar(db: Database, opts: IngestOpts = {}): Promi
     const bok = curatedKrCentralBank(minDate, maxDate);
     events.push(...bok);
     if (bok.length) onLog(`  한국은행 금리결정(큐레이션) ${bok.length}건`);
+    // 시드 소진 경보: 윈도우가 마지막 큐레이션 날짜를 넘어서면(≈2.7개월 전부터) 차년도 갱신 필요.
+    // 크론 로그에 남아 조용히 끊기는 것을 방지. (BOK 페이지는 JS 렌더라 자동 스크래핑 불가)
+    const latestSeed = BOK_RATE_DECISIONS[BOK_RATE_DECISIONS.length - 1];
+    if (latestSeed && latestSeed < maxDate) {
+      onLog(
+        `  ⚠️ 한국은행 금통위 시드 소진 임박 — 마지막=${latestSeed}. ` +
+          `src/lib/calendar.ts 의 BOK_RATE_DECISIONS 를 차년도 공식 일정으로 갱신하세요.`,
+      );
+    }
   }
   onLog(`  거시 일정 ${events.length}건`);
 
