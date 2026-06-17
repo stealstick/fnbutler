@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  let events = getCalendarEvents({ categories, countries, minImportance }) as unknown as CalEvent[];
+  let events = (await getCalendarEvents({ categories, countries, minImportance })) as unknown as CalEvent[];
   if (subcategories?.length) {
     const set = new Set(subcategories);
     // 소분류 필터는 거시 이벤트에만 적용(실적은 통과).

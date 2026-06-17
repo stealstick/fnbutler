@@ -9,8 +9,7 @@ export const metadata = {
     "FOMC·BOJ·한국은행 금리결정, 미국 CPI/PPI/고용, 중국 경기·물가·소비, 해외/국내 실적발표를 한 화면에.",
 };
 
-export default function CalendarPage() {
-  const events = getCalendarEvents({});
-  const stats = getCalendarStats();
+export default async function CalendarPage() {
+  const [events, stats] = await Promise.all([getCalendarEvents({}), getCalendarStats()]);
   return <CalendarView events={events} stats={stats} />;
 }

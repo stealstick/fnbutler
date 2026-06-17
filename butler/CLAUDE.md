@@ -40,8 +40,14 @@ GitHub Actions 일일 크론(refresh.yml)          GitHub Actions(deploy.yml, pu
 - **시세/컨센서스 데이터**: SQLite. 라이브에선 읽기 전용에 가깝다(배포 때 GCS 스냅샷을 이미지에
   구움). 갱신은 오프라인(크론/CLI)이 담당 → GCS 업로드 → 재배포. 그래서 "배포 시 초기화"가
   문제되지 않는다(최신본을 다시 굽는 것).
-- **유저 데이터**: Firestore. 라이브에서 발생(회원가입/관심목록)하며 배포와 무관하게 영속.
-  ⚠️ Cloud Run FS는 휘발성이라 유저 데이터를 SQLite에 두면 재배포 때 사라진다 → Firestore로 분리한 이유.
+- **유저 데이터 + 캘린더**: Firestore. 라이브에서 발생/갱신되며 배포와 무관하게 영속·즉시반영.
+  ⚠️ Cloud Run FS는 휘발성이라 SQLite에 두면 재배포 때 사라진다 → Firestore로 분리한 이유.
+
+> **⚠️ 데이터 배치 규칙 (꼭 지킬 것).** 데이터를 SQLite(이미지 베이크)에 둘지 Firestore에 둘지는
+> "갱신 주기"로 가른다. **시세/컨센서스처럼 일배치 스냅샷 = SQLite. 런타임에 자주 바뀌고
+> 재배포 없이 즉시 반영돼야 하는 것(유저 데이터, 알림, 경제·실적 캘린더) = Firestore.**
+> 캘린더를 SQLite에 두면 "로컬에서 수집→GCS 업로드→재배포"를 해야 prod에 보이는 잘못된 흐름이 된다.
+> 새 데이터를 추가할 때 이 기준으로 먼저 판단하라. (절대 로컬에서 데이터 빌드해 굽는 방식으로 가지 말 것)
 
 ## 4. 데이터 모델 (`db/schema.sql`)
 
@@ -55,7 +61,7 @@ long-format 지표, 최신값·파생지표는 뷰로 계산, 모든 적재 `sou
 - `valuations` — PER/PBR 분기 시계열.
 - `change_logs` — 변경 이력. `occurred_at`(실제 발생일=리포트일/분기말) + `observed_at`(감지시각).
 - `daily_snapshots` — 일별 핵심지표 스냅샷.
-- 유저 테이블(`users/sessions/watchlist/notifications`)은 로컬 SQLite 폴백용으로만 존재. prod는 Firestore.
+- 유저 테이블(`users/sessions/watchlist/notifications`) + `calendar_events`/`calendar_prefs` 는 로컬 SQLite 폴백용. **prod 는 Firestore**(calendar 는 `calendar/events` 단일 문서, prefs 는 `calendar_prefs` 컬렉션).
 - 뷰: `v_latest_broker_target`(증권사별 최신 목표가), `v_financials_growth`(QoQ/YoY, window LAG), `v_sector_agg`(섹터 집계).
 
 ## 5. ⚠️ 데이터 소스 / 인증 게이팅 (꼭 알아야 함)
@@ -132,7 +138,9 @@ long-format 지표, 최신값·파생지표는 뷰로 계산, 모든 적재 `sou
 ### 경제·실적 캘린더 (`/calendar`)
 
 FOMC·BoJ·한국은행 금리결정, 미국 CPI/PPI/고용/소매, 중국 경기·물가·소비, 해외/국내 실적발표를
-한 화면(월간 그리드 + 리스트)에 모은다. 데이터는 `calendar_events` 테이블, 출처별 멱등 적재.
+한 화면(월간 그리드 + 리스트)에 모은다. **저장은 Firestore `calendar/events` 단일 문서(전량 교체),
+로컬은 SQLite `calendar_events` 폴백.** 크론이 Firestore 를 직접 갱신 → **재배포 없이 즉시 반영**.
+수집 윈도우(±N일)가 사실상 전부라 매 수집 = 전량 교체(`userStore.putAllCalendarEvents`).
 
 - **거시 일정**: Nasdaq 경제 캘린더(`api.nasdaq.com/api/calendar/economicevents`, 무인증) — 국가
   US/CN/JP/KR 필터, 지표명으로 소분류(통화정책/물가/고용/경기·소비/기타)+중요도 분류. 유의미한 지표는
@@ -145,7 +153,8 @@ FOMC·BoJ·한국은행 금리결정, 미국 CPI/PPI/고용/소매, 중국 경�
   개인 구독 토큰(`feed_token`) → `/api/calendar/ics?u=<token>` 이 그 필터를 적용한 개인 피드.
 - **구글 캘린더 연동**: `/api/calendar/ics`(ICS 구독 피드, 6h 갱신힌트) + 이벤트별 TEMPLATE 추가 링크.
   익명 사용자는 필터를 localStorage 에 보존, 구독 URL 에 쿼리 필터가 반영된다.
-- 멱등: 매 수집마다 윈도우(±N일) 안의 nasdaq/bok 행을 지우고 다시 넣는다(재일정/실제값 반영).
+- 멱등: 매 수집 = 전량 교체. 단 Nasdaq fetch 실패 시 기존 nasdaq 분 보존(받은 것만 갱신), DART 실패 시 기존 국내실적 보존 → 부분 차단에도 데이터 안 날림.
+- 수집 트리거: 일일 크론(`refresh.yml`) 또는 `gh workflow run refresh.yml -f mode=calendar-only`(회사 루프 생략, 캘린더만 Firestore 갱신, 재배포 없음).
 
 ## 11. 컨벤션 / 주의
 

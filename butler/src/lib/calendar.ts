@@ -16,6 +16,7 @@
  */
 import { createHash } from "node:crypto";
 import type { Database } from "better-sqlite3";
+import { userStore } from "./userstore";
 
 export type CalCategory = "macro" | "earnings_intl" | "earnings_kr";
 
@@ -267,17 +268,8 @@ async function nasdaqEarnings(date: string): Promise<any[] | null> {
 }
 
 // ---------------------------------------------------------------------------
-// 적재
+// 적재 (userStore: prod=Firestore 단일문서 / 로컬=SQLite 테이블)
 // ---------------------------------------------------------------------------
-const UPSERT_SQL = `
-INSERT OR REPLACE INTO calendar_events
- (id, category, subcategory, country, event_date, event_time, tz, title, symbol,
-  importance, actual, consensus, previous, market_cap, url, note, source, updated_at)
-VALUES
- (@id, @category, @subcategory, @country, @event_date, @event_time, @tz, @title, @symbol,
-  @importance, @actual, @consensus, @previous, @market_cap, @url, @note, @source, @updated_at)
-`;
-
 export interface IngestOpts {
   daysBack?: number;
   daysAhead?: number;
@@ -306,10 +298,8 @@ export async function ingestCalendar(db: Database, opts: IngestOpts = {}): Promi
   const dates = dateRange(daysBack, daysAhead);
   const minDate = dates[0];
   const maxDate = dates[dates.length - 1];
-  const now = new Date().toISOString();
   const events: CalEvent[] = [];
-  // 출처 건강도 — fetch 실패(null)가 하나라도 있으면 파괴적 윈도우 삭제를 건너뛰고
-  // 받은 것만 비파괴 UPSERT 한다(부분 실패 시 기존 데이터 보존).
+  // 출처 건강도 — fetch 실패(null)가 하나라도 있으면 전량 교체 대신 기존 분을 보존한다.
   let nasdaqFailures = 0;
 
   // 1) 거시 일정 -----------------------------------------------------------
@@ -431,39 +421,35 @@ export async function ingestCalendar(db: Database, opts: IngestOpts = {}): Promi
     onLog("  국내 실적: DART_API_KEY 미설정 → 건너뜀");
   }
 
-  // 4) 멱등 적재 — 윈도우 내 행 삭제 후 일괄 삽입.
-  //    ⚠️ 데이터 손실 방지: fetch 실패가 있으면(부분 차단/네트워크) 파괴적 삭제를 건너뛰고
-  //    받은 것만 비파괴 UPSERT 한다(기존 데이터 보존). 완전 성공 시에만 재일정/취소분을 prune.
+  // 4) 전량 교체 적재 (userStore: prod=Firestore / 로컬=SQLite).
+  //    수집 윈도우(±N일)가 사실상 전부라 매 수집 = 전량 교체. 단, 데이터 손실 방지:
+  //    Nasdaq fetch 실패 시 기존 nasdaq 분을 보존하고 받은 것만 덮어쓴다(부분차단/네트워크 대비).
+  //    DART 실패 시 기존 국내실적 보존. 한국은행은 결정적 큐레이션이라 항상 갱신.
   const nasdaqHealthy = nasdaqFailures === 0;
   if (!nasdaqHealthy)
-    onLog(`  ⚠️ Nasdaq fetch 실패 ${nasdaqFailures}건 — 파괴적 삭제 생략(기존 데이터 보존, 받은 분만 갱신)`);
+    onLog(`  ⚠️ Nasdaq fetch 실패 ${nasdaqFailures}건 — 전량 교체 대신 기존 nasdaq 보존+받은 분 갱신`);
 
   const nasdaqEvents = events.filter((e) => e.source === "nasdaq");
   const bokEvents = events.filter((e) => e.source === "bok");
   const dartEvents = events.filter((e) => e.source === "dart");
-  const del = (sources: string) =>
-    db
-      .prepare(`DELETE FROM calendar_events WHERE source = ? AND event_date BETWEEN ? AND ?`)
-      .run(sources, minDate, maxDate);
 
-  const insert = db.prepare(UPSERT_SQL);
-  const tx = db.transaction(() => {
-    if (nasdaqHealthy) del("nasdaq"); // 완전 성공 시에만 prune
-    for (const ev of nasdaqEvents) insert.run({ ...ev, updated_at: now });
-    // 한국은행: 결정적 큐레이션 → 항상 안전하게 재적재
-    del("bok");
-    for (const ev of bokEvents) insert.run({ ...ev, updated_at: now });
-    // DART: 성공했을 때만 prune (실패 시 기존 국내실적 보존)
-    if (dartOk) {
-      del("dart");
-      for (const ev of dartEvents) insert.run({ ...ev, updated_at: now });
-    }
-  });
-  tx();
+  const existing = await userStore.getAllCalendarEvents();
+  const keep = (src: string) => existing.filter((e) => e.source === src);
+  const mergeById = (base: CalEvent[], updates: CalEvent[]) => {
+    const m = new Map(base.map((e) => [e.id, e]));
+    for (const e of updates) m.set(e.id, e);
+    return [...m.values()];
+  };
+
+  const finalNasdaq = nasdaqHealthy ? nasdaqEvents : mergeById(keep("nasdaq") as CalEvent[], nasdaqEvents);
+  const finalDart = dartOk ? dartEvents : (keep("dart") as CalEvent[]);
+  const finalEvents = [...finalNasdaq, ...bokEvents, ...finalDart];
+
+  await userStore.putAllCalendarEvents(finalEvents);
 
   return {
     dates: dates.length,
-    macro: events.filter((e) => e.category === "macro").length,
+    macro: finalEvents.filter((e) => e.category === "macro").length,
     earningsIntl: top.length,
     earningsKr: krEvents.length,
   };

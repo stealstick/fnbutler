@@ -39,6 +39,31 @@ export interface CalendarPrefsRecord {
   feedToken: string | null;
 }
 
+/**
+ * 경제·실적 캘린더 이벤트 — 런타임에 자주 갱신되고 재배포 없이 반영돼야 하므로
+ * 시세 SQLite(이미지 베이크)가 아니라 유저 데이터와 같은 Firestore 계층에 둔다.
+ * 수집 윈도우(±N일)가 사실상 전부라 매 수집 = 전량 교체(putAll). 로컬 dev 는 SQLite 폴백.
+ */
+export interface CalendarEventRecord {
+  id: string;
+  category: string;
+  subcategory: string | null;
+  country: string | null;
+  event_date: string;
+  event_time: string | null;
+  tz: string | null;
+  title: string;
+  symbol: string | null;
+  importance: number;
+  actual: string | null;
+  consensus: string | null;
+  previous: string | null;
+  market_cap: number | null;
+  url: string | null;
+  note: string | null;
+  source: string;
+}
+
 const useFirestore = process.env.BUTLER_USERSTORE === "firestore";
 
 /* ============================ Firestore 백엔드 ============================ */
@@ -161,6 +186,15 @@ const firestoreBackend = {
     const doc = snap.docs[0];
     const d = doc.data();
     return { userId: doc.id, prefs: (d.prefs as CalendarPrefsData) ?? {}, feedToken: d.feedToken ?? null };
+  },
+  // 캘린더 이벤트는 단일 문서(calendar/events)에 배열로 보관 — 1 read/write 로 저렴.
+  async getAllCalendarEvents(): Promise<CalendarEventRecord[]> {
+    const doc = await fs().collection("calendar").doc("events").get();
+    if (!doc.exists) return [];
+    return (doc.data()!.events as CalendarEventRecord[]) ?? [];
+  },
+  async putAllCalendarEvents(events: CalendarEventRecord[]): Promise<void> {
+    await fs().collection("calendar").doc("events").set({ events, updatedAt: nowIso() });
   },
 };
 
@@ -303,6 +337,33 @@ const sqliteBackend = {
     return r
       ? { userId: String(r.user_id), prefs: JSON.parse(r.prefs_json || "{}"), feedToken: r.feed_token }
       : null;
+  },
+  // 로컬 dev 폴백: calendar_events 테이블에 전량 교체.
+  async getAllCalendarEvents(): Promise<CalendarEventRecord[]> {
+    return getDb()
+      .prepare(
+        `SELECT id, category, subcategory, country, event_date, event_time, tz, title, symbol,
+                importance, actual, consensus, previous, market_cap, url, note, source
+         FROM calendar_events`,
+      )
+      .all() as CalendarEventRecord[];
+  },
+  async putAllCalendarEvents(events: CalendarEventRecord[]): Promise<void> {
+    const db = getDb();
+    const now = nowIso();
+    const insert = db.prepare(
+      `INSERT OR REPLACE INTO calendar_events
+        (id, category, subcategory, country, event_date, event_time, tz, title, symbol,
+         importance, actual, consensus, previous, market_cap, url, note, source, updated_at)
+       VALUES
+        (@id, @category, @subcategory, @country, @event_date, @event_time, @tz, @title, @symbol,
+         @importance, @actual, @consensus, @previous, @market_cap, @url, @note, @source, @updated_at)`,
+    );
+    const tx = db.transaction(() => {
+      db.prepare("DELETE FROM calendar_events").run();
+      for (const e of events) insert.run({ ...e, updated_at: now });
+    });
+    tx();
   },
 };
 

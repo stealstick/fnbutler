@@ -93,8 +93,9 @@ async function main() {
     }
   }
 
-  // 캘린더는 매 갱신 시 윈도우를 다시 적재하므로(실제값 채움/신규 일정) 성공하면 변경으로 취급.
-  const changed = newReports > 0 || quoteUpdated > 0 || calendarOk;
+  // 캘린더는 Firestore(라이브)에 적재되므로 재배포가 불필요 → changed 판정에서 제외.
+  // (SQLite 시세/리포트가 바뀐 경우에만 GCS 업로드/재배포한다)
+  const changed = newReports > 0 || quoteUpdated > 0;
   // 캘린더 전용 모드는 신규 리포트가 없으므로 알림 발송 생략.
   const { sent } = calendarOnly
     ? { sent: 0 }

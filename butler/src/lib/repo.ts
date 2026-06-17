@@ -473,52 +473,39 @@ export interface CalendarQuery {
   minImportance?: number;
 }
 
-/** 캘린더 이벤트 조회 (날짜·카테고리·국가·중요도 필터). */
-export function getCalendarEvents(q: CalendarQuery = {}): CalendarEventRow[] {
-  const db = getDb();
-  const where: string[] = [];
-  const params: Record<string, unknown> = {};
-  if (q.from) {
-    where.push("event_date >= @from");
-    params.from = q.from;
-  }
-  if (q.to) {
-    where.push("event_date <= @to");
-    params.to = q.to;
-  }
-  if (q.categories?.length) {
-    where.push(`category IN (${q.categories.map((_, i) => `@cat${i}`).join(",")})`);
-    q.categories.forEach((c, i) => (params[`cat${i}`] = c));
-  }
-  if (q.countries?.length) {
-    where.push(`country IN (${q.countries.map((_, i) => `@ctry${i}`).join(",")})`);
-    q.countries.forEach((c, i) => (params[`ctry${i}`] = c));
-  }
-  if (q.minImportance != null) {
-    where.push("importance >= @minImp");
-    params.minImp = q.minImportance;
-  }
-  // 같은 날짜 내 표시 우선순위: 통화정책(0) > 그 외 거시(1) > 실적(2), 그다음 중요도/시각/시총.
-  // UI(CalendarView)와 ICS 피드(DB 순서 사용)가 동일한 우선순위를 갖도록 SQL 에서 정렬.
-  const sql =
-    `SELECT * FROM calendar_events ${where.length ? "WHERE " + where.join(" AND ") : ""}` +
-    ` ORDER BY event_date ASC,
-       CASE WHEN category='macro' AND subcategory='central_bank' THEN 0
-            WHEN category='macro' THEN 1 ELSE 2 END ASC,
-       importance DESC, COALESCE(event_time,'99:99') ASC, market_cap DESC`;
-  return db.prepare(sql).all(params) as CalendarEventRow[];
+// 같은 날짜 내 표시 우선순위: 통화정책(0) > 그 외 거시(1) > 실적(2).
+const dispRank = (e: CalendarEventRow) =>
+  e.category === "macro" ? (e.subcategory === "central_bank" ? 0 : 1) : 2;
+
+/** 캘린더 이벤트 조회 (날짜·카테고리·국가·중요도 필터). userStore(Firestore/SQLite)에서 읽어 메모리 필터/정렬. */
+export async function getCalendarEvents(q: CalendarQuery = {}): Promise<CalendarEventRow[]> {
+  let evs = (await userStore.getAllCalendarEvents()) as CalendarEventRow[];
+  if (q.from) evs = evs.filter((e) => e.event_date >= q.from!);
+  if (q.to) evs = evs.filter((e) => e.event_date <= q.to!);
+  if (q.categories?.length) evs = evs.filter((e) => q.categories!.includes(e.category));
+  if (q.countries?.length) evs = evs.filter((e) => !e.country || q.countries!.includes(e.country));
+  if (q.minImportance != null) evs = evs.filter((e) => e.importance >= q.minImportance!);
+  evs.sort(
+    (a, b) =>
+      a.event_date.localeCompare(b.event_date) ||
+      dispRank(a) - dispRank(b) ||
+      b.importance - a.importance ||
+      (a.event_time ?? "99:99").localeCompare(b.event_time ?? "99:99") ||
+      (b.market_cap ?? 0) - (a.market_cap ?? 0),
+  );
+  return evs;
 }
 
 /** 캘린더 적재 현황. */
-export function getCalendarStats() {
-  const db = getDb();
-  const one = (sql: string) => ((db.prepare(sql).get() as { c: number } | undefined)?.c ?? 0);
+export async function getCalendarStats() {
+  const evs = (await userStore.getAllCalendarEvents()) as CalendarEventRow[];
+  const dates = evs.map((e) => e.event_date).sort();
   return {
-    total: one("SELECT COUNT(*) c FROM calendar_events"),
-    macro: one("SELECT COUNT(*) c FROM calendar_events WHERE category='macro'"),
-    earningsIntl: one("SELECT COUNT(*) c FROM calendar_events WHERE category='earnings_intl'"),
-    earningsKr: one("SELECT COUNT(*) c FROM calendar_events WHERE category='earnings_kr'"),
-    minDate: (db.prepare("SELECT MIN(event_date) d FROM calendar_events").get() as { d: string | null }).d,
-    maxDate: (db.prepare("SELECT MAX(event_date) d FROM calendar_events").get() as { d: string | null }).d,
+    total: evs.length,
+    macro: evs.filter((e) => e.category === "macro").length,
+    earningsIntl: evs.filter((e) => e.category === "earnings_intl").length,
+    earningsKr: evs.filter((e) => e.category === "earnings_kr").length,
+    minDate: dates[0] ?? null,
+    maxDate: dates[dates.length - 1] ?? null,
   };
 }
