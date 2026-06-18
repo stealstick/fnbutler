@@ -5,7 +5,7 @@
  *   tsx scripts/ingest-calendar.ts --back 5 --ahead 60
  *   DART_API_KEY=xxxx tsx scripts/ingest-calendar.ts   # 국내 실적(잠정실적 공시)까지
  *
- * 출처: Nasdaq 경제/실적 캘린더(무인증) + 선택적 DART Open API(국내 실적, 키 필요).
+ * 출처: Nasdaq 경제/실적 캘린더(무인증, 해외 실적 TOP500) + 선택적 DART Open API(국내 실적, 키 필요).
  * 멱등: 윈도우(±N일) 안의 행을 지우고 다시 넣는다(재일정/취소 반영).
  */
 import { closeDb, getDb, migrate } from "../src/lib/db";

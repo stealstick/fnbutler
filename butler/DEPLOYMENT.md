@@ -88,7 +88,7 @@ gcloud run jobs execute fnbutler-refresh \
   --region asia-northeast3 \
   --wait
 
-# 캘린더만 수동 갱신 (DART_API_KEY secret이 있으면 국내 100대 기업 잠정실적 공시 포함)
+# 캘린더만 수동 갱신 (Nasdaq 해외 TOP500 + DART_API_KEY secret이 있으면 국내 100대 기업 잠정실적 공시 포함)
 gcloud run jobs execute fnbutler-calendar-refresh \
   --project protein-test-469413 \
   --region asia-northeast3 \

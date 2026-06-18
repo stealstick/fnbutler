@@ -59,6 +59,7 @@ npm run refresh:calendar
 - 최신 피드에서 이미 가진 `report_id` 를 만나면 중단해 신규 리포트만 받는다.
 - 시세/목표가는 값이 바뀐 경우에만 UPDATE 하므로 같은 데이터를 여러 번 돌려도 안전하다.
 - 운영 환경에서는 Cloud Scheduler가 Cloud Run Job `fnbutler-refresh` 를 매 영업일 18:30 KST에 실행한다.
+- Nasdaq 실적 캘린더는 수집 범위 안에서 시총 상위 500개 해외/미국 상장기업 실적발표 일정을 캘린더에 넣는다.
 - 국내 100대 기업 DART 잠정실적 공시는 `DART_API_KEY` secret이 있는 `fnbutler-calendar-refresh`
   Job이 매주 토요일 08:00 KST에 캘린더 전용으로 보강한다.
 

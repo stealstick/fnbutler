@@ -299,7 +299,7 @@ export default function CalendarView({ events, stats }: { events: Ev[]; stats: S
         <h2>
           경제 · 실적 캘린더{" "}
           <span className="sub">
-            FOMC·BOJ·한국은행, 미국 CPI/PPI/고용, 중국 경기·물가·소비, 해외/국내 실적발표
+            FOMC·BOJ·한국은행, 미국 CPI/PPI/고용, 중국 경기·물가·소비, Nasdaq TOP500·국내 실적발표
           </span>
         </h2>
         <div className="stat-row" style={{ marginBottom: 6 }}>
@@ -309,7 +309,8 @@ export default function CalendarView({ events, stats }: { events: Ev[]; stats: S
           <S n={stats.total} l="전체 이벤트" />
         </div>
         <div className="note">
-          출처: Nasdaq 경제·실적 캘린더(공개){stats.earningsKr === 0 ? " · 국내 실적은 DART_API_KEY 설정 시 표시" : " · 국내 실적 DART"}
+          출처: Nasdaq 경제·실적 캘린더(공개 · 해외 실적 TOP500)
+          {stats.earningsKr === 0 ? " · 국내 실적은 DART_API_KEY 설정 시 표시" : " · 국내 실적 DART"}
           {stats.minDate ? ` · 수집범위 ${stats.minDate} ~ ${stats.maxDate}` : ""}
         </div>
       </div>

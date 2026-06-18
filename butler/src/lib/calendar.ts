@@ -7,7 +7,7 @@
  *      → 국가(country)·지표명(eventName)으로 필터/분류. country ∈ {US,CN,JP,KR}.
  *  - 해외 실적발표(시총 상위):
  *      Nasdaq 실적 캘린더  GET api.nasdaq.com/api/calendar/earnings?date=YYYY-MM-DD
- *      → 윈도우 전체에서 marketCap 상위 N개(기본 100)만 적재 = "해외 TOP100".
+ *      → 윈도우 전체에서 marketCap 상위 N개(기본 500)만 적재 = "해외 TOP500".
  *  - 국내 실적발표(시총 TOP100): 선택적. DART Open API(키 필요)로 잠정실적 공시를 수집.
  *      한국은 실적발표 "예정일"을 공개하는 무료 API가 없어, 키가 있을 때만 실제 공시일을 적재한다.
  *
@@ -291,7 +291,7 @@ export async function ingestCalendar(db: Queryable, opts: IngestOpts = {}): Prom
     daysBack = 10,
     daysAhead = 45,
     countries = DEFAULT_COUNTRIES,
-    topEarnings = 100,
+    topEarnings = 500,
     dartKey,
     onLog = () => {},
   } = opts;
