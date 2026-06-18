@@ -98,6 +98,9 @@ export default function FinancialsTable({
           </tbody>
         </table>
       </div>
+      <p className="note">
+        기간은 중간 결산기를 건너뛰지 않고 표시합니다. 원천 데이터에 해당 분기/연도 값이 없으면 “-”로 남습니다.
+      </p>
     </div>
   );
 }
@@ -134,10 +137,13 @@ function buildTable(rows: GrowthRow[], valuations: Val[], mode: "Q" | "A") {
       };
     }
   }
+  fillMissingPeriods(periodMap, mode, periodKey, periodLabel);
+
   // 컬럼이 전부 추정이면 헤더에 E 표시
   for (const [, p] of periodMap) {
+    const hasAny = METRIC_ORDER.some((m) => cells[m]?.[p.key]);
     const anyActual = METRIC_ORDER.some((m) => cells[m]?.[p.key] && !cells[m][p.key].isEstimate);
-    p.isEstimate = !anyActual;
+    p.isEstimate = hasAny && !anyActual;
   }
 
   // 밸류에이션 정렬: date_label → period
@@ -157,4 +163,25 @@ function buildTable(rows: GrowthRow[], valuations: Val[], mode: "Q" | "A") {
     .slice(0, mode === "Q" ? 16 : 12);
 
   return { periods, cells, val };
+}
+
+function fillMissingPeriods(
+  periodMap: Map<string, { key: string; label: string; y: number; q: number; isEstimate: boolean }>,
+  mode: "Q" | "A",
+  periodKey: (y: number, q: number) => string,
+  periodLabel: (y: number, q: number) => string,
+) {
+  const periods = [...periodMap.values()];
+  if (periods.length < 2) return;
+
+  const minOrd = Math.min(...periods.map((p) => (mode === "Q" ? p.y * 4 + (p.q - 1) : p.y)));
+  const maxOrd = Math.max(...periods.map((p) => (mode === "Q" ? p.y * 4 + (p.q - 1) : p.y)));
+
+  for (let ord = minOrd; ord <= maxOrd; ord++) {
+    const y = mode === "Q" ? Math.floor(ord / 4) : ord;
+    const q = mode === "Q" ? (ord % 4) + 1 : 0;
+    const key = periodKey(y, q);
+    if (periodMap.has(key)) continue;
+    periodMap.set(key, { key, label: periodLabel(y, q), y, q, isEstimate: false });
+  }
 }
