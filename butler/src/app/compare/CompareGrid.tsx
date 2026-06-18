@@ -4,16 +4,8 @@ import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { won, num, pct, signClass } from "@/lib/format";
+import type { GrowthBundle } from "@/lib/compare-growth";
 
-/** 한 전환점(QoQ/YoY): p = 증감률 %, t = 툴팁(무엇→무엇). */
-export type Trans = { p: number | null; t: string };
-export type Bundle = {
-  qoqPrevCur: Trans; // 직전 → 현재 (QoQ)
-  qoqCurNext: Trans; // 현재 → 다음 (QoQ, 추정)
-  yoyPrevThis: Trans; // 전년 → 올해 (YoY)
-  yoyThisNext: Trans; // 올해 → 다음년도 (YoY, 추정)
-  yoyNextNext2: Trans; // 다음년도 → 2년뒤 (YoY, 추정)
-};
 export type RowData = {
   corp_code: string;
   name: string;
@@ -27,7 +19,7 @@ export type RowData = {
   pbr: number | null;
   target_return_rate: number | null;
   epsGrowth: number | null;
-  growth: Record<string, Bundle>;
+  growth?: Record<string, GrowthBundle>;
 };
 
 type Dir = "asc" | "desc";
@@ -121,11 +113,11 @@ const FIXED: Col[] = [
 ];
 
 const GROWTH_COLS: Array<{ key: GrowthKey; label: string; tip: string }> = [
-  { key: "qoqPrevCur", label: "직전→현재", tip: "직전분기 대비 현재분기 (QoQ, 실적)" },
-  { key: "qoqCurNext", label: "현재→다음E", tip: "현재분기 대비 다음분기 추정 (QoQ)" },
-  { key: "yoyPrevThis", label: "전년→올해E", tip: "전년 대비 올해 (YoY)" },
-  { key: "yoyThisNext", label: "올해→다음년E", tip: "올해 대비 다음년도 추정 (YoY)" },
-  { key: "yoyNextNext2", label: "다음년→2년뒤E", tip: "다음년도 대비 2년뒤 추정 (YoY)" },
+  { key: "qoqPrevCur", label: "QoQ 직전→현재", tip: "직전분기 대비 현재분기 (QoQ, 실적)" },
+  { key: "qoqCurNext", label: "QoQ 현재→다음E", tip: "현재분기 대비 다음분기 추정 (QoQ)" },
+  { key: "yoyPrevThis", label: "YoY 전년→올해E", tip: "전년 대비 올해 (YoY)" },
+  { key: "yoyThisNext", label: "YoY 올해→다음년E", tip: "올해 대비 다음년도 추정 (YoY)" },
+  { key: "yoyNextNext2", label: "YoY 다음년→2년뒤E", tip: "다음년도 대비 2년뒤 추정 (YoY)" },
 ];
 
 export default function CompareGrid({ data }: { data: RowData[] }) {
@@ -148,9 +140,9 @@ export default function CompareGrid({ data }: { data: RowData[] }) {
       label: g.label,
       tip: g.tip,
       defDir: "desc",
-      val: (r, m) => r.growth[m]?.[g.key]?.p ?? null,
+      val: (r, m) => r.growth?.[m]?.[g.key]?.p ?? null,
       cell: (r, m) => {
-        const t = r.growth[m]?.[g.key];
+        const t = r.growth?.[m]?.[g.key];
         return gnum(t?.p ?? null, t?.t);
       },
     })),

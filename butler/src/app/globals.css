@@ -125,7 +125,10 @@ table.grid th { color: var(--muted); font-weight: 600; font-size: 12px; backgrou
 table.grid td.l, table.grid th.l { text-align: left; }
 table.grid tbody tr:hover { background: color-mix(in srgb, var(--accent-soft) 62%, white 38%); }
 table.grid td .y { display: block; font-size: 11px; color: var(--muted); }
-.scrollx { overflow-x: auto; }
+.scrollx { max-width: 100%; overflow-x: auto; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
+.companies-table { min-width: 1680px; }
+.growth-toolbar { margin-top: 10px; margin-bottom: 10px; }
+.growth-hint { margin-left: auto; font-size: 11px; }
 table.grid th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
 table.grid th.sortable:hover { color: var(--text); }
 table.grid th.sortable.active { color: var(--accent); }

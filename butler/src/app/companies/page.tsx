@@ -4,14 +4,25 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { won, num, pct, signClass } from "@/lib/format";
+import type { GrowthBundle, GrowthMetric } from "@/lib/compare-growth";
 import type { CompanyRow, SectorAgg } from "@/lib/repo";
 
 const MAX_COMPARE = 10;
+const GROWTH_METRICS: Array<{ key: GrowthMetric; label: string }> = [
+  { key: "REVENUE", label: "매출액" },
+  { key: "OPERATING_PROFIT", label: "영업이익" },
+  { key: "NET_INCOME", label: "당기순이익" },
+];
+
+type CompanyListRow = CompanyRow & {
+  epsGrowth: number | null;
+  growth?: Record<GrowthMetric, GrowthBundle>;
+};
 
 interface ApiResp {
   total: number;
   count: number;
-  results: CompanyRow[];
+  results: CompanyListRow[];
 }
 
 type Dir = "asc" | "desc";
@@ -28,12 +39,13 @@ export default function CompaniesPage() {
   const [sectors, setSectors] = useState<SectorAgg[]>([]);
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [metric, setMetric] = useState<GrowthMetric>("REVENUE");
   // 비교 선택 — 페이지/필터가 바뀌어도 유지(코드+이름을 들고 다님)
   const [sel, setSel] = useState<{ code: string; name: string }[]>([]);
   const limit = 50;
 
   const selCodes = new Set(sel.map((s) => s.code));
-  const toggleSel = (c: CompanyRow) =>
+  const toggleSel = (c: CompanyListRow) =>
     setSel((prev) =>
       prev.some((s) => s.code === c.corp_code)
         ? prev.filter((s) => s.code !== c.corp_code)
@@ -93,6 +105,10 @@ export default function CompaniesPage() {
 
   const total = data?.total ?? 0;
   const pages = Math.ceil(total / limit);
+  const growthCell = (c: CompanyListRow, key: keyof GrowthBundle) => {
+    const t = c.growth?.[metric]?.[key];
+    return <GrowthPct p={t?.p ?? null} title={t?.t} />;
+  };
 
   return (
     <div className="panel">
@@ -156,8 +172,22 @@ export default function CompaniesPage() {
         ))}
       </div>
 
+      <div className="toolbar growth-toolbar">
+        <span className="muted" style={{ fontSize: 12 }}>성장률 기준 지표</span>
+        <span className="toggle">
+          {GROWTH_METRICS.map((m) => (
+            <button key={m.key} className={metric === m.key ? "on" : ""} onClick={() => setMetric(m.key)}>
+              {m.label}
+            </button>
+          ))}
+        </span>
+        <span className="muted growth-hint">
+          가로 스크롤로 QoQ·YoY 성장률까지 확인
+        </span>
+      </div>
+
       <div className="scrollx">
-        <table className="grid">
+        <table className="grid companies-table">
           <thead>
             <tr>
               <th title="비교 선택" style={{ width: 34, textAlign: "center" }}>비교</th>
@@ -171,6 +201,12 @@ export default function CompaniesPage() {
               <Th label="평균 목표주가" k="target_price_avg" />
               <Th label="상승여력" k="target_return_rate" />
               <Th label="커버" k="cover_securities" />
+              <th title="(선행 EPS − EPS) / |EPS|. 향후 1년 이익 성장 추정">EPS성장E</th>
+              <th title="직전분기 대비 현재분기 실적 증감률">QoQ 직전→현재</th>
+              <th title="현재분기 대비 다음분기 추정 증감률">QoQ 현재→다음E</th>
+              <th title="전년 대비 올해 증감률">YoY 전년→올해E</th>
+              <th title="올해 대비 다음년도 추정 증감률">YoY 올해→다음년E</th>
+              <th title="다음년도 대비 2년뒤 추정 증감률">YoY 다음년→2년뒤E</th>
             </tr>
           </thead>
           <tbody>
@@ -203,14 +239,26 @@ export default function CompaniesPage() {
                   {c.target_return_rate != null ? pct(c.target_return_rate) : "-"}
                 </td>
                 <td className="mono">{c.cover_securities ? <span className="pill">{c.cover_securities}</span> : "-"}</td>
+                <td className="mono">
+                  <GrowthPct p={c.epsGrowth} />
+                </td>
+                <td className="mono">{growthCell(c, "qoqPrevCur")}</td>
+                <td className="mono">{growthCell(c, "qoqCurNext")}</td>
+                <td className="mono">{growthCell(c, "yoyPrevThis")}</td>
+                <td className="mono">{growthCell(c, "yoyThisNext")}</td>
+                <td className="mono">{growthCell(c, "yoyNextNext2")}</td>
               </tr>
             ))}
             {data && data.results.length === 0 && (
-              <tr><td colSpan={11} className="empty">검색 결과가 없습니다.</td></tr>
+              <tr><td colSpan={17} className="empty">검색 결과가 없습니다.</td></tr>
             )}
           </tbody>
         </table>
       </div>
+      <p className="note">
+        성장률 컬럼은 선택한 지표 기준입니다. QoQ는 분기 대비, YoY는 연간 대비입니다. 추정치(E)는 데이터가 적재된
+        기업·기간에서만 표시됩니다.
+      </p>
 
       {pages > 1 && (
         <div className="toolbar" style={{ marginTop: 14, justifyContent: "center" }}>
@@ -251,5 +299,15 @@ export default function CompaniesPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function GrowthPct({ p, title }: { p: number | null; title?: string }) {
+  if (p == null) return <span className="muted">-</span>;
+  const arrow = p > 0 ? "▲" : p < 0 ? "▼" : "–";
+  return (
+    <span className={"gnum " + signClass(p)} title={title}>
+      {arrow} {pct(p)}
+    </span>
   );
 }

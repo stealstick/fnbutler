@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listCompanies, type ListOpts } from "@/lib/repo";
+import { listCompanies, getCompareGrowth, type ListOpts } from "@/lib/repo";
+import { buildGrowthByCompany, epsGrowth } from "@/lib/compare-growth";
 
 /** 기업 목록 (검색/필터/정렬/페이지네이션) — 로컬 DB. */
 export async function GET(req: NextRequest) {
@@ -15,5 +16,12 @@ export async function GET(req: NextRequest) {
     offset: sp.get("offset") ? Number(sp.get("offset")) : 0,
   };
   const { total, rows } = await listCompanies(opts);
-  return NextResponse.json({ total, count: rows.length, results: rows });
+  const growthRows = await getCompareGrowth(rows.map((r) => r.corp_code));
+  const growthByCompany = buildGrowthByCompany(growthRows);
+  const results = rows.map((r) => ({
+    ...r,
+    epsGrowth: epsGrowth(r),
+    growth: growthByCompany[r.corp_code],
+  }));
+  return NextResponse.json({ total, count: rows.length, results });
 }
