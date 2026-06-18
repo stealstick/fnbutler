@@ -42,6 +42,7 @@ npm run deploy:postgres
 
 - 필요한 GCP API 활성화
 - 런타임 서비스 계정 `fnbutler-runner` 생성
+- GitHub 배포 서비스 계정 `gh-deployer` 가 `fnbutler-runner` 를 사용할 수 있도록 actAs 권한 부여
 - Artifact Registry Docker 저장소 생성
 - Cloud SQL Postgres `fnbutler-pg` 생성
 - DB 비밀번호 Secret 생성

@@ -8,6 +8,7 @@
 #
 # Optional env overrides:
 #   PROJECT REGION SERVICE INSTANCE DB_NAME DB_USER DB_PASSWORD BASE_URL
+#   GITHUB_DEPLOYER_SA TG_TOKEN_SECRET TG_WEBHOOK_SECRET DART_API_KEY_SECRET
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -25,6 +26,7 @@ BUCKET="${BUCKET:-protein-test-469413-fnbutler}"
 REPO="${REPO:-cloud-run-source-deploy}"
 SA_NAME="${SA_NAME:-fnbutler-runner}"
 SA_EMAIL="${SA_NAME}@${PROJECT}.iam.gserviceaccount.com"
+GITHUB_DEPLOYER_SA="${GITHUB_DEPLOYER_SA:-gh-deployer@${PROJECT}.iam.gserviceaccount.com}"
 TAG="$(date +%Y%m%d-%H%M%S)"
 APP_IMG="${REGION}-docker.pkg.dev/${PROJECT}/${REPO}/${SERVICE}:${TAG}"
 JOB_IMG="${REGION}-docker.pkg.dev/${PROJECT}/${REPO}/${JOB}:${TAG}"
@@ -46,6 +48,13 @@ for role in roles/cloudsql.client roles/datastore.user roles/run.developer roles
     --role "$role" \
     --quiet >/dev/null
 done
+if gcloud iam service-accounts describe "$GITHUB_DEPLOYER_SA" --project "$PROJECT" >/dev/null 2>&1; then
+  gcloud iam service-accounts add-iam-policy-binding "$SA_EMAIL" \
+    --member "serviceAccount:${GITHUB_DEPLOYER_SA}" \
+    --role roles/iam.serviceAccountUser \
+    --project "$PROJECT" \
+    --quiet >/dev/null
+fi
 
 echo "==> Ensuring Artifact Registry repository"
 if ! gcloud artifacts repositories describe "$REPO" --location "$REGION" --project "$PROJECT" >/dev/null 2>&1; then
