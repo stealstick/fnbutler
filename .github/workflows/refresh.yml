@@ -9,7 +9,7 @@ on:
         description: "refresh mode"
         type: choice
         default: full
-        options: [full, calendar-only, dart-financials, dart-2024-financials, dart-2025-financials]
+        options: [full, calendar-only, dart-financials, dart-2024-financials, dart-2025-financials, wisereport-estimates]
       wait:
         description: "wait for job completion"
         type: boolean
@@ -61,6 +61,9 @@ jobs:
           fi
           if [ "$MODE" = "dart-2025-financials" ]; then
             EXTRA_ARGS=(--args tsx,scripts/backfill-dart-financials.ts,--year,2025)
+          fi
+          if [ "$MODE" = "wisereport-estimates" ]; then
+            EXTRA_ARGS=(--args tsx,scripts/backfill-wisereport-estimates.ts)
           fi
 
           gcloud run jobs execute "$TARGET_JOB" \

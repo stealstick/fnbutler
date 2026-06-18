@@ -5,11 +5,13 @@
  *   tsx scripts/refresh-daily.ts --scope watchlist
  *   tsx scripts/refresh-daily.ts --calendar-only
  *   tsx scripts/refresh-daily.ts --no-dart-financials
+ *   tsx scripts/refresh-daily.ts --no-wisereport-estimates
  *
  * 특징
  *  - 증분: 피드는 최신순이라 이미 가진 report_id 를 만나면 중단 → 최근 신규분만 받음.
  *  - 멱등: 시세/목표가는 값이 바뀐 경우에만 UPDATE. 같은 데이터면 updated_at 도 그대로.
  *  - DART_API_KEY가 있으면 현재연도/전년도 정기보고서 재무 누락분을 함께 보강한다.
+ *  - WiseReport/FnGuide 공개 재무요약에서 컨센서스 추정치를 함께 보강한다.
  *  - Postgres가 영속 저장소이므로 GCS DB 업로드/이미지 재배포는 하지 않는다.
  */
 import { all, closeDb, getDb, migrate, nowIso, query } from "../src/lib/db";
@@ -17,6 +19,7 @@ import { ingestNewReports, refreshCompanyQuote } from "../src/lib/ingest";
 import { recordDailySnapshot, dispatchAlerts } from "../src/lib/poll";
 import { ingestCalendar } from "../src/lib/calendar";
 import { backfillDartFinancials } from "./backfill-dart-financials";
+import { backfillWiseReportEstimates } from "./backfill-wisereport-estimates";
 
 const has = (f: string) => process.argv.includes(`--${f}`);
 const argOf = (f: string) => {
@@ -123,19 +126,29 @@ async function main() {
     }
   }
 
+  let wiseEstimatesMsg = "skip";
+  if (!has("no-wisereport-estimates")) {
+    const estimateLimit = Number(argOf("wisereport-estimate-limit") || process.env.WISEREPORT_ESTIMATE_LIMIT || "0");
+    const summary = await backfillWiseReportEstimates(db, {
+      limit: estimateLimit,
+      log: (message) => process.stdout.write(`   wisereport-estimates ${message}`),
+    });
+    wiseEstimatesMsg = `targeted=${summary.targeted},writes=${summary.writes},fail=${summary.fail}`;
+  }
+
   const { sent } = await dispatchAlerts(db, { sinceIso: runStart, baseUrl: BASE_URL });
   await query(
     "INSERT INTO ingest_runs (kind, started_at, finished_at, ok, note) VALUES ('refresh-daily', $1, $2, 1, $3)",
     [
       runStart,
       nowIso(),
-      `targets=${targets.length} newReports=${newReports} quoteUpdated=${quoteUpdated} unchanged=${unchanged} alerts=${sent} errors=${errors} calendar=${calendarMsg} dartFinancials=${dartFinancialsMsg}`,
+      `targets=${targets.length} newReports=${newReports} quoteUpdated=${quoteUpdated} unchanged=${unchanged} alerts=${sent} errors=${errors} calendar=${calendarMsg} dartFinancials=${dartFinancialsMsg} wiseEstimates=${wiseEstimatesMsg}`,
     ],
     db,
   );
 
   process.stdout.write(
-    `갱신 완료 — 신규리포트 ${newReports} · 시세변경 ${quoteUpdated} · 무변경 ${unchanged} · 알림 ${sent} · 오류 ${errors} · DART재무 ${dartFinancialsMsg}\n`,
+    `갱신 완료 — 신규리포트 ${newReports} · 시세변경 ${quoteUpdated} · 무변경 ${unchanged} · 알림 ${sent} · 오류 ${errors} · DART재무 ${dartFinancialsMsg} · 추정치 ${wiseEstimatesMsg}\n`,
   );
 }
 
