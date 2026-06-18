@@ -9,7 +9,7 @@ on:
         description: "refresh mode"
         type: choice
         default: full
-        options: [full, calendar-only]
+        options: [full, calendar-only, dart-2024-financials]
       wait:
         description: "wait for job completion"
         type: boolean
@@ -46,11 +46,16 @@ jobs:
           fi
 
           TARGET_JOB="$JOB"
+          EXTRA_ARGS=()
           if [ "$EVENT_NAME" = "schedule" ] || [ "$MODE" = "calendar-only" ]; then
             TARGET_JOB="$CALENDAR_JOB"
+          fi
+          if [ "$MODE" = "dart-2024-financials" ]; then
+            EXTRA_ARGS=(--args tsx,scripts/backfill-dart-financials.ts,--year,2024)
           fi
 
           gcloud run jobs execute "$TARGET_JOB" \
             --project "$PROJECT" \
             --region "$REGION" \
+            "${EXTRA_ARGS[@]}" \
             $WAIT_FLAG
