@@ -16,7 +16,7 @@
 | Cloud Scheduler | `fnbutler-calendar-weekly` | 토요일 08:00 KST 캘린더 Job 실행 |
 | Cloud SQL | `fnbutler-pg` | Postgres 16, `db-f1-micro` |
 | DB | `butler` / user `butler` | 시세·컨센서스·재무 운영 DB |
-| Secret Manager | `fnbutler-db-password`, `DART_API_KEY` | DB 비밀번호, 국내 실적 캘린더 키 |
+| Secret | `fnbutler-db-password`, `DART_API_KEY` | DB 비밀번호, 국내 실적 캘린더 키 |
 
 ## 1. 로컬 Postgres 이관
 
@@ -54,6 +54,8 @@ npm run deploy:postgres
 - Cloud Scheduler 평일 18:30 KST 일일 갱신, 토요일 08:00 KST 캘린더 전용 스케줄 생성/업데이트
 
 선택 secret을 이미 Secret Manager에 만들어 둔 경우 환경변수로 이름을 넘길 수 있다.
+GitHub Actions 배포는 repo secret `DART_API_KEY` 가 있으면 Cloud Run Job env 로 직접 주입하고,
+GCP Secret Manager `DART_API_KEY` 가 있으면 Secret Manager 값을 우선 사용한다.
 
 ```bash
 TG_TOKEN_SECRET=BUTLER_TELEGRAM_BOT_TOKEN \

@@ -36,21 +36,14 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
-      - name: Sync runtime secrets
+      - name: Check optional runtime secrets
         env:
           DART_API_KEY_VALUE: ${{ secrets.DART_API_KEY }}
         run: |
           if [ -n "$DART_API_KEY_VALUE" ]; then
-            if gcloud secrets describe DART_API_KEY --project "$PROJECT" >/dev/null 2>&1; then
-              printf "%s" "$DART_API_KEY_VALUE" | gcloud secrets versions add DART_API_KEY \
-                --data-file=- \
-                --project "$PROJECT"
-            else
-              printf "%s" "$DART_API_KEY_VALUE" | gcloud secrets create DART_API_KEY \
-                --replication-policy automatic \
-                --data-file=- \
-                --project "$PROJECT"
-            fi
+            echo "DART_API_KEY GitHub Actions secret is configured."
+          else
+            echo "DART_API_KEY GitHub Actions secret is not configured; DART calendar collection will be skipped unless a GCP Secret Manager secret exists."
           fi
 
       - name: Build & push images
@@ -89,14 +82,19 @@ jobs:
             --set-secrets "$SECRET_VARS"
 
       - name: Update refresh job image
+        env:
+          DART_API_KEY_VALUE: ${{ secrets.DART_API_KEY }}
         run: |
           CONNECTION="${PROJECT}:${REGION}:${SQL_INSTANCE}"
           SECRET_VARS="PGPASSWORD=${DB_PASSWORD_SECRET}:latest"
+          ENV_VARS="PGHOST=/cloudsql/${CONNECTION},PGDATABASE=${DB_NAME},PGUSER=${DB_USER},BUTLER_USERSTORE=firestore,BUTLER_BASE_URL=${URL},BUTLER_RATE_PER_MIN=80"
           if gcloud secrets describe BUTLER_TELEGRAM_BOT_TOKEN --project "$PROJECT" >/dev/null 2>&1; then
             SECRET_VARS="${SECRET_VARS},BUTLER_TELEGRAM_BOT_TOKEN=BUTLER_TELEGRAM_BOT_TOKEN:latest"
           fi
           if gcloud secrets describe DART_API_KEY --project "$PROJECT" >/dev/null 2>&1; then
             SECRET_VARS="${SECRET_VARS},DART_API_KEY=DART_API_KEY:latest"
+          elif [ -n "$DART_API_KEY_VALUE" ]; then
+            ENV_VARS="${ENV_VARS},DART_API_KEY=${DART_API_KEY_VALUE}"
           fi
 
           if gcloud run jobs describe "$JOB" --region "$REGION" --project "$PROJECT" >/dev/null 2>&1; then
@@ -112,15 +110,20 @@ jobs:
             --max-retries 0 --task-timeout 7200 \
             --service-account "${RUN_SA}@${PROJECT}.iam.gserviceaccount.com" \
             --set-cloudsql-instances "$CONNECTION" \
-            --set-env-vars "PGHOST=/cloudsql/${CONNECTION},PGDATABASE=${DB_NAME},PGUSER=${DB_USER},BUTLER_USERSTORE=firestore,BUTLER_BASE_URL=${URL},BUTLER_RATE_PER_MIN=80" \
+            --set-env-vars "$ENV_VARS" \
             --set-secrets "$SECRET_VARS"
 
       - name: Update weekly calendar job
+        env:
+          DART_API_KEY_VALUE: ${{ secrets.DART_API_KEY }}
         run: |
           CONNECTION="${PROJECT}:${REGION}:${SQL_INSTANCE}"
           SECRET_VARS="PGPASSWORD=${DB_PASSWORD_SECRET}:latest"
+          ENV_VARS="PGHOST=/cloudsql/${CONNECTION},PGDATABASE=${DB_NAME},PGUSER=${DB_USER},BUTLER_USERSTORE=firestore,BUTLER_BASE_URL=${URL},BUTLER_RATE_PER_MIN=80"
           if gcloud secrets describe DART_API_KEY --project "$PROJECT" >/dev/null 2>&1; then
             SECRET_VARS="${SECRET_VARS},DART_API_KEY=DART_API_KEY:latest"
+          elif [ -n "$DART_API_KEY_VALUE" ]; then
+            ENV_VARS="${ENV_VARS},DART_API_KEY=${DART_API_KEY_VALUE}"
           fi
 
           if gcloud run jobs describe "$CALENDAR_JOB" --region "$REGION" --project "$PROJECT" >/dev/null 2>&1; then
@@ -136,7 +139,7 @@ jobs:
             --max-retries 0 --task-timeout 7200 \
             --service-account "${RUN_SA}@${PROJECT}.iam.gserviceaccount.com" \
             --set-cloudsql-instances "$CONNECTION" \
-            --set-env-vars "PGHOST=/cloudsql/${CONNECTION},PGDATABASE=${DB_NAME},PGUSER=${DB_USER},BUTLER_USERSTORE=firestore,BUTLER_BASE_URL=${URL},BUTLER_RATE_PER_MIN=80" \
+            --set-env-vars "$ENV_VARS" \
             --set-secrets "$SECRET_VARS"
 
       - name: Update weekly calendar scheduler
