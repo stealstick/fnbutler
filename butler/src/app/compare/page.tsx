@@ -102,8 +102,8 @@ export default async function ComparePage({
   searchParams: Promise<{ codes?: string }>;
 }) {
   const codes = parseCodes((await searchParams).codes);
-  const companies = getCompaniesByCodes(codes);
-  const growthRows = getCompareGrowth(companies.map((c) => c.corp_code));
+  const companies = await getCompaniesByCodes(codes);
+  const growthRows = await getCompareGrowth(companies.map((c) => c.corp_code));
   const CY = new Date().getFullYear();
 
   if (companies.length === 0) {

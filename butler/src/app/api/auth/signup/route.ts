@@ -3,7 +3,7 @@ import { getDb, migrate } from "@/lib/db";
 import { createUser, createSession, SESSION_COOKIE, sessionCookieMaxAge } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
-  migrate(getDb());
+  await migrate(getDb());
   const { email, password } = (await req.json().catch(() => ({}))) as {
     email?: string;
     password?: string;

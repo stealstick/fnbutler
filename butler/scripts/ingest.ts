@@ -7,7 +7,7 @@
  *   tsx scripts/ingest.ts --companies --detail --all  # 전종목 상세 (느림)
  *   tsx scripts/ingest.ts --detail --only-consensus   # 컨센서스 보유 기업만
  */
-import { getDb, migrate } from "../src/lib/db";
+import { all, closeDb, getDb, migrate } from "../src/lib/db";
 import { ingestCompanies, ingestDetail } from "../src/lib/ingest";
 
 function arg(name: string): string | undefined {
@@ -20,7 +20,7 @@ const has = (name: string) => process.argv.includes(`--${name}`);
 
 async function main() {
   const db = getDb();
-  migrate(db);
+  await migrate(db);
 
   if (has("companies")) {
     process.stdout.write("📋 기업 목록 수집 중...\n");
@@ -43,11 +43,11 @@ async function main() {
       const where = onlyConsensus ? "WHERE has_consensus = 1" : "";
       const lim = limit > 0 ? `LIMIT ${limit}` : "";
       targets = (
-        db
-          .prepare(
-            `SELECT corp_code FROM companies ${where} ORDER BY market_cap DESC NULLS LAST ${lim}`,
-          )
-          .all() as Array<{ corp_code: string }>
+        await all<{ corp_code: string }>(
+          `SELECT corp_code FROM companies ${where} ORDER BY market_cap DESC NULLS LAST ${lim}`,
+          [],
+          db,
+        )
       ).map((r) => r.corp_code);
     }
 
@@ -74,7 +74,13 @@ async function main() {
   }
 }
 
-main().then(() => process.exit(0)).catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+main()
+  .then(async () => {
+    await closeDb();
+    process.exit(0);
+  })
+  .catch(async (e) => {
+    console.error(e);
+    await closeDb();
+    process.exit(1);
+  });

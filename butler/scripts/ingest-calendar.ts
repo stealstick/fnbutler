@@ -8,7 +8,7 @@
  * 출처: Nasdaq 경제/실적 캘린더(무인증) + 선택적 DART Open API(국내 실적, 키 필요).
  * 멱등: 윈도우(±N일) 안의 행을 지우고 다시 넣는다(재일정/취소 반영).
  */
-import { getDb, migrate } from "../src/lib/db";
+import { closeDb, getDb, migrate } from "../src/lib/db";
 import { ingestCalendar } from "../src/lib/calendar";
 
 function arg(name: string): string | undefined {
@@ -20,7 +20,7 @@ function arg(name: string): string | undefined {
 
 async function main() {
   const db = getDb();
-  migrate(db);
+  await migrate(db);
 
   const daysBack = Number(arg("back") || "14");
   const daysAhead = Number(arg("ahead") || "80");
@@ -43,8 +43,12 @@ async function main() {
 }
 
 main()
-  .then(() => process.exit(0))
-  .catch((e) => {
+  .then(async () => {
+    await closeDb();
+    process.exit(0);
+  })
+  .catch(async (e) => {
     console.error(e);
+    await closeDb();
     process.exit(1);
   });

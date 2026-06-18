@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { num, pct, ratingChangeBadge, signClass } from "@/lib/format";
 import InfoTip from "@/components/InfoTip";
 import { useTableSort, SortTh } from "@/components/sortable";
@@ -248,7 +248,9 @@ export default function TargetPricePanel({
                       {b.ai_summary && (
                         <details className="ai" onClick={(e) => e.stopPropagation()}>
                           <summary>AI 요약</summary>
-                          <div className="body">{b.ai_summary}</div>
+                          <div className="body">
+                            <AiSummaryBody text={b.ai_summary} />
+                          </div>
                         </details>
                       )}
                     </td>
@@ -333,6 +335,35 @@ export default function TargetPricePanel({
       </p>
     </div>
   );
+}
+
+/** `**굵게**` 인라인 → <strong>. 그 외는 그대로. */
+function renderInline(text: string): ReactNode[] {
+  return text.split(/(\*\*[^*]+\*\*)/g).map((seg, i) => {
+    const m = /^\*\*([^*]+)\*\*$/.exec(seg);
+    return m ? <strong key={i}>{m[1]}</strong> : <span key={i}>{seg}</span>;
+  });
+}
+
+/**
+ * 리포트 상세 API의 AI 요약(라이트 마크다운: `- **헤더**` + 들여쓴 본문)을 렌더.
+ * 짧은 폴백 요약(마크다운 없음)도 그냥 단락으로 자연스럽게 표시된다.
+ */
+function AiSummaryBody({ text }: { text: string }) {
+  const blocks: ReactNode[] = [];
+  text.split("\n").forEach((raw, i) => {
+    const line = raw.replace(/\s+$/, "");
+    if (!line.trim()) return; // 빈 줄은 간격(gap)으로 대체
+    const bullet = /^\s*-\s+/.test(line);
+    const content = line.replace(/^\s*-\s+/, "");
+    blocks.push(
+      <div key={i} className={bullet ? "ai-li" : "ai-p"}>
+        {bullet ? <span className="ai-bullet" aria-hidden>•</span> : null}
+        <span>{renderInline(content)}</span>
+      </div>,
+    );
+  });
+  return <div className="ai-md">{blocks}</div>;
 }
 
 function TargetChart({

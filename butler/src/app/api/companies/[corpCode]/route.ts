@@ -10,17 +10,24 @@ import {
 /** 기업뷰 단일 번들: 회사정보 + 증권사별 목표주가 + 재무(분기/연간) + 밸류 + 목표주가 추이. */
 export async function GET(_req: Request, ctx: { params: Promise<{ corpCode: string }> }) {
   const { corpCode } = await ctx.params;
-  const company = getCompany(corpCode);
+  const company = await getCompany(corpCode);
   if (!company) return NextResponse.json({ error: "not found" }, { status: 404 });
+  const [brokerTargets, quarterly, annual, valuations, targetMonthly] = await Promise.all([
+    getBrokerTargets(corpCode),
+    getFinancials(corpCode, "Q"),
+    getFinancials(corpCode, "A"),
+    getValuationSeries(corpCode),
+    getTargetMonthly(corpCode),
+  ]);
 
   return NextResponse.json({
     company,
-    brokerTargets: getBrokerTargets(corpCode),
+    brokerTargets,
     financials: {
-      quarterly: getFinancials(corpCode, "Q"),
-      annual: getFinancials(corpCode, "A"),
+      quarterly,
+      annual,
     },
-    valuations: getValuationSeries(corpCode),
-    targetMonthly: getTargetMonthly(corpCode),
+    valuations,
+    targetMonthly,
   });
 }

@@ -1,5 +1,7 @@
 -- ============================================================================
--- butler.works 데이터 정규화 DB (SQLite)
+-- Legacy SQLite schema kept only as the migration source/reference for
+-- scripts/migrate-sqlite-to-postgres.ts. Runtime schema lives in
+-- db/postgres/schema.sql.
 --
 -- 설계 원칙 (fnguide 본 프로젝트 schema.sql 의 철학을 그대로 계승)
 --  1. 기업별 테이블 분리(X) → 단일 팩트 테이블 + corp_code FK (O).
@@ -249,7 +251,7 @@ CREATE TABLE IF NOT EXISTS telegram_link_tokens (
 -- 계정별 캘린더 필터 저장 + 개인 구독 피드 토큰.
 --   prefs_json: {categories:[], countries:[], minImportance:int, subcategories:[]}
 --   feed_token: 개인 ICS 구독 URL(/api/calendar/ics?u=<token>)용 불투명 토큰.
--- (prod 는 Firestore 의 calendar_prefs 컬렉션 사용 — 이 테이블은 로컬 SQLite 폴백)
+-- (prod 는 Firestore 의 calendar_prefs 컬렉션 사용 — 이 테이블은 레거시 SQLite 폴백)
 CREATE TABLE IF NOT EXISTS calendar_prefs (
     user_id    TEXT PRIMARY KEY,
     prefs_json TEXT NOT NULL,

@@ -1,10 +1,8 @@
-name: daily refresh & deploy
+name: run refresh job
 
-# 매 영업일 18:30 KST(09:30 UTC) 자동 데이터 갱신 + 배포. 로컬 PC 불필요.
-# GCS 의 butler.db 를 받아 증분·멱등 갱신 → 변경 있으면 그 DB 를 이미지에 구워 Cloud Run 배포.
+# Production refresh is scheduled by Cloud Scheduler against the Cloud Run Job.
+# This workflow is a manual escape hatch for re-running that same job from GitHub.
 on:
-  schedule:
-    - cron: "30 9 * * 1-5"
   workflow_dispatch:
     inputs:
       mode:
@@ -12,76 +10,40 @@ on:
         type: choice
         default: full
         options: [full, calendar-only]
+      wait:
+        description: "wait for job completion"
+        type: boolean
+        default: true
 
 env:
   PROJECT: protein-test-469413
   REGION: asia-northeast3
-  SERVICE: fnbutler
-  DB_BUCKET: protein-test-469413-fnbutler
-  URL: https://fnbutler-l3why3suea-du.a.run.app
+  JOB: fnbutler-refresh
 
 jobs:
   refresh:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
       - uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
+
       - uses: google-github-actions/setup-gcloud@v2
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
 
-      - name: Install deps
-        run: cd butler && npm ci
-
-      - name: Pull current DB from GCS
+      - name: Execute Cloud Run refresh job
         run: |
-          cd butler && mkdir -p db
-          gcloud storage cp "gs://${DB_BUCKET}/butler.db" db/butler.db
-          md5sum db/butler.db | awk '{print $1}' > /tmp/before.md5
+          WAIT_FLAG="--wait"
+          if [ "${{ github.event.inputs.wait }}" != "true" ]; then
+            WAIT_FLAG="--async"
+          fi
 
-      - name: Incremental + idempotent refresh
-        env:
-          BUTLER_TELEGRAM_BOT_TOKEN: ${{ secrets.BUTLER_TELEGRAM_BOT_TOKEN }}
-          BUTLER_BASE_URL: https://fnbutler-l3why3suea-du.a.run.app
-          BUTLER_RATE_PER_MIN: "80"
-          BUTLER_USERSTORE: firestore # 알림 대상(관심목록)은 Firestore 에서 조회
-          # 캘린더 국내 실적발표(잠정실적 공시) 수집용. 미설정 시 국내실적만 비활성(나머지는 정상).
-          DART_API_KEY: ${{ secrets.DART_API_KEY }}
-        run: cd butler && npx tsx scripts/refresh-daily.ts ${{ github.event.inputs.mode == 'calendar-only' && '--calendar-only' || '' }}
+          ARGS_FLAG=""
+          if [ "${{ github.event.inputs.mode }}" = "calendar-only" ]; then
+            ARGS_FLAG="--args=tsx,scripts/refresh-daily.ts,--calendar-only"
+          fi
 
-      - name: Detect change
-        id: chg
-        run: |
-          cd butler
-          NEW=$(md5sum db/butler.db | awk '{print $1}')
-          if [ "$NEW" = "$(cat /tmp/before.md5)" ]; then echo "changed=false" >> "$GITHUB_OUTPUT"; else echo "changed=true" >> "$GITHUB_OUTPUT"; fi
-
-      - name: Upload DB to GCS (best-effort)
-        if: steps.chg.outputs.changed == 'true'
-        continue-on-error: true # gh-deployer 에 버킷 쓰기 권한 없으면 스킵(베이크로 대체)
-        run: cd butler && gcloud storage cp db/butler.db "gs://${DB_BUCKET}/butler.db"
-
-      - name: Build & deploy (refreshed DB baked)
-        if: steps.chg.outputs.changed == 'true'
-        env:
-          TG_TOKEN: ${{ secrets.BUTLER_TELEGRAM_BOT_TOKEN }}
-          TG_WEBHOOK_SECRET: ${{ secrets.BUTLER_TELEGRAM_WEBHOOK_SECRET }}
-        run: |
-          cd butler
-          IMG="${REGION}-docker.pkg.dev/${PROJECT}/cloud-run-source-deploy/${SERVICE}:refresh-${GITHUB_RUN_ID}"
-          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
-          docker build -t "$IMG" .
-          docker push "$IMG"
-          # ^@^ 구분자: 값에 콤마가 섞여도 안전 (gcloud --set-env-vars escaping)
-          gcloud run deploy "$SERVICE" \
-            --image "$IMG" --project "$PROJECT" --region "$REGION" \
-            --allow-unauthenticated --memory 1Gi --cpu 1 \
-            --min-instances 0 --max-instances 1 --port 8080 \
-            --set-env-vars "^@^BUTLER_DB_PATH=/app/db/butler.db@BUTLER_USERSTORE=firestore@BUTLER_BASE_URL=${URL}@BUTLER_TELEGRAM_BOT_TOKEN=${TG_TOKEN}@BUTLER_TELEGRAM_WEBHOOK_SECRET=${TG_WEBHOOK_SECRET}"
-
-      - name: No change
-        if: steps.chg.outputs.changed == 'false'
-        run: echo "변경 없음 — 배포 생략"
+          gcloud run jobs execute "$JOB" \
+            --project "$PROJECT" \
+            --region "$REGION" \
+            $WAIT_FLAG \
+            $ARGS_FLAG

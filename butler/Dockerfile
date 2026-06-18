@@ -16,12 +16,25 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=8080
 ENV HOSTNAME=0.0.0.0
-ENV BUTLER_DB_PATH=/app/db/butler.db
 
 COPY --from=builder /app/public ./public
-COPY --from=builder /app/db ./db
+COPY --from=builder /app/db/postgres ./db/postgres
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/.next/standalone ./
 
 EXPOSE 8080
 CMD ["node", "server.js"]
+
+FROM node:20-bookworm-slim AS worker
+WORKDIR /app
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json package-lock.json ./
+COPY db/postgres ./db/postgres
+COPY src ./src
+COPY scripts ./scripts
+COPY tsconfig.json next-env.d.ts ./
+
+CMD ["npx", "tsx", "scripts/refresh-daily.ts"]

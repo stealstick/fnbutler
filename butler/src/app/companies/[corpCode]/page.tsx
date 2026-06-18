@@ -26,19 +26,21 @@ export default async function CompanyPage({
   params: Promise<{ corpCode: string }>;
 }) {
   const { corpCode } = await params;
-  const company = getCompany(corpCode);
+  const company = await getCompany(corpCode);
   if (!company) notFound();
 
   const user = await getSessionUser((await cookies()).get(SESSION_COOKIE)?.value);
   const watched = user ? await userStore.isWatched(user.id, corpCode) : false;
 
-  const brokers = getBrokerTargets(corpCode);
-  const brokerHistory = getBrokerTargetHistory(corpCode);
-  const targetMonthly = getTargetMonthly(corpCode);
-  const quarterly = getFinancials(corpCode, "Q");
-  const annual = getFinancials(corpCode, "A");
-  const valuations = getValuationSeries(corpCode);
-  const changes = getChanges(corpCode, 40);
+  const [brokers, brokerHistory, targetMonthly, quarterly, annual, valuations, changes] = await Promise.all([
+    getBrokerTargets(corpCode),
+    getBrokerTargetHistory(corpCode),
+    getTargetMonthly(corpCode),
+    getFinancials(corpCode, "Q"),
+    getFinancials(corpCode, "A"),
+    getValuationSeries(corpCode),
+    getChanges(corpCode, 40),
+  ]);
 
   return (
     <>

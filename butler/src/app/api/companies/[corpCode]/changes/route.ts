@@ -5,5 +5,5 @@ import { getChanges } from "@/lib/repo";
 export async function GET(req: NextRequest, ctx: { params: Promise<{ corpCode: string }> }) {
   const { corpCode } = await ctx.params;
   const limit = Number(req.nextUrl.searchParams.get("limit") ?? 100);
-  return NextResponse.json({ corpCode, changes: getChanges(corpCode, limit) });
+  return NextResponse.json({ corpCode, changes: await getChanges(corpCode, limit) });
 }

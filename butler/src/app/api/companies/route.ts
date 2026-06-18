@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { listCompanies, type ListOpts } from "@/lib/repo";
 
 /** 기업 목록 (검색/필터/정렬/페이지네이션) — 로컬 DB. */
-export function GET(req: NextRequest) {
+export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const opts: ListOpts = {
     q: sp.get("q") ?? undefined,
@@ -14,6 +14,6 @@ export function GET(req: NextRequest) {
     limit: sp.get("limit") ? Number(sp.get("limit")) : 50,
     offset: sp.get("offset") ? Number(sp.get("offset")) : 0,
   };
-  const { total, rows } = listCompanies(opts);
+  const { total, rows } = await listCompanies(opts);
   return NextResponse.json({ total, count: rows.length, results: rows });
 }

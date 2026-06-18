@@ -7,9 +7,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const nextConfig = {
   output: "standalone",
   outputFileTracingRoot: __dirname,
-  // better-sqlite3 is a native module — keep it out of the bundler so route
-  // handlers / server components can `require` it at runtime.
-  serverExternalPackages: ["better-sqlite3", "@google-cloud/firestore"],
+  serverExternalPackages: ["pg", "@google-cloud/firestore"],
 };
 
 export default nextConfig;

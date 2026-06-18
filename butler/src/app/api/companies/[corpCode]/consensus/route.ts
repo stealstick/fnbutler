@@ -12,7 +12,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ corpCode: s
   return NextResponse.json({
     corpCode,
     mode,
-    brokers: mode === "history" ? getBrokerHistory(corpCode) : getBrokerTargets(corpCode),
-    targetMonthly: getTargetMonthly(corpCode),
+    brokers: mode === "history" ? await getBrokerHistory(corpCode) : await getBrokerTargets(corpCode),
+    targetMonthly: await getTargetMonthly(corpCode),
   });
 }

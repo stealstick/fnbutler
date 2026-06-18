@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getRecentChanges, getStats } from "@/lib/repo";
+import { getRecentChanges, getStats, type ChangeRow } from "@/lib/repo";
 import { pct, num } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -17,10 +17,8 @@ export default async function ChangesPage({
   searchParams: Promise<{ type?: string }>;
 }) {
   const { type } = await searchParams;
-  const changes = getRecentChanges(150, type || undefined) as Array<
-    Awaited<ReturnType<typeof getRecentChanges>>[number] & { corp_name?: string }
-  >;
-  const stats = getStats();
+  const changes = (await getRecentChanges(150, type || undefined)) as Array<ChangeRow & { corp_name?: string }>;
+  const stats = await getStats();
 
   return (
     <>

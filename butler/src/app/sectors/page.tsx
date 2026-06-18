@@ -3,8 +3,8 @@ import SectorListTable from "./SectorListTable";
 
 export const dynamic = "force-dynamic";
 
-export default function SectorsPage() {
-  const sectors = listSectorAggs();
+export default async function SectorsPage() {
+  const sectors = await listSectorAggs();
 
   return (
     <div className="panel">

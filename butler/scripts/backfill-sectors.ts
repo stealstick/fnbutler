@@ -5,7 +5,7 @@
  *   tsx scripts/backfill-sectors.ts            # 전체
  *   tsx scripts/backfill-sectors.ts --limit 500
  */
-import { getDb, migrate } from "../src/lib/db";
+import { all, closeDb, getDb, migrate } from "../src/lib/db";
 import { butler } from "../src/lib/butler";
 import { upsertCompanyDetail } from "../src/lib/ingest";
 import { nowIso } from "../src/lib/db";
@@ -15,21 +15,21 @@ const limit = limIdx !== -1 ? Number(process.argv[limIdx + 1]) : 0;
 
 async function main() {
   const db = getDb();
-  migrate(db);
-  const rows = db
-    .prepare(
-      `SELECT corp_code FROM companies
-       WHERE sector IS NULL OR sector = ''
-       ORDER BY market_cap DESC NULLS LAST ${limit > 0 ? `LIMIT ${limit}` : ""}`,
-    )
-    .all() as Array<{ corp_code: string }>;
+  await migrate(db);
+  const rows = await all<{ corp_code: string }>(
+    `SELECT corp_code FROM companies
+     WHERE sector IS NULL OR sector = ''
+     ORDER BY market_cap DESC NULLS LAST ${limit > 0 ? `LIMIT ${limit}` : ""}`,
+    [],
+    db,
+  );
   process.stdout.write(`섹터 백필 대상: ${rows.length}개\n`);
   let ok = 0,
     fail = 0;
   for (const r of rows) {
     try {
       const d = await butler.company(r.corp_code);
-      upsertCompanyDetail(db, d, nowIso());
+      await upsertCompanyDetail(db, d, nowIso());
       ok++;
     } catch {
       fail++;
@@ -40,7 +40,13 @@ async function main() {
   process.stdout.write(`✅ 섹터 백필 완료: 성공 ${ok}, 실패 ${fail}\n`);
 }
 
-main().then(() => process.exit(0)).catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+main()
+  .then(async () => {
+    await closeDb();
+    process.exit(0);
+  })
+  .catch(async (e) => {
+    console.error(e);
+    await closeDb();
+    process.exit(1);
+  });

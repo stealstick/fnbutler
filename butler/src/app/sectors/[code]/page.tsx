@@ -16,10 +16,12 @@ export default async function SectorDetail({
   params: Promise<{ code: string }>;
 }) {
   const { code } = await params;
-  const sector = getSectorAgg(code);
+  const sector = await getSectorAgg(code);
   if (!sector) notFound();
-  const companies = getSectorCompanies(code, "target_return_rate");
-  const momentum = getSectorMomentum(code);
+  const [companies, momentum] = await Promise.all([
+    getSectorCompanies(code, "target_return_rate"),
+    getSectorMomentum(code),
+  ]);
 
   return (
     <>

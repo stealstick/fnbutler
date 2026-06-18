@@ -1,165 +1,89 @@
-# CLAUDE.md — butler.view
+# CLAUDE.md - butler.view
 
-butler.works 데이터를 자체 정규화 DB로 모아 **기업/섹터/증권사별 목표주가·컨센서스**를
-비교하는 애널리스트 데스크(웹). 이 파일은 이 프로젝트에서 작업하는 Claude/개발자를 위한 안내다.
+butler.view 는 `butler.works` 데이터를 자체 정규화 DB로 모아 기업/섹터/증권사별
+목표주가·컨센서스를 비교하는 Next.js 웹 앱이다.
 
-## 1. 한 줄 요약 / 라이브
+## 현재 운영 원칙
 
-- 라이브: **https://fnbutler-l3why3suea-du.a.run.app** (Cloud Run, asia-northeast3)
-- 로컬: `npm run dev` → http://localhost:3939
-- 데이터 출처: 전부 `source = "butler"` (api.butler.works 리버스 엔지니어링). 출처 분석은 메모리 `butler-works-consensus-api` 참고.
+- 운영 DB는 **Postgres** 다. SQLite `db/butler.db` 는 레거시 백필 스냅샷/이관 소스일 뿐이다.
+- 런타임은 **Cloud Run + Cloud SQL(Postgres)** 이다.
+- 일일 갱신은 **Cloud Scheduler -> Cloud Run Job -> Postgres 직접 업데이트** 흐름이다.
+- DB 파일을 GCS에 올리거나 이미지에 굽는 흐름으로 되돌리지 말 것.
+- 운영 유저/세션/관심목록/알림/캘린더는 `BUTLER_USERSTORE=firestore` 일 때 Firestore에 저장한다.
+  로컬 개발에서는 같은 인터페이스가 Postgres 테이블로 폴백한다.
 
-## 2. 기술 스택
+## 라이브/로컬
 
-| 영역 | 선택 | 비고 |
-|---|---|---|
-| 프레임워크 | **Next.js 15 (App Router) + React 19 + TypeScript** | `output: standalone` |
-| 시세/컨센서스 DB | **SQLite (better-sqlite3)** `db/butler.db` | 조인·집계·윈도우함수 필요. 읽기 위주, 매 배포 GCS에서 재시드 |
-| 유저 DB | **Firestore (Native, 서울리전)** | 회원/세션/관심목록/알림. 배포해도 영속. 로컬은 SQLite 폴백 |
-| 런타임 스크립트 | **tsx** | 수집/갱신 CLI (`scripts/*.ts`) |
-| 호스팅 | **Cloud Run** (min=0, max=1, 1CPU/1Gi) | 스케일투제로 → 유휴 시 ~무료 |
-| 데이터 보관 | **GCS** `gs://protein-test-469413-fnbutler/butler.db` | 배포 이미지에 굽는 시세 DB 스냅샷 |
-| CI/CD | **GitHub Actions** (repo `stealstick/fnbutler`, PUBLIC=무료) | push 배포 + 일일 크론 |
-| 알림 | **Telegram Bot API** | `BUTLER_TELEGRAM_BOT_TOKEN` 있을 때만 |
-| GCP 프로젝트 | `protein-test-469413` (번호 765232817913) | 리전 asia-northeast3 |
+- 라이브: https://fnbutler-l3why3suea-du.a.run.app
+- 로컬: `cd butler && npm run dev` -> http://localhost:3939
+- 기본 로컬 DB: `postgres://butler:butler@localhost:5432/butler`
 
-## 3. 아키텍처 / 데이터 흐름
+## 기술 스택
 
-```
-            ┌─ 라이브(Cloud Run, 읽기 위주) ─────────────────────────┐
-api.butler  │  Next 서버  ── SQLite(butler.db, 이미지에 구움) 읽기    │
-   .works   │            └─ Firestore  ←→ 회원/관심목록/세션/알림     │
-     ▲      └──────────────────────────────────────────────────────┘
-     │ 수집(공개 API)                          ▲ 배포(이미지 빌드)
-     │                                         │
-GitHub Actions 일일 크론(refresh.yml)          GitHub Actions(deploy.yml, push 시)
-  GCS butler.db pull → 증분·멱등 갱신 →         GCS butler.db pull → 이미지 빌드 →
-  변경 시 GCS 업로드 + 빌드/배포 + 텔레그램알림    Cloud Run 배포
-```
-
-- **시세/컨센서스 데이터**: SQLite. 라이브에선 읽기 전용에 가깝다(배포 때 GCS 스냅샷을 이미지에
-  구움). 갱신은 오프라인(크론/CLI)이 담당 → GCS 업로드 → 재배포. 그래서 "배포 시 초기화"가
-  문제되지 않는다(최신본을 다시 굽는 것).
-- **유저 데이터 + 캘린더**: Firestore. 라이브에서 발생/갱신되며 배포와 무관하게 영속·즉시반영.
-  ⚠️ Cloud Run FS는 휘발성이라 SQLite에 두면 재배포 때 사라진다 → Firestore로 분리한 이유.
-
-> **⚠️ 데이터 배치 규칙 (꼭 지킬 것).** 데이터를 SQLite(이미지 베이크)에 둘지 Firestore에 둘지는
-> "갱신 주기"로 가른다. **시세/컨센서스처럼 일배치 스냅샷 = SQLite. 런타임에 자주 바뀌고
-> 재배포 없이 즉시 반영돼야 하는 것(유저 데이터, 알림, 경제·실적 캘린더) = Firestore.**
-> 캘린더를 SQLite에 두면 "로컬에서 수집→GCS 업로드→재배포"를 해야 prod에 보이는 잘못된 흐름이 된다.
-> 새 데이터를 추가할 때 이 기준으로 먼저 판단하라. (절대 로컬에서 데이터 빌드해 굽는 방식으로 가지 말 것)
-
-## 4. 데이터 모델 (`db/schema.sql`)
-
-설계 철학(부모 fnguide schema.sql 계승): 단일 팩트테이블+`corp_code` FK, 리포트 불변/멱등,
-long-format 지표, 최신값·파생지표는 뷰로 계산, 모든 적재 `source='butler'`.
-
-- `companies` — 전종목 마스터(2,555). `corp_code`=DART 8자리 PK. 시세/밸류 스냅샷 + `sector_code`(광역섹터) + `has_consensus`.
-- `consensus_reports` — 리포트 불변 저장(`report_id` 멱등). **리포트 1건 = 증권사 1곳 목표가**. 원본(raw).
-- `target_price_monthly` — 월별 목표가 min/avg/max 집계.
-- `financials` — long-format 재무(metric×year×quarter×period_type×is_estimate).
-- `valuations` — PER/PBR 분기 시계열.
-- `change_logs` — 변경 이력. `occurred_at`(실제 발생일=리포트일/분기말) + `observed_at`(감지시각).
-- `daily_snapshots` — 일별 핵심지표 스냅샷.
-- 유저 테이블(`users/sessions/watchlist/notifications`) + `calendar_events`/`calendar_prefs` 는 로컬 SQLite 폴백용. **prod 는 Firestore**(calendar 는 `calendar/events` 단일 문서, prefs 는 `calendar_prefs` 컬렉션).
-- 뷰: `v_latest_broker_target`(증권사별 최신 목표가), `v_financials_growth`(QoQ/YoY, window LAG), `v_sector_agg`(섹터 집계).
-
-## 5. ⚠️ 데이터 소스 / 인증 게이팅 (꼭 알아야 함)
-
-- 목표주가·컨센서스 리포트: 비로그인 공개 → 최신까지 수집 가능.
-- **재무 시계열(매출/영업이익/순이익, PER/PBR 과거값): 비로그인 시 ~2023년까지만**. 최신 분기는 로그인(구독) 세션 필요.
-  → 로그인 캡처 HAR을 `scripts/import-har.ts`로 적재하면 최신 재무 백필됨.
-- 커버리지: 전종목 2,555 중 **분석보고서(최근1년)≥1 = ~1,386개만** 목표주가 존재. 나머진 무커버(목표가 없음).
-- 레이트리밋: api.butler.works 분당 100요청/IP. 수집기는 `BUTLER_RATE_PER_MIN`(기본 80)로 셀프 throttle.
-
-## 6. 수집/갱신 스크립트 (`scripts/`)
-
-| 명령 | 용도 |
+| 영역 | 선택 |
 |---|---|
-| `npm run db:init` | 스키마 생성(멱등) |
-| `npm run ingest:companies` | 전종목 목록(스크리너) |
-| `npm run ingest:covered` | 커버리지 전종목 목표가 수집(batch 10/10s 점잖게) |
-| `npm run ingest:detail -- --only-consensus --feed-pages 25` | 상세(증권사 목표가+재무+과거리포트) |
-| `npm run backfill:sectors` | 섹터(업종) 분류 백필 |
-| `npm run backfill:changes` | 변경이력을 원본 리포트일 기준 재생성 |
-| `npm run import:har -- <file.har>` | 로그인 HAR로 최신 재무 백필 |
-| `npm run ingest:calendar` | 경제·실적 캘린더 수집(Nasdaq 경제/실적 + BOK 큐레이션, `--back N --ahead N`) |
-| `npm run refresh` / `refresh:push` | **일일 증분·멱등 갱신** (+ 변경 시 GCS 업로드/재배포; 캘린더도 함께 갱신, `--no-calendar`로 제외) |
+| 프레임워크 | Next.js 15 App Router, React 19, TypeScript |
+| 운영 DB | Cloud SQL Postgres 16 |
+| 로컬 DB | Postgres |
+| 유저 저장소 | Firestore(prod) / Postgres(local fallback) |
+| 수집/배치 | `tsx` scripts |
+| 호스팅 | Cloud Run service + Cloud Run Job |
+| 스케줄 | Cloud Scheduler |
+| 알림 | Telegram Bot API |
 
-**증분·멱등 핵심**: `ingestNewReports`(피드 최신순, 이미 가진 report_id 만나면 중단 → 신규분만),
-`refreshCompanyQuote`(시세/목표가 값이 바뀐 경우에만 UPDATE; `toNum`으로 "N/A"→null NaN오탐 방지).
-변경 없으면 GCS 업로드·재배포까지 건너뜀.
+## 주요 명령
 
-## 7. 배포 / CI/CD
+```bash
+npm run db:setup:local
+npm run db:init
+npm run db:migrate-sqlite
+npm run build
+npm run refresh
+npm run refresh:calendar
+npm run deploy:postgres
+npm run postgres:import:cloud
+```
 
-- **push 자동배포** (`.github/workflows/deploy.yml`): main에 `butler/**` push → GCS DB pull → 이미지 빌드/푸시 → Cloud Run 배포. 인증=`gh-deployer` SA 키(GitHub 시크릿 `GCP_SA_KEY`).
-- **일일 크론** (`.github/workflows/refresh.yml`): 매 영업일 18:30 KST(09:30 UTC) + 수동(workflow_dispatch). GCS DB pull → `refresh-daily.ts`(증분·멱등) → 변경 시 GCS 업로드 + 빌드/배포 + 텔레그램 알림(대상은 Firestore에서 조회, `BUTLER_USERSTORE=firestore`). 문서(*.md)만 바뀌면 배포 제외.
-- 수동 배포: `bash butler/scripts/deploy.sh` (로컬 docker 빌드→푸시→배포).
-- 데이터 갱신을 prod에 반영: 로컬 수집 → `gcloud storage cp db/butler.db gs://…/butler.db` → 재배포(또는 크론이 처리).
+## 데이터 모델
 
-## 8. 비용 (월, ~$0 목표)
+운영 스키마는 `db/postgres/schema.sql`.
 
-- Cloud Run min=0 → 유휴 무료(무료한도 내). 콜드스타트 ~2초.
-- Firestore: 무료한도(유저 데이터 소량) → ~$0.
-- GitHub Actions: repo PUBLIC → **무제한 무료**.
-- GCS(4MB DB) + Artifact Registry(이미지) → 수 센트.
-- 합계 사실상 **$0~2/월**. (콜드스타트 없애려 min=1 두면 ~$30~45/월이라 비권장)
+- `companies`: 전종목 마스터, 시세/밸류 스냅샷
+- `brokers`: 증권사 마스터
+- `consensus_reports`: 리포트 원본, `report_id` 멱등 저장
+- `target_price_monthly`: 월별 목표가 집계
+- `financials`: long-format 재무
+- `valuations`: PER/PBR 시계열
+- `change_logs`: 목표가/컨센서스/재무 변경 타임라인
+- `daily_snapshots`: 일별 핵심 지표
+- `users`, `sessions`, `watchlist`, `notifications`: 로컬 Postgres userStore
+- `calendar_events`, `calendar_prefs`: 로컬 Postgres calendar fallback
 
-## 9. 환경변수
+뷰:
 
-| 변수 | 용도 |
-|---|---|
-| `BUTLER_USERSTORE` | `firestore`(prod) / 미설정(로컬 SQLite) |
-| `BUTLER_DB_PATH` | SQLite 경로 (prod `/app/db/butler.db`) |
-| `BUTLER_BASE_URL` | 알림 링크 도메인 |
-| `BUTLER_TELEGRAM_BOT_TOKEN` | 텔레그램 봇(없으면 알림·웹훅 비활성) |
-| `BUTLER_TELEGRAM_WEBHOOK_SECRET` | 웹훅 위조 검증 시크릿(선택, setWebhook secret_token 과 동일) |
-| `BUTLER_TELEGRAM_BOT_USERNAME` | 봇 username 강제(선택, 미설정 시 getMe 자동 조회) |
-| `BUTLER_RATE_PER_MIN` | 업스트림 분당 호출 상한(기본 80) |
-| `GOOGLE_APPLICATION_CREDENTIALS` | 로컬에서 Firestore 테스트 시 SA 키 경로 |
-| `DART_API_KEY` | (선택) 캘린더 **국내 실적발표**(잠정실적 공시) 수집용 DART Open API 키. 없으면 국내실적만 비활성 |
+- `v_latest_broker_target`
+- `v_financials_growth`
+- `v_sector_agg`
 
-### 텔레그램 자동 연결(딥링크)
+## 수집/갱신
 
-`/settings` 의 **텔레그램 연결** 버튼이 일회성 토큰을 발급(`/api/auth/telegram/link`) →
-`https://t.me/<bot>?start=<token>` 딥링크로 봇을 시작하면 웹훅(`/api/telegram/webhook`)이
-그 토큰으로 계정을 찾아 `chat_id` 를 자동 바인딩한다(수동 입력 불필요). 토큰은 SQLite
-`telegram_link_tokens` / Firestore `tg_link_tokens` 에 저장(15분 만료·일회용). 최초 1회
-`npm run telegram:setup`(env: 토큰·BASE_URL·시크릿) 으로 setWebhook 등록이 필요하다.
-봇 토큰/웹훅 시크릿은 GitHub Secrets(`BUTLER_TELEGRAM_BOT_TOKEN`,
-`BUTLER_TELEGRAM_WEBHOOK_SECRET`) → 두 워크플로의 Cloud Run `--set-env-vars` 로 주입된다.
+- `ingestNewReports`: 피드 최신순으로 읽다가 이미 가진 `report_id` 를 만나면 중단한다.
+- `refreshCompanyQuote`: 실제 값이 바뀐 경우에만 UPDATE 한다.
+- `backfill:changes`: 원본 리포트일 기준으로 변경 로그를 재생성한다.
+- `import:har`: 로그인 HAR로 공개 API에서 마스킹되는 최신 재무를 보강한다.
 
-## 10. 화면 (3계층 IA)
+## 배포/비용
 
-`/`(데스크 개요) · `/companies`(전체) · `/sectors`+`/sectors/[code]`(섹터) ·
-`/companies/[corpCode]`(증권사별 목표가 비교+차트오버레이+분기/연간 재무+변경이력) ·
-`/calendar`(경제·실적 캘린더) · `/watchlist` `/settings` `/login` `/changes`. API 명세: `public/docs/openapi.yaml`.
+`scripts/gcloud-postgres-bootstrap.sh` 가 Cloud SQL, Cloud Run 서비스, Cloud Run Job,
+Cloud Scheduler를 만든다. 비용을 30,000원/월 아래로 두기 위해 Cloud SQL은
+`db-f1-micro`, zonal, HDD 10GB, backup off, storage auto increase off 로 만든다.
 
-### 경제·실적 캘린더 (`/calendar`)
+자세한 절차는 `DEPLOYMENT.md`.
 
-FOMC·BoJ·한국은행 금리결정, 미국 CPI/PPI/고용/소매, 중국 경기·물가·소비, 해외/국내 실적발표를
-한 화면(월간 그리드 + 리스트)에 모은다. **저장은 Firestore `calendar/events` 단일 문서(전량 교체),
-로컬은 SQLite `calendar_events` 폴백.** 크론이 Firestore 를 직접 갱신 → **재배포 없이 즉시 반영**.
-수집 윈도우(±N일)가 사실상 전부라 매 수집 = 전량 교체(`userStore.putAllCalendarEvents`).
+## 주의
 
-- **거시 일정**: Nasdaq 경제 캘린더(`api.nasdaq.com/api/calendar/economicevents`, 무인증) — 국가
-  US/CN/JP/KR 필터, 지표명으로 소분류(통화정책/물가/고용/경기·소비/기타)+중요도 분류. 유의미한 지표는
-  모두 적재하고 화면/계정에서 거른다.
-- **한국은행 금리결정**: Nasdaq 미제공 → `src/lib/calendar.ts` 의 `BOK_RATE_DECISIONS` 큐레이션
-  시드(연 1회 공식 공시로 갱신). source='bok'.
-- **해외 실적(TOP100)**: Nasdaq 실적 캘린더 — 수집 윈도우 내 marketCap 상위 100.
-- **국내 실적**: `DART_API_KEY` 있을 때만 DART 잠정실적 공시(시총 TOP100 교집합) 적재. 없으면 비활성.
-- **계정별 필터 저장**: 로그인 시 카테고리/국가/중요도 필터를 `calendar_prefs`(Firestore/SQLite)에 저장.
-  개인 구독 토큰(`feed_token`) → `/api/calendar/ics?u=<token>` 이 그 필터를 적용한 개인 피드.
-- **구글 캘린더 연동**: `/api/calendar/ics`(ICS 구독 피드, 6h 갱신힌트) + 이벤트별 TEMPLATE 추가 링크.
-  익명 사용자는 필터를 localStorage 에 보존, 구독 URL 에 쿼리 필터가 반영된다.
-- 멱등: 매 수집 = 전량 교체. 단 Nasdaq fetch 실패 시 기존 nasdaq 분 보존(받은 것만 갱신), DART 실패 시 기존 국내실적 보존 → 부분 차단에도 데이터 안 날림.
-- 수집 트리거: 일일 크론(`refresh.yml`) 또는 `gh workflow run refresh.yml -f mode=calendar-only`(회사 루프 생략, 캘린더만 Firestore 갱신, 재배포 없음).
-
-## 11. 컨벤션 / 주의
-
-- 한국어 UI, 다크 터미널 테마. 상승=빨강/하락=파랑(한국식).
-- 숫자 포맷은 `src/lib/format.ts`에서 로케일 `en-US` 고정(SSR/CSR hydration 일치).
-- `getDb()`는 최초 연결 시 자동 migrate(+busy_timeout 5s). 스키마 변경은 `db/schema.sql` + `migrate()`의 ALTER 가드.
-- **작업 단위마다 커밋+푸시**(사용자 지시). 커밋 메시지 한국어, Co-Authored-By 트레일러.
-- 배포/문서는 `DEPLOYMENT.md`, `README.md` 와 함께 최신 유지.
+- `src/lib/db.ts` 는 `pg` Pool 기반 async API다. 새 조회/수집 코드는 `await` 를 빠뜨리지 말 것.
+- `better-sqlite3`, `BUTLER_DB_PATH`, GCS `butler.db` 배포 경로를 되살리지 말 것.
+- 한국어 UI, 상승=빨강/하락=파랑(한국식).
+- 숫자 포맷은 `src/lib/format.ts` 를 우선 사용한다.
+- 문서 변경 시 `README.md`, `DEPLOYMENT.md`, 이 파일을 같이 맞춘다.

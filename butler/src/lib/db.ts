@@ -1,59 +1,108 @@
-import Database from "better-sqlite3";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { Pool, types as pgTypes, type PoolClient, type PoolConfig, type QueryResult, type QueryResultRow } from "pg";
 
-/**
- * 단일 SQLite 연결을 프로세스 전역에 캐시한다.
- * Next.js dev 의 HMR 로 모듈이 재평가돼도 연결이 중복 생성되지 않도록
- * globalThis 에 보관한다.
- */
-const DB_PATH = process.env.BUTLER_DB_PATH || join(process.cwd(), "db", "butler.db");
-const SCHEMA_PATH = join(process.cwd(), "db", "schema.sql");
+const SCHEMA_PATH = join(process.cwd(), "db", "postgres", "schema.sql");
 
-type G = typeof globalThis & { __butlerDb?: Database.Database; __butlerMigrated?: boolean };
+pgTypes.setTypeParser(20, (v) => Number(v)); // int8 / BIGSERIAL
+
+export type Queryable = Pick<Pool | PoolClient, "query">;
+
+type G = typeof globalThis & { __butlerPgPool?: Pool; __butlerPgMigrated?: boolean };
 const g = globalThis as G;
 
-export function getDb(): Database.Database {
-  if (g.__butlerDb) return g.__butlerDb;
-  const db = new Database(DB_PATH);
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
-  db.pragma("busy_timeout = 5000");
-  g.__butlerDb = db;
-  // 최초 연결 시 1회 스키마 보장 (컬럼/뷰 누락으로 페이지가 깨지지 않게)
-  if (!g.__butlerMigrated) {
-    try {
-      migrate(db);
-      g.__butlerMigrated = true;
-    } catch {
-      /* 다른 프로세스가 마이그레이션 중일 수 있음 — 무시 */
-    }
+function poolConfig(): PoolConfig {
+  const connectionString = process.env.BUTLER_DATABASE_URL || process.env.DATABASE_URL;
+  if (connectionString) {
+    return {
+      connectionString,
+      max: Number(process.env.BUTLER_DB_POOL_SIZE || 5),
+      idleTimeoutMillis: 30_000,
+      connectionTimeoutMillis: 10_000,
+    };
   }
-  return db;
+
+  return {
+    host: process.env.PGHOST || "localhost",
+    port: process.env.PGPORT ? Number(process.env.PGPORT) : 5432,
+    database: process.env.PGDATABASE || "butler",
+    user: process.env.PGUSER || "butler",
+    password: process.env.PGPASSWORD || "butler",
+    max: Number(process.env.BUTLER_DB_POOL_SIZE || 5),
+    idleTimeoutMillis: 30_000,
+    connectionTimeoutMillis: 10_000,
+  };
 }
 
-/** 스키마를 적용한다 (CREATE IF NOT EXISTS 이므로 멱등). */
-export function migrate(db = getDb()): void {
-  // companies 신규 컬럼 (ALTER 는 IF NOT EXISTS 미지원 → 존재 확인 후 추가)
-  const cols = new Set(
-    (db.prepare("PRAGMA table_info(companies)").all() as Array<{ name: string }>).map((c) => c.name),
-  );
-  // companies 테이블이 아직 없으면(최초) schema.sql 가 만든 뒤 컬럼이 다 들어있음
-  if (cols.size > 0) {
-    if (!cols.has("sector_code")) db.exec("ALTER TABLE companies ADD COLUMN sector_code TEXT");
-    if (!cols.has("sector_name")) db.exec("ALTER TABLE companies ADD COLUMN sector_name TEXT");
-  }
-  // change_logs.occurred_at (실제 발생일) 추가
-  const clCols = new Set(
-    (db.prepare("PRAGMA table_info(change_logs)").all() as Array<{ name: string }>).map((c) => c.name),
-  );
-  if (clCols.size > 0 && !clCols.has("occurred_at")) {
-    db.exec("ALTER TABLE change_logs ADD COLUMN occurred_at TEXT");
-    // 기존 행은 발생일을 모르므로 일단 관측시각 날짜로 채움(백필 스크립트가 재생성)
-    db.exec("UPDATE change_logs SET occurred_at = substr(observed_at,1,10) WHERE occurred_at IS NULL");
-  }
+export function getDb(): Pool {
+  if (!g.__butlerPgPool) g.__butlerPgPool = new Pool(poolConfig());
+  return g.__butlerPgPool;
+}
+
+export async function closeDb(): Promise<void> {
+  if (!g.__butlerPgPool) return;
+  await g.__butlerPgPool.end();
+  g.__butlerPgPool = undefined;
+  g.__butlerPgMigrated = false;
+}
+
+export async function migrate(db: Queryable = getDb()): Promise<void> {
   const sql = readFileSync(SCHEMA_PATH, "utf8");
-  db.exec(sql);
+  await db.query(sql);
+  g.__butlerPgMigrated = true;
+}
+
+export async function ensureMigrated(): Promise<void> {
+  if (g.__butlerPgMigrated) return;
+  await migrate(getDb());
+}
+
+export async function tx<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
+  const client = await getDb().connect();
+  try {
+    await client.query("BEGIN");
+    const out = await fn(client);
+    await client.query("COMMIT");
+    return out;
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+export async function query<T extends QueryResultRow = QueryResultRow>(
+  sql: string,
+  params: readonly unknown[] = [],
+  db: Queryable = getDb(),
+): Promise<QueryResult<T>> {
+  return db.query<T>(sql, [...params]);
+}
+
+export async function all<T extends QueryResultRow = QueryResultRow>(
+  sql: string,
+  params: readonly unknown[] = [],
+  db: Queryable = getDb(),
+): Promise<T[]> {
+  return (await query<T>(sql, params, db)).rows;
+}
+
+export async function one<T extends QueryResultRow = QueryResultRow>(
+  sql: string,
+  params: readonly unknown[] = [],
+  db: Queryable = getDb(),
+): Promise<T | undefined> {
+  return (await query<T>(sql, params, db)).rows[0];
+}
+
+export async function value<T>(
+  sql: string,
+  params: readonly unknown[] = [],
+  db: Queryable = getDb(),
+): Promise<T | undefined> {
+  const row = await one<Record<string, T>>(sql, params, db);
+  return row ? Object.values(row)[0] : undefined;
 }
 
 export const nowIso = () => new Date().toISOString();

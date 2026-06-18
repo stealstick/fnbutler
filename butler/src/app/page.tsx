@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { listSectorAggs, getRecentChanges, getStats } from "@/lib/repo";
+import { listSectorAggs, getRecentChanges, getStats, type ChangeRow } from "@/lib/repo";
 import { butler } from "@/lib/butler";
 import { won, num, pct, signClass } from "@/lib/format";
 import InfoTip from "@/components/InfoTip";
@@ -18,10 +18,10 @@ async function getMarkets() {
 export default async function Dashboard() {
   const [markets, sectors, stats] = await Promise.all([
     getMarkets(),
-    Promise.resolve(listSectorAggs()),
-    Promise.resolve(getStats()),
+    listSectorAggs(),
+    getStats(),
   ]);
-  const targetChanges = getRecentChanges(200, "target_price");
+  const targetChanges = await getRecentChanges(200, "target_price");
   // 기업당 가장 최근 변경 1건만 (한 기업이 리스트를 독식하지 않게)
   const dedupe = (kind: "up" | "down") => {
     const seen = new Set<string>();
@@ -131,7 +131,7 @@ function MoverList({
   rows,
   kind,
 }: {
-  rows: Array<Awaited<ReturnType<typeof getRecentChanges>>[number] & { corp_name?: string }>;
+  rows: Array<ChangeRow & { corp_name?: string }>;
   kind: "up" | "down";
 }) {
   if (rows.length === 0) return <div className="empty">최근 {kind === "up" ? "상향" : "하향"} 없음</div>;

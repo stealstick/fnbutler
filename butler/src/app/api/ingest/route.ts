@@ -13,7 +13,7 @@ export const maxDuration = 300;
  */
 export async function POST(req: NextRequest) {
   const db = getDb();
-  migrate(db);
+  await migrate(db);
   const body = (await req.json().catch(() => ({}))) as { kind?: string; corpCode?: string };
 
   if (body.kind === "detail" && body.corpCode) {

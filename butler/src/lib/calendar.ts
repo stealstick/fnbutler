@@ -15,7 +15,7 @@
  *       윈도우 밖 과거 이벤트는 이력으로 보존된다.
  */
 import { createHash } from "node:crypto";
-import type { Database } from "better-sqlite3";
+import { all, type Queryable } from "./db";
 import { userStore } from "./userstore";
 
 export type CalCategory = "macro" | "earnings_intl" | "earnings_kr";
@@ -268,7 +268,7 @@ async function nasdaqEarnings(date: string): Promise<any[] | null> {
 }
 
 // ---------------------------------------------------------------------------
-// 적재 (userStore: prod=Firestore 단일문서 / 로컬=SQLite 테이블)
+// 적재 (userStore: prod=Firestore 단일문서 / 로컬=Postgres 테이블)
 // ---------------------------------------------------------------------------
 export interface IngestOpts {
   daysBack?: number;
@@ -286,7 +286,7 @@ export interface IngestResult {
   earningsKr: number;
 }
 
-export async function ingestCalendar(db: Database, opts: IngestOpts = {}): Promise<IngestResult> {
+export async function ingestCalendar(db: Queryable, opts: IngestOpts = {}): Promise<IngestResult> {
   const {
     daysBack = 10,
     daysAhead = 45,
@@ -421,7 +421,7 @@ export async function ingestCalendar(db: Database, opts: IngestOpts = {}): Promi
     onLog("  국내 실적: DART_API_KEY 미설정 → 건너뜀");
   }
 
-  // 4) 전량 교체 적재 (userStore: prod=Firestore / 로컬=SQLite).
+  // 4) 전량 교체 적재 (userStore: prod=Firestore / 로컬=Postgres).
   //    수집 윈도우(±N일)가 사실상 전부라 매 수집 = 전량 교체. 단, 데이터 손실 방지:
   //    Nasdaq fetch 실패 시 기존 nasdaq 분을 보존하고 받은 것만 덮어쓴다(부분차단/네트워크 대비).
   //    DART 실패 시 기존 국내실적 보존. 한국은행은 결정적 큐레이션이라 항상 갱신.
@@ -459,19 +459,19 @@ export async function ingestCalendar(db: Database, opts: IngestOpts = {}): Promi
 // DART 국내 잠정실적 공시 (선택) — corp_code 는 butler 와 동일한 DART 8자리.
 // ---------------------------------------------------------------------------
 async function collectDartEarnings(
-  db: Database,
+  db: Queryable,
   key: string,
   minDate: string,
   maxDate: string,
   onLog: (m: string) => void,
 ): Promise<CalEvent[]> {
-  const top = db
-    .prepare(
-      `SELECT corp_code, name, stock_code, market_cap
-       FROM companies WHERE market_cap IS NOT NULL
-       ORDER BY market_cap DESC LIMIT 100`,
-    )
-    .all() as Array<{ corp_code: string; name: string; stock_code: string; market_cap: number }>;
+  const top = await all<{ corp_code: string; name: string; stock_code: string; market_cap: number }>(
+    `SELECT corp_code, name, stock_code, market_cap
+     FROM companies WHERE market_cap IS NOT NULL
+     ORDER BY market_cap DESC LIMIT 100`,
+    [],
+    db,
+  );
   const byCode = new Map(top.map((c) => [c.corp_code, c]));
   const bgn = minDate.replace(/-/g, "");
   const end = maxDate.replace(/-/g, "");

@@ -1,9 +1,30 @@
-import { getDb, migrate } from "../src/lib/db";
+import { all, closeDb, getDb, migrate } from "../src/lib/db";
 
-const db = getDb();
-migrate(db);
-const tables = db
-  .prepare("SELECT name FROM sqlite_master WHERE type IN ('table','view') ORDER BY type, name")
-  .all() as Array<{ name: string }>;
-console.log("✅ schema applied. tables/views:");
-for (const t of tables) console.log("   -", t.name);
+async function main() {
+  const db = getDb();
+  await migrate(db);
+  const rows = await all<{ name: string; kind: string }>(
+    `SELECT tablename AS name, 'table' AS kind
+     FROM pg_tables
+     WHERE schemaname = 'public'
+     UNION ALL
+     SELECT viewname AS name, 'view' AS kind
+     FROM pg_views
+     WHERE schemaname = 'public'
+     ORDER BY kind, name`,
+    [],
+    db,
+  );
+  process.stdout.write(`Postgres schema ready: ${rows.map((r) => r.name).join(", ")}\n`);
+}
+
+main()
+  .then(async () => {
+    await closeDb();
+    process.exit(0);
+  })
+  .catch(async (e) => {
+    console.error(e);
+    await closeDb();
+    process.exit(1);
+  });

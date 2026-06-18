@@ -5,5 +5,5 @@ import { getFinancials } from "@/lib/repo";
 export async function GET(req: NextRequest, ctx: { params: Promise<{ corpCode: string }> }) {
   const { corpCode } = await ctx.params;
   const period = req.nextUrl.searchParams.get("period") === "A" ? "A" : "Q";
-  return NextResponse.json({ corpCode, period, rows: getFinancials(corpCode, period) });
+  return NextResponse.json({ corpCode, period, rows: await getFinancials(corpCode, period) });
 }

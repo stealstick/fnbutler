@@ -1,0 +1,181 @@
+#!/usr/bin/env bash
+# Provision and deploy the low-cost Postgres production stack:
+#   Cloud SQL db-f1-micro + Cloud Run service + Cloud Run Job + Cloud Scheduler.
+#
+# Required:
+#   gcloud auth login
+#   gcloud config set project protein-test-469413
+#
+# Optional env overrides:
+#   PROJECT REGION SERVICE INSTANCE DB_NAME DB_USER DB_PASSWORD BASE_URL
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+PROJECT="${PROJECT:-protein-test-469413}"
+REGION="${REGION:-asia-northeast3}"
+SERVICE="${SERVICE:-fnbutler}"
+JOB="${JOB:-fnbutler-refresh}"
+SCHEDULER_JOB="${SCHEDULER_JOB:-fnbutler-refresh-weekdays}"
+INSTANCE="${INSTANCE:-fnbutler-pg}"
+DB_NAME="${DB_NAME:-butler}"
+DB_USER="${DB_USER:-butler}"
+DB_PASSWORD_SECRET="${DB_PASSWORD_SECRET:-fnbutler-db-password}"
+BASE_URL="${BASE_URL:-https://fnbutler-l3why3suea-du.a.run.app}"
+BUCKET="${BUCKET:-protein-test-469413-fnbutler}"
+REPO="${REPO:-cloud-run-source-deploy}"
+SA_NAME="${SA_NAME:-fnbutler-runner}"
+SA_EMAIL="${SA_NAME}@${PROJECT}.iam.gserviceaccount.com"
+TAG="$(date +%Y%m%d-%H%M%S)"
+APP_IMG="${REGION}-docker.pkg.dev/${PROJECT}/${REPO}/${SERVICE}:${TAG}"
+JOB_IMG="${REGION}-docker.pkg.dev/${PROJECT}/${REPO}/${JOB}:${TAG}"
+CONNECTION="${PROJECT}:${REGION}:${INSTANCE}"
+
+echo "==> Enabling APIs"
+gcloud services enable \
+  sqladmin.googleapis.com run.googleapis.com cloudscheduler.googleapis.com \
+  artifactregistry.googleapis.com secretmanager.googleapis.com cloudbuild.googleapis.com \
+  --project "$PROJECT"
+
+echo "==> Ensuring service account"
+if ! gcloud iam service-accounts describe "$SA_EMAIL" --project "$PROJECT" >/dev/null 2>&1; then
+  gcloud iam service-accounts create "$SA_NAME" --display-name "FnButler runtime" --project "$PROJECT"
+fi
+for role in roles/cloudsql.client roles/datastore.user roles/run.developer roles/run.invoker roles/iam.serviceAccountUser roles/secretmanager.secretAccessor; do
+  gcloud projects add-iam-policy-binding "$PROJECT" \
+    --member "serviceAccount:${SA_EMAIL}" \
+    --role "$role" \
+    --quiet >/dev/null
+done
+
+echo "==> Ensuring Artifact Registry repository"
+if ! gcloud artifacts repositories describe "$REPO" --location "$REGION" --project "$PROJECT" >/dev/null 2>&1; then
+  gcloud artifacts repositories create "$REPO" \
+    --repository-format docker \
+    --location "$REGION" \
+    --description "Cloud Run images" \
+    --project "$PROJECT"
+fi
+
+echo "==> Ensuring Cloud SQL Postgres instance (${INSTANCE})"
+if ! gcloud sql instances describe "$INSTANCE" --project "$PROJECT" >/dev/null 2>&1; then
+  gcloud sql instances create "$INSTANCE" \
+    --project "$PROJECT" \
+    --database-version POSTGRES_16 \
+    --edition enterprise \
+    --tier db-f1-micro \
+    --region "$REGION" \
+    --availability-type zonal \
+    --storage-type HDD \
+    --storage-size 10 \
+    --no-storage-auto-increase \
+    --no-backup \
+    --no-deletion-protection
+fi
+
+echo "==> Ensuring database and password secret"
+if ! gcloud secrets describe "$DB_PASSWORD_SECRET" --project "$PROJECT" >/dev/null 2>&1; then
+  DB_PASSWORD="${DB_PASSWORD:-$(openssl rand -base64 36 | tr -d '/+=' | head -c 32)}"
+  printf "%s" "$DB_PASSWORD" | gcloud secrets create "$DB_PASSWORD_SECRET" \
+    --replication-policy automatic \
+    --data-file - \
+    --project "$PROJECT"
+elif [[ -n "${DB_PASSWORD:-}" ]]; then
+  printf "%s" "$DB_PASSWORD" | gcloud secrets versions add "$DB_PASSWORD_SECRET" \
+    --data-file - \
+    --project "$PROJECT"
+else
+  DB_PASSWORD="$(gcloud secrets versions access latest --secret "$DB_PASSWORD_SECRET" --project "$PROJECT")"
+fi
+
+if ! gcloud sql databases list --instance "$INSTANCE" --project "$PROJECT" --format="value(name)" | grep -qx "$DB_NAME"; then
+  gcloud sql databases create "$DB_NAME" --instance "$INSTANCE" --project "$PROJECT"
+fi
+if gcloud sql users list --instance "$INSTANCE" --project "$PROJECT" --format="value(name)" | grep -qx "$DB_USER"; then
+  gcloud sql users set-password "$DB_USER" --instance "$INSTANCE" --password "$DB_PASSWORD" --project "$PROJECT"
+else
+  gcloud sql users create "$DB_USER" --instance "$INSTANCE" --password "$DB_PASSWORD" --project "$PROJECT"
+fi
+
+echo "==> Building and pushing images"
+gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+docker build --platform linux/amd64 --target runner -t "$APP_IMG" "$ROOT"
+docker build --platform linux/amd64 --target worker -t "$JOB_IMG" "$ROOT"
+docker push "$APP_IMG"
+docker push "$JOB_IMG"
+
+ENV_VARS="PGHOST=/cloudsql/${CONNECTION},PGDATABASE=${DB_NAME},PGUSER=${DB_USER},BUTLER_USERSTORE=firestore,BUTLER_BASE_URL=${BASE_URL},BUTLER_RATE_PER_MIN=80"
+SECRET_VARS="PGPASSWORD=${DB_PASSWORD_SECRET}:latest"
+if [[ -n "${TG_TOKEN_SECRET:-}" ]]; then SECRET_VARS="${SECRET_VARS},BUTLER_TELEGRAM_BOT_TOKEN=${TG_TOKEN_SECRET}:latest"; fi
+if [[ -n "${TG_WEBHOOK_SECRET:-}" ]]; then SECRET_VARS="${SECRET_VARS},BUTLER_TELEGRAM_WEBHOOK_SECRET=${TG_WEBHOOK_SECRET}:latest"; fi
+if [[ -n "${DART_API_KEY_SECRET:-}" ]]; then SECRET_VARS="${SECRET_VARS},DART_API_KEY=${DART_API_KEY_SECRET}:latest"; fi
+
+echo "==> Deploying Cloud Run service"
+gcloud run deploy "$SERVICE" \
+  --image "$APP_IMG" \
+  --project "$PROJECT" \
+  --region "$REGION" \
+  --allow-unauthenticated \
+  --memory 512Mi \
+  --cpu 1 \
+  --min-instances 0 \
+  --max-instances 2 \
+  --port 8080 \
+  --service-account "$SA_EMAIL" \
+  --set-cloudsql-instances "$CONNECTION" \
+  --set-env-vars "$ENV_VARS" \
+  --set-secrets "$SECRET_VARS"
+
+echo "==> Creating/updating Cloud Run refresh job"
+if gcloud run jobs describe "$JOB" --region "$REGION" --project "$PROJECT" >/dev/null 2>&1; then
+  JOB_CMD=(gcloud run jobs update "$JOB")
+else
+  JOB_CMD=(gcloud run jobs create "$JOB")
+fi
+"${JOB_CMD[@]}" \
+  --image "$JOB_IMG" \
+  --project "$PROJECT" \
+  --region "$REGION" \
+  --command npx \
+  --args tsx,scripts/refresh-daily.ts \
+  --memory 512Mi \
+  --cpu 1 \
+  --tasks 1 \
+  --parallelism 1 \
+  --max-retries 0 \
+  --task-timeout 7200 \
+  --service-account "$SA_EMAIL" \
+  --set-cloudsql-instances "$CONNECTION" \
+  --set-env-vars "$ENV_VARS" \
+  --set-secrets "$SECRET_VARS"
+
+echo "==> Creating/updating Cloud Scheduler job"
+SCHEDULER_URI="https://${REGION}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${PROJECT}/jobs/${JOB}:run"
+if gcloud scheduler jobs describe "$SCHEDULER_JOB" --location "$REGION" --project "$PROJECT" >/dev/null 2>&1; then
+  SCHED_CMD=(gcloud scheduler jobs update http "$SCHEDULER_JOB")
+else
+  SCHED_CMD=(gcloud scheduler jobs create http "$SCHEDULER_JOB")
+fi
+"${SCHED_CMD[@]}" \
+  --project "$PROJECT" \
+  --location "$REGION" \
+  --schedule "30 18 * * 1-5" \
+  --time-zone "Asia/Seoul" \
+  --uri "$SCHEDULER_URI" \
+  --http-method POST \
+  --oauth-service-account-email "$SA_EMAIL" \
+  --oauth-token-scope "https://www.googleapis.com/auth/cloud-platform" \
+  --attempt-deadline 60s \
+  --max-retry-attempts 1
+
+cat <<EOF
+
+Done.
+Service image: $APP_IMG
+Job image:     $JOB_IMG
+Cloud SQL:     $CONNECTION
+
+Initial data import:
+  LOCAL_DATABASE_URL=postgres://butler:butler@localhost:5432/butler \\
+  PROJECT=$PROJECT REGION=$REGION INSTANCE=$INSTANCE DB_NAME=$DB_NAME BUCKET=$BUCKET \\
+  bash scripts/gcloud-postgres-import-local.sh
+EOF

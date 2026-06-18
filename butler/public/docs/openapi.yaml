@@ -28,7 +28,7 @@ servers:
   - url: http://localhost:3939/api/proxy
     description: butler.view 투명 프록시 (→ api.butler.works/api)
   - url: http://localhost:3939/api
-    description: butler.view 로컬 DB API (정규화 SQLite)
+    description: butler.view 로컬 DB API (정규화 Postgres)
 
 tags:
   - name: screener
