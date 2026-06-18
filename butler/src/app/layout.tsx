@@ -23,7 +23,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/sectors">섹터</Link>
               <Link href="/calendar">캘린더</Link>
               <Link href="/changes">변경이력</Link>
-              <a href="/docs/openapi.yaml">API</a>
             </nav>
             <span style={{ marginLeft: "auto", display: "inline-flex", gap: 14, alignItems: "center" }}>
               <UserNav />

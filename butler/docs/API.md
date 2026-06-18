@@ -1,7 +1,6 @@
 # butler.works API 정리 (HAR 리버스 엔지니어링)
 
 `api.butler.works` 내부 API 를 HAR 캡처(841 + 52 요청)로 분석해 정리한 문서.
-기계가독 명세는 [`openapi.yaml`](../public/docs/openapi.yaml).
 
 ## 공통 사실
 
