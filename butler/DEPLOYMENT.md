@@ -11,10 +11,12 @@
 | 리전 | `asia-northeast3` | 서울 |
 | Cloud Run 서비스 | `fnbutler` | Next.js 웹/API |
 | Cloud Run Job | `fnbutler-refresh` | 일일 데이터 갱신 |
+| Cloud Run Job | `fnbutler-calendar-refresh` | 주간 캘린더 전용 갱신 |
 | Cloud Scheduler | `fnbutler-refresh-weekdays` | 평일 18:30 KST Job 실행 |
+| Cloud Scheduler | `fnbutler-calendar-weekly` | 토요일 08:00 KST 캘린더 Job 실행 |
 | Cloud SQL | `fnbutler-pg` | Postgres 16, `db-f1-micro` |
 | DB | `butler` / user `butler` | 시세·컨센서스·재무 운영 DB |
-| Secret Manager | `fnbutler-db-password` | DB 비밀번호 |
+| Secret Manager | `fnbutler-db-password`, `DART_API_KEY` | DB 비밀번호, 국내 실적 캘린더 키 |
 
 ## 1. 로컬 Postgres 이관
 
@@ -48,8 +50,8 @@ npm run deploy:postgres
 - DB 비밀번호 Secret 생성
 - 웹/Job Docker 이미지 빌드 및 푸시
 - Cloud Run 서비스 배포
-- Cloud Run Job 생성/업데이트
-- Cloud Scheduler 평일 18:30 KST 스케줄 생성/업데이트
+- Cloud Run Job 생성/업데이트 (`fnbutler-refresh`, `fnbutler-calendar-refresh`)
+- Cloud Scheduler 평일 18:30 KST 일일 갱신, 토요일 08:00 KST 캘린더 전용 스케줄 생성/업데이트
 
 선택 secret을 이미 Secret Manager에 만들어 둔 경우 환경변수로 이름을 넘길 수 있다.
 
@@ -82,20 +84,19 @@ gcloud run jobs execute fnbutler-refresh \
   --region asia-northeast3 \
   --wait
 
-# 캘린더만 수동 갱신
-gcloud run jobs execute fnbutler-refresh \
+# 캘린더만 수동 갱신 (DART_API_KEY secret이 있으면 국내 100대 기업 잠정실적 공시 포함)
+gcloud run jobs execute fnbutler-calendar-refresh \
   --project protein-test-469413 \
   --region asia-northeast3 \
-  --wait \
-  --args=tsx,scripts/refresh-daily.ts,--calendar-only
+  --wait
 ```
 
-GitHub의 `.github/workflows/refresh.yml` 은 같은 Job을 수동 실행하는 비상 버튼이다.
+GitHub의 `.github/workflows/refresh.yml` 은 같은 Job들을 수동 실행하는 비상 버튼이다.
 DB 파일을 내려받거나 이미지를 다시 굽지 않는다.
 
 ## 5. 배포 업데이트
 
-- `main` push: `.github/workflows/deploy.yml` 이 웹 이미지와 refresh Job 이미지를 빌드/푸시하고 업데이트한다.
+- `main` push: `.github/workflows/deploy.yml` 이 웹 이미지와 refresh/calendar Job 이미지를 빌드/푸시하고 업데이트한다.
 - 수동: `npm run deploy:postgres`
 - 단일 서비스만 Cloud Build로 배포: `cloudbuild.yaml`
 
@@ -105,8 +106,8 @@ DB 파일을 내려받거나 이미지를 다시 굽지 않는다.
 
 - Cloud SQL: `db-f1-micro`, zonal, HDD 10GB, 자동 스토리지 증가 off, 백업 off, HA off
 - Cloud Run: min instances 0, 서비스 max 2
-- Cloud Run Job: 평일 1회, 512Mi/1CPU
-- Cloud Scheduler: Job 1개
+- Cloud Run Job: 평일 일일 갱신 1회 + 주간 캘린더 갱신 1회, 512Mi/1CPU
+- Cloud Scheduler: Job 2개
 
 공식 가격표 기준으로 Cloud SQL `db-f1-micro` 는 시간당 약 `$0.0105` 이며,
 Scheduler는 Job당 월 `$0.10` 수준이다. Cloud Run은 요청/작업 시간 과금이라 이 트래픽에서는
@@ -123,6 +124,11 @@ curl -s https://fnbutler-l3why3suea-du.a.run.app/api/stats
 
 gcloud run jobs executions list \
   --job fnbutler-refresh \
+  --region asia-northeast3 \
+  --project protein-test-469413
+
+gcloud run jobs executions list \
+  --job fnbutler-calendar-refresh \
   --region asia-northeast3 \
   --project protein-test-469413
 

@@ -16,7 +16,9 @@ PROJECT="${PROJECT:-protein-test-469413}"
 REGION="${REGION:-asia-northeast3}"
 SERVICE="${SERVICE:-fnbutler}"
 JOB="${JOB:-fnbutler-refresh}"
+CALENDAR_JOB="${CALENDAR_JOB:-fnbutler-calendar-refresh}"
 SCHEDULER_JOB="${SCHEDULER_JOB:-fnbutler-refresh-weekdays}"
+CALENDAR_SCHEDULER_JOB="${CALENDAR_SCHEDULER_JOB:-fnbutler-calendar-weekly}"
 INSTANCE="${INSTANCE:-fnbutler-pg}"
 DB_NAME="${DB_NAME:-butler}"
 DB_USER="${DB_USER:-butler}"
@@ -157,6 +159,29 @@ fi
   --set-env-vars "$ENV_VARS" \
   --set-secrets "$SECRET_VARS"
 
+echo "==> Creating/updating Cloud Run weekly calendar job"
+if gcloud run jobs describe "$CALENDAR_JOB" --region "$REGION" --project "$PROJECT" >/dev/null 2>&1; then
+  CALENDAR_JOB_CMD=(gcloud run jobs update "$CALENDAR_JOB")
+else
+  CALENDAR_JOB_CMD=(gcloud run jobs create "$CALENDAR_JOB")
+fi
+"${CALENDAR_JOB_CMD[@]}" \
+  --image "$JOB_IMG" \
+  --project "$PROJECT" \
+  --region "$REGION" \
+  --command npx \
+  --args tsx,scripts/refresh-daily.ts,--calendar-only \
+  --memory 512Mi \
+  --cpu 1 \
+  --tasks 1 \
+  --parallelism 1 \
+  --max-retries 0 \
+  --task-timeout 7200 \
+  --service-account "$SA_EMAIL" \
+  --set-cloudsql-instances "$CONNECTION" \
+  --set-env-vars "$ENV_VARS" \
+  --set-secrets "$SECRET_VARS"
+
 echo "==> Creating/updating Cloud Scheduler job"
 SCHEDULER_URI="https://${REGION}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${PROJECT}/jobs/${JOB}:run"
 if gcloud scheduler jobs describe "$SCHEDULER_JOB" --location "$REGION" --project "$PROJECT" >/dev/null 2>&1; then
@@ -176,11 +201,31 @@ fi
   --attempt-deadline 60s \
   --max-retry-attempts 1
 
+echo "==> Creating/updating weekly calendar Scheduler job"
+CALENDAR_SCHEDULER_URI="https://${REGION}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${PROJECT}/jobs/${CALENDAR_JOB}:run"
+if gcloud scheduler jobs describe "$CALENDAR_SCHEDULER_JOB" --location "$REGION" --project "$PROJECT" >/dev/null 2>&1; then
+  CALENDAR_SCHED_CMD=(gcloud scheduler jobs update http "$CALENDAR_SCHEDULER_JOB")
+else
+  CALENDAR_SCHED_CMD=(gcloud scheduler jobs create http "$CALENDAR_SCHEDULER_JOB")
+fi
+"${CALENDAR_SCHED_CMD[@]}" \
+  --project "$PROJECT" \
+  --location "$REGION" \
+  --schedule "0 8 * * 6" \
+  --time-zone "Asia/Seoul" \
+  --uri "$CALENDAR_SCHEDULER_URI" \
+  --http-method POST \
+  --oauth-service-account-email "$SA_EMAIL" \
+  --oauth-token-scope "https://www.googleapis.com/auth/cloud-platform" \
+  --attempt-deadline 60s \
+  --max-retry-attempts 1
+
 cat <<EOF
 
 Done.
 Service image: $APP_IMG
 Job image:     $JOB_IMG
+Calendar job:  $CALENDAR_JOB
 Cloud SQL:     $CONNECTION
 
 Initial data import:

@@ -19,6 +19,7 @@ env:
   PROJECT: protein-test-469413
   REGION: asia-northeast3
   JOB: fnbutler-refresh
+  CALENDAR_JOB: fnbutler-calendar-refresh
 
 jobs:
   refresh:
@@ -37,13 +38,12 @@ jobs:
             WAIT_FLAG="--async"
           fi
 
-          ARGS_FLAG=""
+          TARGET_JOB="$JOB"
           if [ "${{ github.event.inputs.mode }}" = "calendar-only" ]; then
-            ARGS_FLAG="--args=tsx,scripts/refresh-daily.ts,--calendar-only"
+            TARGET_JOB="$CALENDAR_JOB"
           fi
 
-          gcloud run jobs execute "$JOB" \
+          gcloud run jobs execute "$TARGET_JOB" \
             --project "$PROJECT" \
             --region "$REGION" \
-            $WAIT_FLAG \
-            $ARGS_FLAG
+            $WAIT_FLAG
