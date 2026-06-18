@@ -151,6 +151,7 @@ jobs:
             SCHED_CMD=(gcloud scheduler jobs create http "$CALENDAR_SCHEDULER_JOB")
           fi
 
+          set +e
           "${SCHED_CMD[@]}" \
             --project "$PROJECT" \
             --location "$REGION" \
@@ -162,6 +163,11 @@ jobs:
             --oauth-token-scope "https://www.googleapis.com/auth/cloud-platform" \
             --attempt-deadline 60s \
             --max-retry-attempts 1
+          SCHED_STATUS=$?
+          set -e
+          if [ "$SCHED_STATUS" -ne 0 ]; then
+            echo "::warning::Cloud Scheduler sync skipped. Grant roles/cloudscheduler.admin to the deploy service account to manage ${CALENDAR_SCHEDULER_JOB}; GitHub Actions still runs the weekly calendar cron."
+          fi
 
       - name: Verify
         run: |

@@ -1,7 +1,7 @@
 name: run refresh job
 
-# Production refresh is scheduled by Cloud Scheduler against the Cloud Run Job.
-# This workflow is a manual escape hatch for re-running that same job from GitHub.
+# Production refresh is scheduled by Cloud Scheduler or GitHub Actions against the Cloud Run Job.
+# This workflow is also a manual escape hatch for re-running that same job from GitHub.
 on:
   workflow_dispatch:
     inputs:
@@ -14,6 +14,9 @@ on:
         description: "wait for job completion"
         type: boolean
         default: true
+  schedule:
+    # Saturdays 08:00 KST.
+    - cron: "0 23 * * 5"
 
 env:
   PROJECT: protein-test-469413
@@ -32,14 +35,18 @@ jobs:
       - uses: google-github-actions/setup-gcloud@v2
 
       - name: Execute Cloud Run refresh job
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          MODE: ${{ github.event.inputs.mode || 'full' }}
+          WAIT: ${{ github.event.inputs.wait || 'true' }}
         run: |
           WAIT_FLAG="--wait"
-          if [ "${{ github.event.inputs.wait }}" != "true" ]; then
+          if [ "$WAIT" != "true" ]; then
             WAIT_FLAG="--async"
           fi
 
           TARGET_JOB="$JOB"
-          if [ "${{ github.event.inputs.mode }}" = "calendar-only" ]; then
+          if [ "$EVENT_NAME" = "schedule" ] || [ "$MODE" = "calendar-only" ]; then
             TARGET_JOB="$CALENDAR_JOB"
           fi
 
