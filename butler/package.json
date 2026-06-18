@@ -17,6 +17,7 @@
     "ingest:all": "tsx scripts/ingest.ts --companies --detail --all",
     "backfill:sectors": "tsx scripts/backfill-sectors.ts",
     "backfill:changes": "tsx scripts/backfill-changes.ts",
+    "backfill:dart-financials": "tsx scripts/backfill-dart-financials.ts --latest",
     "backfill:summaries": "tsx scripts/backfill-summaries.ts",
     "import:har": "tsx scripts/import-har.ts",
     "poll": "tsx scripts/poll-daily.ts",

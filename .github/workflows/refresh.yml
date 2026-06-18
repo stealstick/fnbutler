@@ -9,12 +9,14 @@ on:
         description: "refresh mode"
         type: choice
         default: full
-        options: [full, calendar-only, dart-2024-financials]
+        options: [full, calendar-only, dart-financials, dart-2024-financials, dart-2025-financials]
       wait:
         description: "wait for job completion"
         type: boolean
         default: true
   schedule:
+    # Weekdays 18:30 KST.
+    - cron: "30 9 * * 1-5"
     # Saturdays 08:00 KST.
     - cron: "0 23 * * 5"
 
@@ -37,6 +39,7 @@ jobs:
       - name: Execute Cloud Run refresh job
         env:
           EVENT_NAME: ${{ github.event_name }}
+          SCHEDULE: ${{ github.event.schedule || '' }}
           MODE: ${{ github.event.inputs.mode || 'full' }}
           WAIT: ${{ github.event.inputs.wait || 'true' }}
         run: |
@@ -47,11 +50,17 @@ jobs:
 
           TARGET_JOB="$JOB"
           EXTRA_ARGS=()
-          if [ "$EVENT_NAME" = "schedule" ] || [ "$MODE" = "calendar-only" ]; then
+          if { [ "$EVENT_NAME" = "schedule" ] && [ "$SCHEDULE" = "0 23 * * 5" ]; } || [ "$MODE" = "calendar-only" ]; then
             TARGET_JOB="$CALENDAR_JOB"
+          fi
+          if [ "$MODE" = "dart-financials" ]; then
+            EXTRA_ARGS=(--args tsx,scripts/backfill-dart-financials.ts,--latest)
           fi
           if [ "$MODE" = "dart-2024-financials" ]; then
             EXTRA_ARGS=(--args tsx,scripts/backfill-dart-financials.ts,--year,2024)
+          fi
+          if [ "$MODE" = "dart-2025-financials" ]; then
+            EXTRA_ARGS=(--args tsx,scripts/backfill-dart-financials.ts,--year,2025)
           fi
 
           gcloud run jobs execute "$TARGET_JOB" \
