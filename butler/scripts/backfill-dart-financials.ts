@@ -30,6 +30,11 @@ interface DartRow {
   thstrm_q_amount?: string;
 }
 
+interface PickedValue {
+  value: number;
+  cumulative: boolean;
+}
+
 const REPORTS = [
   { code: "11013", quarter: 1 },
   { code: "11012", quarter: 2 },
@@ -77,7 +82,7 @@ function num(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function pick(rows: DartRow[], metric: (typeof METRICS)[number], preferQuarter: boolean): number | null {
+function pick(rows: DartRow[], metric: (typeof METRICS)[number], preferQuarter: boolean): PickedValue | null {
   const incomeRows = rows.filter((r) => r.sj_div === "CIS" || r.sj_div === "IS");
   const byId = incomeRows.find((r) => r.account_id && metric.ids.includes(r.account_id));
   const byName = incomeRows.find((r) => {
@@ -87,7 +92,9 @@ function pick(rows: DartRow[], metric: (typeof METRICS)[number], preferQuarter: 
   const row = byId ?? byName;
   if (!row) return null;
   const qAmount = preferQuarter ? num(row.thstrm_q_amount) : null;
-  return qAmount ?? num(row.thstrm_amount);
+  if (qAmount != null) return { value: qAmount, cumulative: false };
+  const amount = num(row.thstrm_amount);
+  return amount == null ? null : { value: amount, cumulative: preferQuarter };
 }
 
 async function fetchDart(
@@ -147,7 +154,7 @@ async function upsertFinancial(
 }
 
 async function backfillCompany(db: Queryable, key: string, c: Company, year: number): Promise<number> {
-  const byMetric = new Map<Metric, Map<number, number>>();
+  const byMetric = new Map<Metric, Map<number, PickedValue>>();
   for (const m of METRICS) byMetric.set(m.metric, new Map());
 
   for (const r of REPORTS) {
@@ -157,8 +164,8 @@ async function backfillCompany(db: Queryable, key: string, c: Company, year: num
       continue;
     }
     for (const m of METRICS) {
-      const value = pick(rows, m, true);
-      if (value != null) byMetric.get(m.metric)!.set(r.quarter, value);
+      const picked = pick(rows, m, true);
+      if (picked != null) byMetric.get(m.metric)!.set(r.quarter, picked);
     }
     await sleep(120);
   }
@@ -168,14 +175,14 @@ async function backfillCompany(db: Queryable, key: string, c: Company, year: num
   if (annualRows) {
     for (const m of METRICS) {
       const value = pick(annualRows, m, false);
-      if (value != null) annual.set(m.metric, value);
+      if (value != null) annual.set(m.metric, value.value);
     }
   }
 
   let writes = 0;
   for (const m of METRICS) {
-    const quarters = byMetric.get(m.metric)!;
-    for (const [q, value] of quarters) {
+    const quarters = toQuarterValues(byMetric.get(m.metric)!);
+    for (const [q, value] of quarters.values) {
       await upsertFinancial(db, c.corp_code, m.metric, m.label, year, q, "Q", value);
       writes++;
     }
@@ -183,16 +190,40 @@ async function backfillCompany(db: Queryable, key: string, c: Company, year: num
     if (annualValue != null) {
       await upsertFinancial(db, c.corp_code, m.metric, m.label, year, 0, "A", annualValue);
       writes++;
-      const q1 = quarters.get(1);
-      const q2 = quarters.get(2);
-      const q3 = quarters.get(3);
-      if (q1 != null && q2 != null && q3 != null) {
-        await upsertFinancial(db, c.corp_code, m.metric, m.label, year, 4, "Q", annualValue - q1 - q2 - q3);
+      if (quarters.cumulativeQ3 != null) {
+        await upsertFinancial(db, c.corp_code, m.metric, m.label, year, 4, "Q", annualValue - quarters.cumulativeQ3);
         writes++;
       }
     }
   }
   return writes;
+}
+
+function toQuarterValues(raw: Map<number, PickedValue>): { values: Map<number, number>; cumulativeQ3: number | null } {
+  const values = new Map<number, number>();
+  const cumulative = new Map<number, number>();
+  const q1 = raw.get(1);
+  if (q1) {
+    values.set(1, q1.value);
+    cumulative.set(1, q1.value);
+  }
+
+  for (const q of [2, 3] as const) {
+    const picked = raw.get(q);
+    if (!picked) continue;
+    if (picked.cumulative) {
+      const prev = cumulative.get(q - 1);
+      if (prev == null) continue;
+      values.set(q, picked.value - prev);
+      cumulative.set(q, picked.value);
+    } else {
+      values.set(q, picked.value);
+      const prev = cumulative.get(q - 1);
+      if (prev != null) cumulative.set(q, prev + picked.value);
+    }
+  }
+
+  return { values, cumulativeQ3: cumulative.get(3) ?? null };
 }
 
 async function main() {
