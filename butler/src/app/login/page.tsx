@@ -39,7 +39,7 @@ export default function LoginPage() {
       <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 16 }}>
         <input className="input" type="email" placeholder="이메일" value={email} required
           onChange={(e) => setEmail(e.target.value)} />
-        <input className="input" type="password" placeholder="비밀번호 (6자 이상)" value={password} required
+        <input className="input" type="password" placeholder="비밀번호" value={password} required
           onChange={(e) => setPassword(e.target.value)} />
         {err && <div className="down" style={{ fontSize: 13 }}>{err}</div>}
         <button className="btn" type="submit" disabled={loading}>

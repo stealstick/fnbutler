@@ -8,8 +8,8 @@ export async function POST(req: NextRequest) {
     email?: string;
     password?: string;
   };
-  if (!email || !password || password.length < 6) {
-    return NextResponse.json({ error: "이메일과 6자 이상 비밀번호 필요" }, { status: 400 });
+  if (!email || !password) {
+    return NextResponse.json({ error: "이메일과 비밀번호 필요" }, { status: 400 });
   }
   try {
     const user = await createUser(email, password);
