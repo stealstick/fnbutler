@@ -1,10 +1,10 @@
 openapi: 3.1.0
 info:
-  title: butler.works API (리버스 엔지니어링) + butler.view 로컬 API
+  title: butler.works API (리버스 엔지니어링) + keystone 로컬 API
   version: "1.0.0"
   description: |
     `www.butler.works` 의 내부 API(`api.butler.works`)를 HAR 캡처로 리버스 엔지니어링해
-    정리한 명세 + 본 프로젝트(butler.view)가 제공하는 로컬 DB 기반 API.
+    정리한 명세 + 본 프로젝트(keystone)가 제공하는 로컬 DB 기반 API.
 
     ## 업스트림(butler.works) 핵심 사실
     - 인증: 공개 엔드포인트는 토큰 불필요. CORS `Access-Control-Allow-Origin: *`.
@@ -26,9 +26,9 @@ servers:
   - url: https://api.butler.works
     description: butler.works 업스트림(공개)
   - url: http://localhost:3939/api/proxy
-    description: butler.view 투명 프록시 (→ api.butler.works/api)
+    description: keystone 투명 프록시 (→ api.butler.works/api)
   - url: http://localhost:3939/api
-    description: butler.view 로컬 DB API (정규화 Postgres)
+    description: keystone 로컬 DB API (정규화 Postgres)
 
 tags:
   - name: screener
@@ -44,7 +44,7 @@ tags:
   - name: market
     description: 시장 지수 / 환율
   - name: local
-    description: butler.view 로컬 DB API
+    description: keystone 로컬 DB API
   - name: sector
     description: 섹터 집계 (로컬)
   - name: auth
@@ -289,7 +289,7 @@ paths:
       summary: KOSPI/KOSDAQ 지수 스냅샷
       responses: { "200": { description: OK } }
 
-  # ===================== 로컬: butler.view =====================
+  # ===================== 로컬: keystone =====================
   /companies:
     get:
       tags: [local]

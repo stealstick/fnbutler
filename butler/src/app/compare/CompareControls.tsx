@@ -53,7 +53,7 @@ export default function CompareControls({ codes }: { codes: string[] }) {
     const url = window.location.href;
     try {
       if (navigator.share) {
-        await navigator.share({ title: "기업 비교 — butler.view", url });
+        await navigator.share({ title: "기업 비교 — keystone", url });
         return;
       }
     } catch {

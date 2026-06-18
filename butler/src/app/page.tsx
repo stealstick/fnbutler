@@ -44,10 +44,17 @@ export default async function Dashboard() {
   return (
     <>
       {/* 마켓 바 */}
-      <div className="panel">
-        <h2>
-          데스크 개요 <span className="sub">애널리스트 데스크 · 목표주가 컨센서스 (source: butler)</span>
-        </h2>
+      <div className="panel home-hero">
+        <div className="home-hero-head">
+          <div>
+            <div className="eyebrow">Korean Equity Intelligence</div>
+            <h1>Keystone</h1>
+            <p>기업·섹터·리포트 데스크.</p>
+          </div>
+          <Link href="/companies" className="btn">
+            기업 탐색
+          </Link>
+        </div>
         <div className="marketbar">
           {markets &&
             ["kospi", "kosdaq"].map((k) =>
@@ -101,17 +108,17 @@ export default async function Dashboard() {
       {/* 최근 목표주가 상향/하향 */}
       <div className="two-col">
         <div className="panel">
-          <h2>🔺 최근 목표주가 상향</h2>
+          <h2>최근 목표주가 상향</h2>
           <MoverList rows={ups} kind="up" />
         </div>
         <div className="panel">
-          <h2>🔻 최근 목표주가 하향</h2>
+          <h2>최근 목표주가 하향</h2>
           <MoverList rows={downs} kind="down" />
         </div>
       </div>
 
       <p className="footer">
-        butler.view · 전체 <Link href="/companies">기업</Link> · <Link href="/sectors">섹터</Link> ·{" "}
+        keystone · 전체 <Link href="/companies">기업</Link> · <Link href="/sectors">섹터</Link> ·{" "}
         <Link href="/changes">변경이력</Link>
       </p>
     </>

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deploy butler.view on the Postgres production stack.
+# Deploy keystone on the Postgres production stack.
 #
 # This wrapper keeps the old entry point working while delegating to the
 # Cloud SQL + Cloud Run + Cloud Scheduler bootstrap script.

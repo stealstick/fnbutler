@@ -171,9 +171,9 @@ export default function CalendarView({ events, stats }: { events: Ev[]; stats: S
     if (Array.isArray(p.countries)) setCtrySel(p.countries);
     if (typeof p.minImportance === "number") setCoreOnly(p.minImportance >= 2);
   }
-  function loadLocal() {
+function loadLocal() {
     try {
-      const raw = localStorage.getItem("butler.cal.filters");
+      const raw = localStorage.getItem("keystone.cal.filters") ?? localStorage.getItem("butler.cal.filters");
       if (raw) applyPrefs(JSON.parse(raw));
     } catch {
       /* noop */
@@ -184,7 +184,7 @@ export default function CalendarView({ events, stats }: { events: Ev[]; stats: S
     if (!hydrated || authed) return;
     try {
       localStorage.setItem(
-        "butler.cal.filters",
+        "keystone.cal.filters",
         JSON.stringify({ categories: catSel, countries: ctrySel, minImportance: minImp }),
       );
     } catch {

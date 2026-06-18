@@ -1,6 +1,6 @@
-# CLAUDE.md - butler.view
+# CLAUDE.md - keystone
 
-butler.view 는 `butler.works` 데이터를 자체 정규화 DB로 모아 기업/섹터/증권사별
+keystone 는 `butler.works` 데이터를 자체 정규화 DB로 모아 기업/섹터/증권사별
 목표주가·컨센서스를 비교하는 Next.js 웹 앱이다.
 
 ## 현재 운영 원칙

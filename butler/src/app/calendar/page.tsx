@@ -4,7 +4,7 @@ import CalendarView from "./CalendarView";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "경제·실적 캘린더 — butler.view",
+  title: "경제·실적 캘린더 — keystone",
   description:
     "FOMC·BOJ·한국은행 금리결정, 미국 CPI/PPI/고용, 중국 경기·물가·소비, 해외/국내 실적발표를 한 화면에.",
 };

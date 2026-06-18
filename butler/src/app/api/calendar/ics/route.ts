@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
   let countries = sp.get("country")?.split(",").map((s) => s.trim()).filter(Boolean);
   let subcategories: string[] | undefined;
   let minImportance: number | undefined;
-  let name = "butler.view 경제·실적 캘린더";
+  let name = "keystone 경제·실적 캘린더";
 
   // 개인 구독 토큰이 있으면 계정 저장 필터를 적용(쿼리 필터보다 우선).
   const token = sp.get("u");
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
       countries = p.countries?.length ? p.countries : undefined;
       subcategories = p.subcategories?.length ? p.subcategories : undefined;
       minImportance = p.minImportance;
-      name = "butler.view 내 캘린더";
+      name = "keystone 내 캘린더";
     }
   }
 
@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
     // 개인 피드(?u=토큰)는 공유 캐시에 남지 않도록 private.
     "cache-control": token ? "private, max-age=900" : "public, max-age=1800",
   };
-  if (sp.get("download")) headers["content-disposition"] = 'attachment; filename="butler-calendar.ics"';
+  if (sp.get("download")) headers["content-disposition"] = 'attachment; filename="keystone-calendar.ics"';
 
   return new Response(ics, { headers });
 }

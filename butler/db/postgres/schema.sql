@@ -1,5 +1,5 @@
 -- ============================================================================
--- butler.view PostgreSQL schema
+-- keystone PostgreSQL schema
 --
 -- Runtime source of truth after the SQLite -> Postgres migration. Keep the data
 -- shapes close to the existing SQLite DB so the already-backfilled snapshot can

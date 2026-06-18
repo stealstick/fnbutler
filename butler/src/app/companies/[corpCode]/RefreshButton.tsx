@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-/** butler 에서 최신 데이터를 재수집(변경분 자동 로깅) 후 페이지 새로고침. */
+/** Keystone에서 최신 데이터를 재수집(변경분 자동 로깅) 후 페이지 새로고침. */
 export default function RefreshButton({ corpCode }: { corpCode: string }) {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);

@@ -24,7 +24,7 @@ export default async function ChangesPage({
     <>
       <div className="panel">
         <h2>
-          변경 이력 <span className="sub">butler 재수집 시 자동 감지된 변경 (source: butler)</span>
+          변경 이력 <span className="sub">Keystone 재수집 시 자동 감지된 변경 (source: keystone)</span>
         </h2>
         <div className="stat-row" style={{ marginBottom: 16 }}>
           <S n={stats.companies} l="수집 기업" />

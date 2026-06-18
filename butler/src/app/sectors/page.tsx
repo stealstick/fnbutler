@@ -14,7 +14,7 @@ export default async function SectorsPage() {
       <SectorListTable sectors={sectors} />
       <p className="note">
         평균 상승여력 = 섹터 내 컨센서스 보유 기업들의 (평균목표가/현재가−1) 평균. KSIC 산업코드를
-        광역 섹터로 매핑(src/lib/sectors.ts). source: butler
+        광역 섹터로 매핑(src/lib/sectors.ts). source: keystone
       </p>
     </div>
   );

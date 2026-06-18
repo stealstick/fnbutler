@@ -1,4 +1,4 @@
-# butler.view Postgres 배포 가이드
+# keystone Postgres 배포 가이드
 
 운영 구조는 **Cloud Run + Cloud SQL(Postgres) + Cloud Run Job + GitHub Actions schedule** 다.
 기존 `db/butler.db` 는 최초 이관 소스로만 사용하고, 운영 중 데이터 갱신은 Postgres에 직접 쓴다.

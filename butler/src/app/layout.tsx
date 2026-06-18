@@ -4,8 +4,8 @@ import "./globals.css";
 import UserNav from "@/components/UserNav";
 
 export const metadata: Metadata = {
-  title: "butler.view — 목표주가 · 컨센서스 데스크",
-  description: "butler.works 데이터 기반 기업·섹터·증권사 목표주가 비교 데스크 (source: butler)",
+  title: "keystone — 목표주가 · 컨센서스 데스크",
+  description: "기업·섹터·증권사 목표주가를 비교하는 Keystone 리서치 데스크",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -15,7 +15,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <header className="topbar">
           <div className="inner">
             <Link href="/" className="brand">
-              butler<span className="dot">.</span>view
+              <span className="brand-mark">K</span>
+              <span className="brand-word">keystone</span>
             </Link>
             <nav>
               <Link href="/companies">기업</Link>

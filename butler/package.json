@@ -1,8 +1,8 @@
 {
-  "name": "butler",
+  "name": "keystone",
   "version": "0.1.0",
   "private": true,
-  "description": "butler.works 목표주가/컨센서스 데이터 프록시 + 자체 Postgres 정규화 DB + 기업/증권사 비교 뷰",
+  "description": "Keystone 목표주가/컨센서스 리서치 데스크 + 자체 Postgres 정규화 DB + 기업/증권사 비교 뷰",
   "scripts": {
     "dev": "next dev -p 3939",
     "build": "next build",

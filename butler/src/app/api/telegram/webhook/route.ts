@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
     } else {
       await sendTelegram(
         chat,
-        `안녕하세요! 알림을 받으려면 butler 설정 페이지에서 '텔레그램 연결' 버튼을 눌러주세요.\n(이 대화의 chat_id: ${chat})`,
+        `안녕하세요! 알림을 받으려면 Keystone 설정 페이지에서 '텔레그램 연결' 버튼을 눌러주세요.\n(이 대화의 chat_id: ${chat})`,
       );
     }
     return NextResponse.json({ ok: true });

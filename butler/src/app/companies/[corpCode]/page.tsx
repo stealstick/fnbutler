@@ -88,7 +88,7 @@ export default async function CompanyPage({
           <WatchStar corpCode={corpCode} initialWatched={watched} loggedIn={!!user} />
           <RefreshButton corpCode={corpCode} />
           <span className="note" style={{ marginLeft: "auto" }}>
-            최종 업데이트 {company.updated_at?.slice(0, 16).replace("T", " ")} · source: butler
+            최종 업데이트 {company.updated_at?.slice(0, 16).replace("T", " ")} · source: keystone
           </span>
         </div>
       </div>

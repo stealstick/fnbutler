@@ -570,12 +570,12 @@ export function buildIcs(
   events: CalEvent[],
   opts: { name?: string; dtstamp?: string } = {},
 ): string {
-  const name = opts.name ?? "butler.view 경제·실적 캘린더";
+  const name = opts.name ?? "keystone 경제·실적 캘린더";
   const stamp = (opts.dtstamp ?? new Date().toISOString()).replace(/[-:]/g, "").replace(/\.\d+/, "").replace(/(\d{8}T\d{6}).*/, "$1Z");
   const lines: string[] = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//butler.view//economic calendar//KO",
+    "PRODID:-//keystone//economic calendar//KO",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
     `X-WR-CALNAME:${icsEscape(name)}`,
@@ -599,7 +599,7 @@ export function buildIcs(
     if (ev.url) descParts.push(ev.url);
 
     lines.push("BEGIN:VEVENT");
-    lines.push(`UID:${ev.id}@butler.view`);
+    lines.push(`UID:${ev.id}@keystone`);
     lines.push(`DTSTAMP:${stamp}`);
     if (ev.event_time && ev.tz === "GMT") {
       // 거시 지표: GMT 시각 → UTC 타임드 이벤트(1시간)

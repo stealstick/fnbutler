@@ -1,4 +1,4 @@
-# butler.view
+# keystone
 
 `butler.works` 의 목표주가·컨센서스·재무 데이터를 **Postgres 정규화 DB** 로 모은
 애널리스트 데스크. 전체/섹터/기업 3계층 조회, 로그인·관심목록, 텔레그램 알림,
