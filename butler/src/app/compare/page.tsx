@@ -159,7 +159,7 @@ export default async function ComparePage({
       <p className="note">
         QoQ(직전→현재 / 현재→다음)·YoY(전년→올해→다음년도→2년뒤) 증감률입니다. 셀에 마우스를 올리면 비교한
         시점·금액이 보입니다. 추정치(현재→다음, 연간 E)는 컨센서스 구독 데이터라 데이터가 적재된 기업·기간에서만
-        채워집니다 (source: butler).
+        채워집니다. 평균 목표주가는 주가 컨센서스이므로 분기 실적 추정치 대체값으로 쓰지 않습니다 (source: butler).
       </p>
     </div>
   );

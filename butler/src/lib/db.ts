@@ -5,6 +5,7 @@ import { Pool, types as pgTypes, type PoolClient, type PoolConfig, type QueryRes
 const SCHEMA_PATH = join(process.cwd(), "db", "postgres", "schema.sql");
 
 pgTypes.setTypeParser(20, (v) => Number(v)); // int8 / BIGSERIAL
+pgTypes.setTypeParser(1700, (v) => Number(v)); // numeric / decimal expressions
 
 export type Queryable = Pick<Pool | PoolClient, "query">;
 

@@ -2,11 +2,21 @@
  *  로케일을 'en-US' 로 고정 → SSR(Node)/CSR(브라우저) 결과가 동일해 hydration 불일치 방지. */
 const LC = "en-US";
 
+type NumericLike = number | string | null | undefined;
+
+function toFiniteNumber(v: NumericLike): number | null {
+  if (v == null) return null;
+  if (typeof v === "string" && v.trim() === "") return null;
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
 /** 원 단위 정수를 '조/억' 한글 단위로. 예: 21552634000000 → '21조 5,526억' */
-export function won(v: number | null | undefined, digits = 0): string {
-  if (v == null || Number.isNaN(v)) return "-";
-  const neg = v < 0;
-  let n = Math.abs(v);
+export function won(v: NumericLike, digits = 0): string {
+  const parsed = toFiniteNumber(v);
+  if (parsed == null) return "-";
+  const neg = parsed < 0;
+  let n = Math.abs(parsed);
   const jo = Math.floor(n / 1_0000_0000_0000);
   n -= jo * 1_0000_0000_0000;
   const eok = n / 1_0000_0000;
@@ -18,24 +28,27 @@ export function won(v: number | null | undefined, digits = 0): string {
 }
 
 /** 천단위 콤마. */
-export function num(v: number | null | undefined, digits = 0): string {
-  if (v == null || Number.isNaN(v)) return "-";
-  return v.toLocaleString(LC, { maximumFractionDigits: digits });
+export function num(v: NumericLike, digits = 0): string {
+  const parsed = toFiniteNumber(v);
+  if (parsed == null) return "-";
+  return parsed.toLocaleString(LC, { maximumFractionDigits: digits });
 }
 
 /** 퍼센트(부호 포함). */
-export function pct(v: number | null | undefined, digits = 1): string {
-  if (v == null || Number.isNaN(v)) return "-";
-  const s = v.toLocaleString(LC, {
+export function pct(v: NumericLike, digits = 1): string {
+  const parsed = toFiniteNumber(v);
+  if (parsed == null) return "-";
+  const s = parsed.toLocaleString(LC, {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
   });
-  return `${v > 0 ? "+" : ""}${s}%`;
+  return `${parsed > 0 ? "+" : ""}${s}%`;
 }
 
-export function signClass(v: number | null | undefined): "up" | "down" | "flat" {
-  if (v == null || v === 0) return "flat";
-  return v > 0 ? "up" : "down";
+export function signClass(v: NumericLike): "up" | "down" | "flat" {
+  const parsed = toFiniteNumber(v);
+  if (parsed == null || parsed === 0) return "flat";
+  return parsed > 0 ? "up" : "down";
 }
 
 /**

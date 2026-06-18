@@ -267,7 +267,7 @@ export async function getBrokerTargetHistory(corpCode: string): Promise<BrokerTa
             END AS target_delta,
             CASE
               WHEN previous_target_price IS NOT NULL AND previous_target_price <> 0 AND target_price IS NOT NULL
-              THEN (target_price - previous_target_price) * 100.0 / previous_target_price
+              THEN ((target_price - previous_target_price) * 100.0 / previous_target_price)::double precision
             END AS target_delta_pct
      FROM report_rows
      ORDER BY report_date DESC, broker`,
