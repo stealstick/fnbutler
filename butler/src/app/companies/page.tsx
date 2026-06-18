@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { won, num, pct, signClass } from "@/lib/format";
-import type { GrowthBundle, GrowthMetric } from "@/lib/compare-growth";
+import type { GrowthBundle, GrowthByMetric, GrowthMetric } from "@/lib/compare-growth";
 import type { CompanyRow, SectorAgg } from "@/lib/repo";
 
 const MAX_COMPARE = 10;
@@ -16,7 +16,6 @@ const GROWTH_METRICS: Array<{ key: GrowthMetric; label: string }> = [
 
 type CompanyListRow = CompanyRow & {
   epsGrowth: number | null;
-  growth?: Record<GrowthMetric, GrowthBundle>;
 };
 
 interface ApiResp {
@@ -40,6 +39,7 @@ export default function CompaniesPage() {
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(false);
   const [metric, setMetric] = useState<GrowthMetric>("REVENUE");
+  const [growthByCode, setGrowthByCode] = useState<Record<string, GrowthByMetric>>({});
   // 비교 선택 — 페이지/필터가 바뀌어도 유지(코드+이름을 들고 다님)
   const [sel, setSel] = useState<{ code: string; name: string }[]>([]);
   const limit = 50;
@@ -85,6 +85,25 @@ export default function CompaniesPage() {
   }, [load]);
   useEffect(() => setPage(0), [q, market, sector, sort, dir, onlyConsensus]);
 
+  const pageCodes = data?.results.map((c) => c.corp_code).join(",") ?? "";
+  useEffect(() => {
+    if (!pageCodes) {
+      setGrowthByCode({});
+      return;
+    }
+
+    const controller = new AbortController();
+    setGrowthByCode({});
+    fetch(`/api/companies/growth?codes=${encodeURIComponent(pageCodes)}`, { signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`growth ${r.status}`))))
+      .then((d) => setGrowthByCode(d.results ?? {}))
+      .catch((e) => {
+        if (e.name !== "AbortError") setGrowthByCode({});
+      });
+
+    return () => controller.abort();
+  }, [pageCodes]);
+
   function clickSort(key: string, defaultDir: Dir = "desc") {
     if (sort === key) setDir((d) => (d === "asc" ? "desc" : "asc"));
     else {
@@ -106,7 +125,7 @@ export default function CompaniesPage() {
   const total = data?.total ?? 0;
   const pages = Math.ceil(total / limit);
   const growthCell = (c: CompanyListRow, key: keyof GrowthBundle) => {
-    const t = c.growth?.[metric]?.[key];
+    const t = growthByCode[c.corp_code]?.[metric]?.[key];
     return <GrowthPct p={t?.p ?? null} title={t?.t} />;
   };
 

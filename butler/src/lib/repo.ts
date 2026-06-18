@@ -126,23 +126,28 @@ export async function getCompareGrowth(codes: string[]): Promise<CompareGrowthRo
      ),
      u AS (SELECT * FROM picked WHERE rn = 1)
      SELECT u.corp_code, u.metric, u.period_type, u.fiscal_year, u.quarter, u.value, u.is_estimate,
-            CASE WHEN u.period_type = 'Q' THEN (
-              SELECT CASE WHEN p.value <> 0
-                          THEN ROUND(((u.value - p.value) / ABS(p.value) * 100.0)::numeric, 1)::double precision END
-              FROM u p
-              WHERE p.corp_code = u.corp_code AND p.metric = u.metric AND p.period_type = 'Q'
-                AND ((u.quarter > 1 AND p.fiscal_year = u.fiscal_year     AND p.quarter = u.quarter - 1)
-                  OR (u.quarter = 1 AND p.fiscal_year = u.fiscal_year - 1 AND p.quarter = 4))
-            ) END AS qoq_pct,
-            (
-              SELECT CASE WHEN p.value <> 0
-                          THEN ROUND(((u.value - p.value) / ABS(p.value) * 100.0)::numeric, 1)::double precision END
-              FROM u p
-              WHERE p.corp_code = u.corp_code AND p.metric = u.metric
-                AND p.period_type = u.period_type AND p.fiscal_year = u.fiscal_year - 1
-                AND (u.period_type = 'A' OR p.quarter = u.quarter)
-            ) AS yoy_pct
+            CASE WHEN u.period_type = 'Q' AND pq.value <> 0
+                 THEN ROUND(((u.value - pq.value) / ABS(pq.value) * 100.0)::numeric, 1)::double precision
+            END AS qoq_pct,
+            CASE WHEN py.value <> 0
+                 THEN ROUND(((u.value - py.value) / ABS(py.value) * 100.0)::numeric, 1)::double precision
+            END AS yoy_pct
      FROM u
+     LEFT JOIN u pq
+       ON u.period_type = 'Q'
+      AND pq.corp_code = u.corp_code
+      AND pq.metric = u.metric
+      AND pq.period_type = 'Q'
+      AND (
+        (u.quarter > 1 AND pq.fiscal_year = u.fiscal_year AND pq.quarter = u.quarter - 1)
+        OR (u.quarter = 1 AND pq.fiscal_year = u.fiscal_year - 1 AND pq.quarter = 4)
+      )
+     LEFT JOIN u py
+       ON py.corp_code = u.corp_code
+      AND py.metric = u.metric
+      AND py.period_type = u.period_type
+      AND py.fiscal_year = u.fiscal_year - 1
+      AND (u.period_type = 'A' OR py.quarter = u.quarter)
      ORDER BY u.corp_code, u.metric, u.period_type, u.fiscal_year, u.quarter`,
     codes,
   );
