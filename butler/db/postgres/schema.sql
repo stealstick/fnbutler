@@ -32,14 +32,24 @@ CREATE TABLE IF NOT EXISTS companies (
     cover_securities   INTEGER,
     target_price_avg   BIGINT,
     target_return_rate DOUBLE PRECISION,
+    currency           TEXT NOT NULL DEFAULT 'KRW',
+    country            TEXT,
+    active             INTEGER NOT NULL DEFAULT 1,
     detail_ingested_at TEXT,
     source             TEXT NOT NULL DEFAULT 'butler',
     created_at         TEXT NOT NULL,
     updated_at         TEXT NOT NULL
 );
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'KRW';
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS country TEXT;
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS active INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE companies ALTER COLUMN price TYPE DOUBLE PRECISION USING price::double precision;
+ALTER TABLE companies ALTER COLUMN target_price_avg TYPE DOUBLE PRECISION USING target_price_avg::double precision;
 CREATE INDEX IF NOT EXISTS idx_companies_stock ON companies(stock_code);
 CREATE INDEX IF NOT EXISTS idx_companies_name ON companies(name);
 CREATE INDEX IF NOT EXISTS idx_companies_mcap ON companies(market_cap DESC);
+CREATE INDEX IF NOT EXISTS idx_companies_market ON companies(market, market_cap DESC);
+CREATE INDEX IF NOT EXISTS idx_companies_active ON companies(active, market_cap DESC);
 CREATE INDEX IF NOT EXISTS idx_companies_cover ON companies(has_consensus, market_cap DESC);
 
 CREATE TABLE IF NOT EXISTS brokers (
@@ -244,7 +254,7 @@ SELECT
     ROUND(AVG(CASE WHEN has_consensus=1 THEN target_return_rate END)::numeric, 2)::double precision AS return_rate_avg,
     SUM(cover_securities) AS cover_securities_sum
 FROM companies
-WHERE sector_code IS NOT NULL
+WHERE sector_code IS NOT NULL AND active = 1
 GROUP BY sector_code, sector_name;
 
 CREATE OR REPLACE VIEW v_financials_growth AS

@@ -9,14 +9,14 @@ on:
         description: "refresh mode"
         type: choice
         default: full
-        options: [full, calendar-only, dart-financials, dart-2024-financials, dart-2025-financials, wisereport-estimates]
+        options: [full, calendar-only, dart-financials, dart-2024-financials, dart-2025-financials, wisereport-estimates, nasdaq-companies]
       wait:
         description: "wait for job completion"
         type: boolean
         default: true
   schedule:
-    # Weekdays 18:30 KST.
-    - cron: "30 9 * * 1-5"
+    # Daily 18:30 KST.
+    - cron: "30 9 * * *"
     # Saturdays 08:00 KST.
     - cron: "0 23 * * 5"
 
@@ -64,6 +64,9 @@ jobs:
           fi
           if [ "$MODE" = "wisereport-estimates" ]; then
             EXTRA_ARGS=(--args tsx,scripts/backfill-wisereport-estimates.ts)
+          fi
+          if [ "$MODE" = "nasdaq-companies" ]; then
+            EXTRA_ARGS=(--args tsx,scripts/ingest-nasdaq.ts)
           fi
 
           gcloud run jobs execute "$TARGET_JOB" \

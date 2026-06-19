@@ -15,6 +15,7 @@ env:
   REGION: asia-northeast3
   SERVICE: fnbutler
   JOB: fnbutler-refresh
+  SCHEDULER_JOB: fnbutler-refresh-weekdays
   CALENDAR_JOB: fnbutler-calendar-refresh
   CALENDAR_SCHEDULER_JOB: fnbutler-calendar-weekly
   SQL_INSTANCE: fnbutler-pg
@@ -112,6 +113,33 @@ jobs:
             --set-cloudsql-instances "$CONNECTION" \
             --set-env-vars "$ENV_VARS" \
             --set-secrets "$SECRET_VARS"
+
+      - name: Update daily refresh scheduler
+        run: |
+          SCHEDULER_URI="https://${REGION}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${PROJECT}/jobs/${JOB}:run"
+          if gcloud scheduler jobs describe "$SCHEDULER_JOB" --location "$REGION" --project "$PROJECT" >/dev/null 2>&1; then
+            SCHED_CMD=(gcloud scheduler jobs update http "$SCHEDULER_JOB")
+          else
+            SCHED_CMD=(gcloud scheduler jobs create http "$SCHEDULER_JOB")
+          fi
+
+          set +e
+          "${SCHED_CMD[@]}" \
+            --project "$PROJECT" \
+            --location "$REGION" \
+            --schedule "30 18 * * *" \
+            --time-zone "Asia/Seoul" \
+            --uri "$SCHEDULER_URI" \
+            --http-method POST \
+            --oauth-service-account-email "${RUN_SA}@${PROJECT}.iam.gserviceaccount.com" \
+            --oauth-token-scope "https://www.googleapis.com/auth/cloud-platform" \
+            --attempt-deadline 60s \
+            --max-retry-attempts 1
+          SCHED_STATUS=$?
+          set -e
+          if [ "$SCHED_STATUS" -ne 0 ]; then
+            echo "::warning::Cloud Scheduler sync skipped. Grant roles/cloudscheduler.admin to the deploy service account to manage ${SCHEDULER_JOB}; GitHub Actions still runs the daily refresh cron."
+          fi
 
       - name: Update weekly calendar job
         env:

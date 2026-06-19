@@ -28,6 +28,7 @@
     "postgres:import:cloud": "bash scripts/gcloud-postgres-import-local.sh",
     "ingest:covered": "tsx scripts/ingest-covered.ts",
     "ingest:calendar": "tsx scripts/ingest-calendar.ts",
+    "ingest:nasdaq": "tsx scripts/ingest-nasdaq.ts",
     "telegram:setup": "tsx scripts/telegram-setup.ts"
   },
   "dependencies": {

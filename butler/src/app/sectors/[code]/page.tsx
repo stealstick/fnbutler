@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getSectorAgg, getSectorCompanies, getSectorMomentum } from "@/lib/repo";
+import { buildGrowthByCompany } from "@/lib/compare-growth";
+import { getCompareGrowth, getSectorAgg, getSectorCompanies, getSectorMomentum } from "@/lib/repo";
 import { won, num, pct, signClass } from "@/lib/format";
 import InfoTip from "@/components/InfoTip";
 import SectorCompaniesTable from "./SectorCompaniesTable";
@@ -22,6 +23,8 @@ export default async function SectorDetail({
     getSectorCompanies(code, "target_return_rate"),
     getSectorMomentum(code),
   ]);
+  const growthRows = await getCompareGrowth(companies.map((c) => c.corp_code));
+  const growthByCompany = buildGrowthByCompany(growthRows);
 
   return (
     <>
@@ -50,7 +53,7 @@ export default async function SectorDetail({
         <h2>
           구성 기업 <span className="sub">헤더(시가총액·PER·상승여력 등)를 클릭하면 그 기준으로 정렬</span>
         </h2>
-        <SectorCompaniesTable companies={companies} />
+        <SectorCompaniesTable companies={companies} growthByCompany={growthByCompany} />
       </div>
     </>
   );

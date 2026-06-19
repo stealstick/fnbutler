@@ -11,7 +11,7 @@ async function main() {
   await migrate(db);
   const codes = (
     await all<{ corp_code: string }>(
-      "SELECT corp_code FROM companies WHERE has_consensus = 1 ORDER BY market_cap DESC NULLS LAST",
+      "SELECT corp_code FROM companies WHERE active = 1 AND source <> 'nasdaq' AND has_consensus = 1 ORDER BY market_cap DESC NULLS LAST",
       [],
       db,
     )

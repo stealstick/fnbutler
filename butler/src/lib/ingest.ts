@@ -136,14 +136,17 @@ export async function ingestCompanies(
 export async function upsertCompanyFromScreen(db: Queryable, r: ScreenRow, now: string) {
   await query(
     `INSERT INTO companies
-       (corp_code, stock_code, name, market_cap, price, fluctuation_rate, source, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, 'butler', $7, $8)
+       (corp_code, stock_code, name, market_cap, price, fluctuation_rate, currency, country, active, source, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, 'KRW', 'KR', 1, 'butler', $7, $8)
      ON CONFLICT(corp_code) DO UPDATE SET
        stock_code=excluded.stock_code,
        name=excluded.name,
        market_cap=excluded.market_cap,
        price=excluded.price,
        fluctuation_rate=excluded.fluctuation_rate,
+       currency='KRW',
+       country='KR',
+       active=1,
        updated_at=excluded.updated_at`,
     [
       r.corpCode,
@@ -236,7 +239,7 @@ export async function upsertCompanyDetail(db: Queryable, d: CompanyDetail, now: 
         industry_code = $8, is_financial = $9, fs_div = $10,
         market_cap = $11, price = $12, fluctuation_rate = $13,
         per = $14, pbr = $15, fper = $16, eps = $17, feps = $18, bps = $19, dps = $20,
-        dividend_yield = $21, treasury_ratio = $22, updated_at = $23
+        dividend_yield = $21, treasury_ratio = $22, currency = 'KRW', country = 'KR', active = 1, updated_at = $23
       WHERE corp_code = $24`,
     [
       d.stockCode,

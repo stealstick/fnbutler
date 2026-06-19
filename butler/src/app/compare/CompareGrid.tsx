@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { won, num, pct, signClass } from "@/lib/format";
+import { won, num, pct, price as stockPrice, signClass } from "@/lib/format";
 import type { GrowthBundle } from "@/lib/compare-growth";
 
 export type RowData = {
@@ -14,6 +14,7 @@ export type RowData = {
   market: string | null;
   market_cap: number | null;
   price: number | null;
+  currency: string;
   per: number | null;
   fper: number | null;
   pbr: number | null;
@@ -80,7 +81,7 @@ const FIXED: Col[] = [
     ),
   },
   { key: "market_cap", label: "시총", defDir: "desc", val: (r) => r.market_cap, cell: (r) => won(r.market_cap) },
-  { key: "price", label: "현재가", defDir: "desc", val: (r) => r.price, cell: (r) => num(r.price) },
+  { key: "price", label: "현재가", defDir: "desc", val: (r) => r.price, cell: (r) => stockPrice(r.price, r.currency) },
   { key: "per", label: "PER", defDir: "asc", val: (r) => r.per, cell: (r) => (r.per != null ? num(r.per, 1) : <span className="muted">-</span>) },
   {
     key: "fper",

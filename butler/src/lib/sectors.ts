@@ -74,6 +74,40 @@ export function classifySector(industryCode?: string | null, codeNameKR?: string
   return slug ? SECTORS[slug] : SECTORS.etc;
 }
 
+/** Nasdaq screener 의 sector/industry 를 기존 투자 섹터 슬러그로 맞춘다. */
+export function classifyNasdaqSector(sector?: string | null, industry?: string | null): Sector {
+  const s = (sector ?? "").toLowerCase();
+  const i = (industry ?? "").toLowerCase();
+  const text = `${s} ${i}`;
+
+  if (/semiconductor|electronic component|computer manufacturing|telecommunications equipment/.test(text))
+    return SECTORS.semiconductor;
+  if (/software|internet|edp services|information technology|technology|interactive media|data processing/.test(text))
+    return SECTORS.it_software;
+  if (/telecom|broadcasting|cable|media|publishing|entertainment|movies|radio|television/.test(text))
+    return SECTORS.telecom_media;
+  if (/auto|vehicle|truck|motor/.test(text)) return SECTORS.auto;
+  if (/biotechnology|pharmaceutical|medical|health care|hospital|diagnostic|drug/.test(text))
+    return SECTORS.pharma_bio;
+  if (/bank|insurance|finance|investment|asset management|broker|capital markets/.test(text))
+    return SECTORS.financials;
+  if (/real estate|reit/.test(text)) return SECTORS.realestate;
+  if (/oil|gas|energy|coal|utilities|electric|water supply/.test(text)) return SECTORS.energy_util;
+  if (/chemical|battery|specialty chemicals/.test(text)) return SECTORS.chemicals;
+  if (/steel|metal|aluminum|copper/.test(text)) return SECTORS.steel_metal;
+  if (/machinery|industrial|electrical products|engineering/.test(text)) return SECTORS.machinery;
+  if (/aerospace|defense|ship|transportation equipment/.test(text)) return SECTORS.shipbuilding;
+  if (/construction|building|homebuilding|materials/.test(text)) return SECTORS.construction;
+  if (/air freight|marine transportation|railroads|trucking|transportation|logistics/.test(text))
+    return SECTORS.transport;
+  if (/food|beverage|tobacco|agricultural/.test(text)) return SECTORS.food_bev;
+  if (/consumer|retail|apparel|restaurants|hotels|catalog|department stores|specialty distribution/.test(text))
+    return SECTORS.consumer;
+  if (/mining|paper|forest|plastic|packaging|textiles/.test(text)) return SECTORS.materials_misc;
+  if (/professional|business services|education|rental|commercial services/.test(text)) return SECTORS.services;
+  return SECTORS.etc;
+}
+
 export function sectorByCode(code: string): Sector | undefined {
   return SECTORS[code];
 }

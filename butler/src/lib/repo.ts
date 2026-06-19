@@ -24,11 +24,15 @@ export interface CompanyRow {
   bps: number | null;
   dps: number | null;
   dividend_yield: number | null;
+  currency: string;
+  country: string | null;
+  active: number;
   has_consensus: number;
   cover_securities: number | null;
   target_price_avg: number | null;
   target_return_rate: number | null;
   detail_ingested_at: string | null;
+  source: string;
   updated_at: string;
 }
 
@@ -93,7 +97,7 @@ export async function getCompany(corpCode: string): Promise<CompanyRow | undefin
 export async function getCompaniesByCodes(codes: string[]): Promise<CompanyRow[]> {
   if (codes.length === 0) return [];
   const rows = await all<CompanyRow>(
-    `SELECT * FROM companies WHERE corp_code IN (${placeholders(codes)})`,
+    `SELECT * FROM companies WHERE active = 1 AND corp_code IN (${placeholders(codes)})`,
     codes,
   );
   const byCode = new Map(rows.map((r) => [r.corp_code, r]));
@@ -189,7 +193,7 @@ export interface ListOpts {
 }
 
 export async function listCompanies(opts: ListOpts = {}): Promise<{ total: number; rows: CompanyRow[] }> {
-  const where: string[] = [];
+  const where: string[] = ["active = 1"];
   const params: unknown[] = [];
   const push = (v: unknown) => {
     params.push(v);
@@ -197,7 +201,7 @@ export async function listCompanies(opts: ListOpts = {}): Promise<{ total: numbe
   };
   if (opts.q) {
     const p = push(`%${opts.q}%`);
-    where.push(`(name ILIKE ${p} OR stock_code ILIKE ${p} OR corp_code ILIKE ${p})`);
+    where.push(`(name ILIKE ${p} OR name_eng ILIKE ${p} OR stock_code ILIKE ${p} OR corp_code ILIKE ${p})`);
   }
   if (opts.market) where.push(`market = ${push(opts.market)}`);
   if (opts.sector) where.push(`sector_code = ${push(opts.sector)}`);
@@ -380,7 +384,7 @@ export async function listSectorAggs(): Promise<SectorAgg[]> {
        COUNT(*)::int AS company_count,
        SUM(market_cap) AS market_cap_sum
      FROM companies
-     WHERE sector_code IS NOT NULL AND sector IS NOT NULL AND sector <> ''
+     WHERE active = 1 AND sector_code IS NOT NULL AND sector IS NOT NULL AND sector <> ''
      GROUP BY sector_code, sector
      HAVING COUNT(*) > 0
      ORDER BY sector_code, SUM(market_cap) DESC NULLS LAST, COUNT(*) DESC, sector`,
@@ -400,7 +404,7 @@ export async function getSectorAgg(code: string): Promise<SectorAgg | undefined>
 
 export async function getSectorCompanies(code: string, sort = "market_cap"): Promise<CompanyRow[]> {
   const order = sort === "target_return_rate" ? "target_return_rate DESC" : "market_cap DESC";
-  return all<CompanyRow>(`SELECT * FROM companies WHERE sector_code = $1 ORDER BY ${order} NULLS LAST`, [code]);
+  return all<CompanyRow>(`SELECT * FROM companies WHERE active = 1 AND sector_code = $1 ORDER BY ${order} NULLS LAST`, [code]);
 }
 
 /** 섹터 내 증권사별 목표가 상향/하향 카운트 (최근 N일). */
@@ -421,7 +425,7 @@ export async function getWatchlistCompanies(userId: string): Promise<CompanyRow[
   const codes = await userStore.listWatchCorpCodes(userId);
   if (codes.length === 0) return [];
   return all<CompanyRow>(
-    `SELECT * FROM companies WHERE corp_code IN (${placeholders(codes)}) ORDER BY market_cap DESC NULLS LAST`,
+    `SELECT * FROM companies WHERE active = 1 AND corp_code IN (${placeholders(codes)}) ORDER BY market_cap DESC NULLS LAST`,
     codes,
   );
 }
@@ -429,9 +433,9 @@ export async function getWatchlistCompanies(userId: string): Promise<CompanyRow[
 export async function getStats() {
   const oneCount = (sql: string) => value<number>(sql).then((v) => Number(v ?? 0));
   return {
-    companies: await oneCount("SELECT COUNT(*)::int c FROM companies"),
-    withDetail: await oneCount("SELECT COUNT(*)::int c FROM companies WHERE detail_ingested_at IS NOT NULL"),
-    withConsensus: await oneCount("SELECT COUNT(*)::int c FROM companies WHERE has_consensus = 1"),
+    companies: await oneCount("SELECT COUNT(*)::int c FROM companies WHERE active = 1"),
+    withDetail: await oneCount("SELECT COUNT(*)::int c FROM companies WHERE active = 1 AND detail_ingested_at IS NOT NULL"),
+    withConsensus: await oneCount("SELECT COUNT(*)::int c FROM companies WHERE active = 1 AND has_consensus = 1"),
     brokers: await oneCount("SELECT COUNT(*)::int c FROM brokers"),
     reports: await oneCount("SELECT COUNT(*)::int c FROM consensus_reports"),
     financialRows: await oneCount("SELECT COUNT(*)::int c FROM financials"),

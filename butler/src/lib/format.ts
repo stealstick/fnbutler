@@ -34,6 +34,19 @@ export function num(v: NumericLike, digits = 0): string {
   return parsed.toLocaleString(LC, { maximumFractionDigits: digits });
 }
 
+/** 종목 현재가. 한국 주식은 원 정수, 미국 주식은 달러 소수점으로 표시한다. */
+export function price(v: NumericLike, currency?: string | null): string {
+  const parsed = toFiniteNumber(v);
+  if (parsed == null) return "-";
+  if (currency === "USD") {
+    return `$${parsed.toLocaleString(LC, {
+      minimumFractionDigits: parsed >= 100 ? 2 : 2,
+      maximumFractionDigits: parsed >= 100 ? 2 : 4,
+    })}`;
+  }
+  return num(parsed);
+}
+
 /** 퍼센트(부호 포함). */
 export function pct(v: NumericLike, digits = 1): string {
   const parsed = toFiniteNumber(v);

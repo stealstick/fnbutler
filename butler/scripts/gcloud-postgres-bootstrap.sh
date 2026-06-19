@@ -192,7 +192,7 @@ fi
 "${SCHED_CMD[@]}" \
   --project "$PROJECT" \
   --location "$REGION" \
-  --schedule "30 18 * * 1-5" \
+  --schedule "30 18 * * *" \
   --time-zone "Asia/Seoul" \
   --uri "$SCHEDULER_URI" \
   --http-method POST \

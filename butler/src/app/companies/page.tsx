@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { won, num, pct, signClass } from "@/lib/format";
+import { won, num, pct, price as stockPrice, signClass } from "@/lib/format";
 import type { GrowthBundle, GrowthByMetric, GrowthMetric } from "@/lib/compare-growth";
 import type { CompanyRow, SectorAgg } from "@/lib/repo";
 
@@ -141,7 +141,7 @@ export default function CompaniesPage() {
       <div className="toolbar">
         <input
           className="input search"
-          placeholder="기업명 · 종목코드 · 기업코드 (예: 삼성전자, 005930)"
+          placeholder="기업명 · 종목코드 · 티커 (예: 삼성전자, 005930, AAPL)"
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
@@ -149,6 +149,7 @@ export default function CompaniesPage() {
           <option value="">전체 시장</option>
           <option value="KOSPI">KOSPI</option>
           <option value="KOSDAQ">KOSDAQ</option>
+          <option value="NASDAQ">NASDAQ</option>
         </select>
         <select
           className="input"
@@ -289,7 +290,7 @@ export default function CompaniesPage() {
                 <td className="mono">{growthCell(c, "yoyThisNext")}</td>
                 <td className="mono">{growthCell(c, "yoyNextNext2")}</td>
                 <td className="l muted" style={{ fontSize: 12 }}>{c.sector_name || c.market || "-"}</td>
-                <td className="mono">{num(c.price)}</td>
+                <td className="mono">{stockPrice(c.price, c.currency)}</td>
                 <td className={"mono " + signClass(c.fluctuation_rate)}>{pct(c.fluctuation_rate)}</td>
                 <td className="mono">{won(c.market_cap)}</td>
                 <td className="mono">{c.per != null ? num(c.per, 1) : "-"}</td>

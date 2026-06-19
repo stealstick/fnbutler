@@ -18,11 +18,20 @@ async function main() {
 
   const targets = (
     scope === "watchlist"
-      ? await all<{ corp_code: string }>("SELECT DISTINCT corp_code FROM watchlist", [], db)
+      ? await all<{ corp_code: string }>(
+          `SELECT DISTINCT w.corp_code
+           FROM watchlist w
+           JOIN companies c ON c.corp_code = w.corp_code
+           WHERE c.active = 1 AND c.source <> 'nasdaq'`,
+          [],
+          db,
+        )
       : await all<{ corp_code: string }>(
           `SELECT corp_code FROM companies
-           WHERE corp_code IN (SELECT corp_code FROM watchlist)
-              OR has_consensus = 1
+           WHERE active = 1
+             AND source <> 'nasdaq'
+             AND (corp_code IN (SELECT corp_code FROM watchlist)
+              OR has_consensus = 1)
            ORDER BY market_cap DESC NULLS LAST`,
           [],
           db,

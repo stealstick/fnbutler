@@ -12,7 +12,7 @@ import {
 } from "@/lib/repo";
 import { getSessionUser, SESSION_COOKIE } from "@/lib/auth";
 import { userStore } from "@/lib/userstore";
-import { won, num, pct, signClass } from "@/lib/format";
+import { won, num, pct, price as stockPrice, signClass } from "@/lib/format";
 import FinancialsTable from "./FinancialsTable";
 import RefreshButton from "./RefreshButton";
 import WatchStar from "@/components/WatchStar";
@@ -64,7 +64,7 @@ export default async function CompanyPage({
           </div>
           <div style={{ marginLeft: "auto", textAlign: "right" }}>
             <div className={"price mono " + signClass(company.fluctuation_rate)}>
-              {num(company.price)}
+              {stockPrice(company.price, company.currency)}
             </div>
             <div className={"mono " + signClass(company.fluctuation_rate)}>
               {pct(company.fluctuation_rate)}
@@ -86,7 +86,7 @@ export default async function CompanyPage({
         <div style={{ display: "flex", gap: 12, marginTop: 14, alignItems: "center", flexWrap: "wrap" }}>
           <Link href="/companies" className="btn ghost">← 목록</Link>
           <WatchStar corpCode={corpCode} initialWatched={watched} loggedIn={!!user} />
-          <RefreshButton corpCode={corpCode} />
+          {company.source === "nasdaq" ? null : <RefreshButton corpCode={corpCode} />}
           <span className="note" style={{ marginLeft: "auto" }}>
             최종 업데이트 {company.updated_at?.slice(0, 16).replace("T", " ")} · source: keystone
           </span>

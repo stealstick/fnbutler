@@ -55,6 +55,7 @@ export default async function ComparePage({
       market: c.market,
       market_cap: c.market_cap,
       price: c.price,
+      currency: c.currency,
       per: c.per,
       fper: c.fper,
       pbr: c.pbr,

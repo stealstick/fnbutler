@@ -1,58 +1,114 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { won, num, pct, signClass } from "@/lib/format";
+import { won, num, pct, price as stockPrice, signClass } from "@/lib/format";
 import { useTableSort, SortTh } from "@/components/sortable";
+import { epsGrowth, type GrowthBundle, type GrowthByMetric, type GrowthMetric } from "@/lib/compare-growth";
 import type { CompanyRow } from "@/lib/repo";
+
+const GROWTH_METRICS: Array<{ key: GrowthMetric; label: string }> = [
+  { key: "REVENUE", label: "매출액" },
+  { key: "OPERATING_PROFIT", label: "영업이익" },
+  { key: "NET_INCOME", label: "당기순이익" },
+];
 
 const getVal = (c: CompanyRow, k: string) =>
   k === "name" ? c.name : ((c as unknown as Record<string, number | null>)[k] ?? null);
 
-export default function SectorCompaniesTable({ companies }: { companies: CompanyRow[] }) {
+export default function SectorCompaniesTable({
+  companies,
+  growthByCompany,
+}: {
+  companies: CompanyRow[];
+  growthByCompany: Record<string, GrowthByMetric>;
+}) {
+  const [metric, setMetric] = useState<GrowthMetric>("REVENUE");
   const { sorted, sortKey, dir, onSort } = useTableSort(companies, getVal, "target_return_rate");
   const th = (label: string, k: string, align?: "l", defaultDir?: "asc" | "desc") => (
     <SortTh label={label} k={k} sortKey={sortKey} dir={dir} onSort={onSort} align={align} defaultDir={defaultDir} />
   );
+  const growthCell = (c: CompanyRow, key: keyof GrowthBundle) => {
+    const t = growthByCompany[c.corp_code]?.[metric]?.[key];
+    return <GrowthPct p={t?.p ?? null} title={t?.t} />;
+  };
 
   return (
-    <div className="scrollx">
-      <table className="grid">
-        <thead>
-          <tr>
-            {th("종목", "name", "l", "asc")}
-            {th("현재가", "price")}
-            {th("시가총액", "market_cap")}
-            {th("PER", "per", undefined, "asc")}
-            {th("PBR", "pbr", undefined, "asc")}
-            {th("평균 목표주가", "target_price_avg")}
-            {th("상승여력", "target_return_rate")}
-            {th("커버", "cover_securities")}
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((c) => (
-            <tr key={c.corp_code}>
-              <td className="l">
-                <Link href={`/companies/${c.corp_code}`}>
-                  <strong>{c.name}</strong>{" "}
-                  <span className="muted mono" style={{ fontSize: 12 }}>{c.stock_code}</span>
-                </Link>
-              </td>
-              <td className="mono">{num(c.price)}</td>
-              <td className="mono">{won(c.market_cap)}</td>
-              <td className="mono">{c.per != null ? num(c.per, 1) : "-"}</td>
-              <td className="mono">{c.pbr != null ? num(c.pbr, 2) : "-"}</td>
-              <td className="mono">{c.target_price_avg ? num(c.target_price_avg) : "-"}</td>
-              <td className={"mono " + signClass(c.target_return_rate)}>
-                {c.target_return_rate != null ? pct(c.target_return_rate) : "-"}
-              </td>
-              <td className="mono">
-                {c.cover_securities ? <span className="pill">{c.cover_securities}</span> : "-"}
-              </td>
-            </tr>
+    <>
+      <div className="toolbar growth-toolbar">
+        <span className="muted" style={{ fontSize: 12 }}>성장률 기준 지표</span>
+        <span className="toggle">
+          {GROWTH_METRICS.map((m) => (
+            <button key={m.key} className={metric === m.key ? "on" : ""} onClick={() => setMetric(m.key)}>
+              {m.label}
+            </button>
           ))}
-        </tbody>
-      </table>
-    </div>
+        </span>
+        <span className="muted growth-hint">전체기업 표와 같은 기준으로 표시</span>
+      </div>
+      <div className="scrollx">
+        <table className="grid companies-table">
+          <thead>
+            <tr>
+              {th("종목", "name", "l", "asc")}
+              <th title="(선행 EPS − EPS) / |EPS|. 향후 1년 이익 성장 추정">EPS성장E</th>
+              <th title="직전분기 대비 현재분기 실적 증감률">QoQ 직전→현재</th>
+              <th title="현재분기 대비 다음분기 추정 증감률">QoQ 현재→다음E</th>
+              <th title="전년 대비 올해 증감률">YoY 전년→올해E</th>
+              <th title="올해 대비 다음년도 추정 증감률">YoY 올해→다음년E</th>
+              <th title="다음년도 대비 2년뒤 추정 증감률">YoY 다음년→2년뒤E</th>
+              {th("현재가", "price")}
+              {th("등락", "fluctuation_rate")}
+              {th("시가총액", "market_cap")}
+              {th("PER", "per", undefined, "asc")}
+              {th("PBR", "pbr", undefined, "asc")}
+              {th("평균 목표주가", "target_price_avg")}
+              {th("상승여력", "target_return_rate")}
+              {th("커버", "cover_securities")}
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((c) => (
+              <tr key={c.corp_code}>
+                <td className="l">
+                  <Link href={`/companies/${c.corp_code}`}>
+                    <strong>{c.name}</strong>{" "}
+                    <span className="muted mono" style={{ fontSize: 12 }}>{c.stock_code}</span>
+                  </Link>
+                </td>
+                <td className="mono"><GrowthPct p={epsGrowth(c)} /></td>
+                <td className="mono">{growthCell(c, "qoqPrevCur")}</td>
+                <td className="mono">{growthCell(c, "qoqCurNext")}</td>
+                <td className="mono">{growthCell(c, "yoyPrevThis")}</td>
+                <td className="mono">{growthCell(c, "yoyThisNext")}</td>
+                <td className="mono">{growthCell(c, "yoyNextNext2")}</td>
+                <td className="mono">{stockPrice(c.price, c.currency)}</td>
+                <td className={"mono " + signClass(c.fluctuation_rate)}>{pct(c.fluctuation_rate)}</td>
+                <td className="mono">{won(c.market_cap)}</td>
+                <td className="mono">{c.per != null ? num(c.per, 1) : "-"}</td>
+                <td className="mono">{c.pbr != null ? num(c.pbr, 2) : "-"}</td>
+                <td className="mono">{c.target_price_avg ? num(c.target_price_avg) : "-"}</td>
+                <td className={"mono " + signClass(c.target_return_rate)}>
+                  {c.target_return_rate != null ? pct(c.target_return_rate) : "-"}
+                </td>
+                <td className="mono">
+                  {c.cover_securities ? <span className="pill">{c.cover_securities}</span> : "-"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+function GrowthPct({ p, title }: { p: number | null; title?: string }) {
+  if (p == null) return <span className="muted">-</span>;
+  const arrow = p > 0 ? "▲" : p < 0 ? "▼" : "–";
+  return (
+    <span className={"gnum " + signClass(p)} title={title}>
+      {arrow} {pct(p)}
+    </span>
   );
 }

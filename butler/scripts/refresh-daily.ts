@@ -4,6 +4,7 @@
  *   tsx scripts/refresh-daily.ts
  *   tsx scripts/refresh-daily.ts --scope watchlist
  *   tsx scripts/refresh-daily.ts --calendar-only
+ *   tsx scripts/refresh-daily.ts --no-nasdaq
  *   tsx scripts/refresh-daily.ts --no-dart-financials
  *   tsx scripts/refresh-daily.ts --no-wisereport-estimates
  *
@@ -12,12 +13,14 @@
  *  - 멱등: 시세/목표가는 값이 바뀐 경우에만 UPDATE. 같은 데이터면 updated_at 도 그대로.
  *  - DART_API_KEY가 있으면 현재연도/전년도 정기보고서 재무 누락분을 함께 보강한다.
  *  - WiseReport/FnGuide 공개 재무요약에서 컨센서스 추정치를 함께 보강한다.
+ *  - Nasdaq screener 공개 JSON에서 NASDAQ 시총 상위 500개 기업을 함께 보강한다.
  *  - Postgres가 영속 저장소이므로 GCS DB 업로드/이미지 재배포는 하지 않는다.
  */
 import { all, closeDb, getDb, migrate, nowIso, query } from "../src/lib/db";
 import { ingestNewReports, refreshCompanyQuote } from "../src/lib/ingest";
 import { recordDailySnapshot, dispatchAlerts } from "../src/lib/poll";
 import { ingestCalendar } from "../src/lib/calendar";
+import { ingestNasdaqTopCompanies } from "../src/lib/nasdaq";
 import { backfillDartFinancials } from "./backfill-dart-financials";
 import { backfillWiseReportEstimates } from "./backfill-wisereport-estimates";
 
@@ -46,14 +49,35 @@ async function main() {
   const scope = argOf("scope") ?? "all";
   const calendarOnly = has("calendar-only");
 
+  let nasdaqMsg = "skip";
+  if (!calendarOnly && !has("no-nasdaq")) {
+    try {
+      const nasdaqLimit = Number(argOf("nasdaq-limit") || process.env.NASDAQ_COMPANY_LIMIT || "500");
+      const n = await ingestNasdaqTopCompanies(db, nasdaqLimit, (message) => process.stdout.write(`   nasdaq ${message}`));
+      nasdaqMsg = `selected=${n.selected},upserted=${n.upserted},usdKrw=${n.usdKrw}`;
+    } catch (e) {
+      nasdaqMsg = `error: ${(e as Error).message}`;
+      process.stdout.write(`   nasdaq error ${(e as Error).message}\n`);
+    }
+  }
+
   const targets = (
     calendarOnly
       ? ([] as { corp_code: string }[])
       : scope === "watchlist"
-        ? await all<{ corp_code: string }>("SELECT DISTINCT corp_code FROM watchlist", [], db)
+        ? await all<{ corp_code: string }>(
+            `SELECT DISTINCT w.corp_code
+             FROM watchlist w
+             JOIN companies c ON c.corp_code = w.corp_code
+             WHERE c.active = 1 AND c.source <> 'nasdaq'`,
+            [],
+            db,
+          )
         : await all<{ corp_code: string }>(
             `SELECT corp_code FROM companies
-             WHERE has_consensus = 1 OR corp_code IN (SELECT corp_code FROM watchlist)
+             WHERE active = 1
+               AND source <> 'nasdaq'
+               AND (has_consensus = 1 OR corp_code IN (SELECT corp_code FROM watchlist))
              ORDER BY market_cap DESC NULLS LAST`,
             [],
             db,
@@ -142,13 +166,13 @@ async function main() {
     [
       runStart,
       nowIso(),
-      `targets=${targets.length} newReports=${newReports} quoteUpdated=${quoteUpdated} unchanged=${unchanged} alerts=${sent} errors=${errors} calendar=${calendarMsg} dartFinancials=${dartFinancialsMsg} wiseEstimates=${wiseEstimatesMsg}`,
+      `targets=${targets.length} newReports=${newReports} quoteUpdated=${quoteUpdated} unchanged=${unchanged} alerts=${sent} errors=${errors} nasdaq=${nasdaqMsg} calendar=${calendarMsg} dartFinancials=${dartFinancialsMsg} wiseEstimates=${wiseEstimatesMsg}`,
     ],
     db,
   );
 
   process.stdout.write(
-    `갱신 완료 — 신규리포트 ${newReports} · 시세변경 ${quoteUpdated} · 무변경 ${unchanged} · 알림 ${sent} · 오류 ${errors} · DART재무 ${dartFinancialsMsg} · 추정치 ${wiseEstimatesMsg}\n`,
+    `갱신 완료 — 신규리포트 ${newReports} · 시세변경 ${quoteUpdated} · 무변경 ${unchanged} · 알림 ${sent} · 오류 ${errors} · Nasdaq ${nasdaqMsg} · DART재무 ${dartFinancialsMsg} · 추정치 ${wiseEstimatesMsg}\n`,
   );
 }
 
