@@ -2,6 +2,7 @@ requests>=2.31
 beautifulsoup4>=4.12
 pdfplumber>=0.11
 SQLAlchemy>=2.0
+psycopg[binary]>=3.1
 PyMuPDF>=1.24          # PDF→이미지 렌더 (비전 폴백)
 anthropic>=0.40        # 비전 AI 백엔드 (ANTHROPIC_API_KEY 설정 시)
 python-dotenv>=1.0     # .env 로드

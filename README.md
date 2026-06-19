@@ -66,8 +66,9 @@ cp .env.example .env   # 편집해서 자격증명/API키 입력
 `sync`/`feed`/`reparse` 에 `--ai` 를 붙이면 좌표 파싱이 빈약한 리포트에만 선별 적용된다
 (매 리포트마다 부르지 않음 — 비용 절약). 모델은 `FNGUIDE_VISION_MODEL` 로 변경.
 
-DB는 기본 SQLite(`data/fnguide.db`). 운영 전환 시 `DATABASE_URL` 환경변수로
-PostgreSQL 지정 (`schema.sql` 이 운영용 DDL + 최신추정치 뷰 정의).
+DB는 Postgres만 지원한다. `DATABASE_URL` 환경변수에
+`postgresql+psycopg://...` 접속 문자열을 지정한다. `schema.sql` 은 운영용 DDL과
+최신추정치 뷰 정의다.
 
 ## 스키마 설계 (schema.sql)
 

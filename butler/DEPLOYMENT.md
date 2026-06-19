@@ -1,7 +1,7 @@
 # keystone Postgres 배포 가이드
 
 운영 구조는 **Cloud Run + Cloud SQL(Postgres) + Cloud Run Job + GitHub Actions schedule** 다.
-기존 `db/butler.db` 는 최초 이관 소스로만 사용하고, 운영 중 데이터 갱신은 Postgres에 직접 쓴다.
+운영 중 데이터 갱신은 Postgres에 직접 쓴다.
 
 ## 구성
 
@@ -19,20 +19,15 @@
 | DB | `butler` / user `butler` | 시세·컨센서스·재무 운영 DB |
 | Secret | `fnbutler-db-password`, `DART_API_KEY` | DB 비밀번호, 국내 실적 캘린더 키 |
 
-## 1. 로컬 Postgres 이관
+## 1. 로컬 Postgres 준비
 
 ```bash
 cd butler
 npm install
 npm run db:setup:local
 npm run db:init
-npm run db:migrate-sqlite
 npm run build
 ```
-
-`db:migrate-sqlite` 는 기본으로 `db/butler.db` 를 읽어 로컬 Postgres에 넣는다.
-목적지 DB에 이미 데이터가 있으면 멈추며, 초기화 후 다시 넣고 싶을 때만
-`tsx scripts/migrate-sqlite-to-postgres.ts --source db/butler.db --reset` 을 사용한다.
 
 ## 2. GCP 스택 생성/배포
 

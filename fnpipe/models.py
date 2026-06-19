@@ -23,7 +23,7 @@ class Base(DeclarativeBase):
 class Company(Base):
     __tablename__ = "companies"
 
-    id: Mapped[int] = mapped_column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     stock_code: Mapped[str] = mapped_column(String(12), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(Text, nullable=False)
     sector: Mapped[str | None] = mapped_column(Text)
@@ -37,7 +37,7 @@ class Company(Base):
 class Broker(Base):
     __tablename__ = "brokers"
 
-    id: Mapped[int] = mapped_column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     fn_brk_cd: Mapped[str | None] = mapped_column(String(12), unique=True)
     name: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
 
@@ -49,7 +49,7 @@ class Report(Base):
         Index("idx_reports_broker", "broker_id"),
     )
 
-    id: Mapped[int] = mapped_column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     fn_rpt_id: Mapped[int] = mapped_column(BigInteger, unique=True, nullable=False)
     company_id: Mapped[int] = mapped_column(ForeignKey("companies.id"), nullable=False)
     broker_id: Mapped[int] = mapped_column(ForeignKey("brokers.id"), nullable=False)
@@ -84,7 +84,7 @@ class ReportFinancial(Base):
         CheckConstraint("period_type IN ('A','Q')"),
     )
 
-    id: Mapped[int] = mapped_column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     report_id: Mapped[int] = mapped_column(
         ForeignKey("reports.id", ondelete="CASCADE"), nullable=False)
     period_type: Mapped[str] = mapped_column(String(1), nullable=False)

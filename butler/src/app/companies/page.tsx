@@ -31,6 +31,7 @@ export default function CompaniesPage() {
   const [q, setQ] = useState("");
   const [market, setMarket] = useState("");
   const [sector, setSector] = useState("");
+  const [industry, setIndustry] = useState("");
   const [onlyConsensus, setOnlyConsensus] = useState(false);
   const [sort, setSort] = useState("market_cap");
   const [dir, setDir] = useState<Dir>("desc");
@@ -73,17 +74,18 @@ export default function CompaniesPage() {
       offset: String(page * limit),
     });
     if (sector) sp.set("sector", sector);
+    if (industry) sp.set("industry", industry);
     if (onlyConsensus) sp.set("consensus", "1");
     const r = await fetch(`/api/companies?${sp}`);
     setData(await r.json());
     setLoading(false);
-  }, [q, market, sector, sort, dir, onlyConsensus, page]);
+  }, [q, market, sector, industry, sort, dir, onlyConsensus, page]);
 
   useEffect(() => {
     const t = setTimeout(load, 200);
     return () => clearTimeout(t);
   }, [load]);
-  useEffect(() => setPage(0), [q, market, sector, sort, dir, onlyConsensus]);
+  useEffect(() => setPage(0), [q, market, sector, industry, sort, dir, onlyConsensus]);
 
   const pageCodes = data?.results.map((c) => c.corp_code).join(",") ?? "";
   useEffect(() => {
@@ -124,6 +126,8 @@ export default function CompaniesPage() {
 
   const total = data?.total ?? 0;
   const pages = Math.ceil(total / limit);
+  const selectedSector = sectors.find((s) => s.sector_code === sector);
+  const childSectors = selectedSector?.children ?? [];
   const growthCell = (c: CompanyListRow, key: keyof GrowthBundle) => {
     const t = growthByCode[c.corp_code]?.[metric]?.[key];
     return <GrowthPct p={t?.p ?? null} title={t?.t} />;
@@ -171,7 +175,10 @@ export default function CompaniesPage() {
       <div className="tabs" role="tablist" aria-label="섹터 필터">
         <button
           className={"tab" + (sector === "" ? " active" : "")}
-          onClick={() => setSector("")}
+          onClick={() => {
+            setSector("");
+            setIndustry("");
+          }}
           role="tab"
           aria-selected={sector === ""}
         >
@@ -181,7 +188,10 @@ export default function CompaniesPage() {
           <button
             key={s.sector_code}
             className={"tab" + (sector === s.sector_code ? " active" : "")}
-            onClick={() => setSector(s.sector_code)}
+            onClick={() => {
+              setSector(s.sector_code);
+              setIndustry("");
+            }}
             role="tab"
             aria-selected={sector === s.sector_code}
           >
@@ -190,6 +200,29 @@ export default function CompaniesPage() {
           </button>
         ))}
       </div>
+
+      {sector && childSectors.length > 0 && (
+        <div className="subtabs" aria-label={`${selectedSector?.sector_name ?? "섹터"} 하위 업종 필터`}>
+          <button
+            className={"subtab" + (industry === "" ? " active" : "")}
+            onClick={() => setIndustry("")}
+          >
+            전체
+            <span className="tab-count">{num(selectedSector?.company_count ?? 0)}</span>
+          </button>
+          {childSectors.map((s) => (
+            <button
+              key={s.industry}
+              className={"subtab" + (industry === s.industry ? " active" : "")}
+              onClick={() => setIndustry(s.industry)}
+              title={s.industry}
+            >
+              {s.label}
+              <span className="tab-count">{num(s.company_count)}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="toolbar growth-toolbar">
         <span className="muted" style={{ fontSize: 12 }}>성장률 기준 지표</span>
@@ -201,7 +234,7 @@ export default function CompaniesPage() {
           ))}
         </span>
         <span className="muted growth-hint">
-          가로 스크롤로 QoQ·YoY 성장률까지 확인
+          종목 옆에서 QoQ·YoY 성장률을 바로 확인
         </span>
       </div>
 
@@ -211,6 +244,12 @@ export default function CompaniesPage() {
             <tr>
               <th title="비교 선택" style={{ width: 34, textAlign: "center" }}>비교</th>
               <Th label="종목" k="name" align="l" dd="asc" />
+              <th title="(선행 EPS − EPS) / |EPS|. 향후 1년 이익 성장 추정">EPS성장E</th>
+              <th title="직전분기 대비 현재분기 실적 증감률">QoQ 직전→현재</th>
+              <th title="현재분기 대비 다음분기 추정 증감률">QoQ 현재→다음E</th>
+              <th title="전년 대비 올해 증감률">YoY 전년→올해E</th>
+              <th title="올해 대비 다음년도 추정 증감률">YoY 올해→다음년E</th>
+              <th title="다음년도 대비 2년뒤 추정 증감률">YoY 다음년→2년뒤E</th>
               <th className="l">섹터</th>
               <Th label="현재가" k="price" />
               <Th label="등락" k="fluctuation_rate" />
@@ -220,12 +259,6 @@ export default function CompaniesPage() {
               <Th label="평균 목표주가" k="target_price_avg" />
               <Th label="상승여력" k="target_return_rate" />
               <Th label="커버" k="cover_securities" />
-              <th title="(선행 EPS − EPS) / |EPS|. 향후 1년 이익 성장 추정">EPS성장E</th>
-              <th title="직전분기 대비 현재분기 실적 증감률">QoQ 직전→현재</th>
-              <th title="현재분기 대비 다음분기 추정 증감률">QoQ 현재→다음E</th>
-              <th title="전년 대비 올해 증감률">YoY 전년→올해E</th>
-              <th title="올해 대비 다음년도 추정 증감률">YoY 올해→다음년E</th>
-              <th title="다음년도 대비 2년뒤 추정 증감률">YoY 다음년→2년뒤E</th>
             </tr>
           </thead>
           <tbody>
@@ -247,6 +280,14 @@ export default function CompaniesPage() {
                     <span className="muted mono" style={{ fontSize: 12 }}>{c.stock_code}</span>
                   </Link>
                 </td>
+                <td className="mono">
+                  <GrowthPct p={c.epsGrowth} />
+                </td>
+                <td className="mono">{growthCell(c, "qoqPrevCur")}</td>
+                <td className="mono">{growthCell(c, "qoqCurNext")}</td>
+                <td className="mono">{growthCell(c, "yoyPrevThis")}</td>
+                <td className="mono">{growthCell(c, "yoyThisNext")}</td>
+                <td className="mono">{growthCell(c, "yoyNextNext2")}</td>
                 <td className="l muted" style={{ fontSize: 12 }}>{c.sector_name || c.market || "-"}</td>
                 <td className="mono">{num(c.price)}</td>
                 <td className={"mono " + signClass(c.fluctuation_rate)}>{pct(c.fluctuation_rate)}</td>
@@ -258,14 +299,6 @@ export default function CompaniesPage() {
                   {c.target_return_rate != null ? pct(c.target_return_rate) : "-"}
                 </td>
                 <td className="mono">{c.cover_securities ? <span className="pill">{c.cover_securities}</span> : "-"}</td>
-                <td className="mono">
-                  <GrowthPct p={c.epsGrowth} />
-                </td>
-                <td className="mono">{growthCell(c, "qoqPrevCur")}</td>
-                <td className="mono">{growthCell(c, "qoqCurNext")}</td>
-                <td className="mono">{growthCell(c, "yoyPrevThis")}</td>
-                <td className="mono">{growthCell(c, "yoyThisNext")}</td>
-                <td className="mono">{growthCell(c, "yoyNextNext2")}</td>
               </tr>
             ))}
             {data && data.results.length === 0 && (

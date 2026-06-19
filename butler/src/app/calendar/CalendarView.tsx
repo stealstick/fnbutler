@@ -74,6 +74,15 @@ function gmtToKst(dateStr: string, timeStr: string) {
     nextDay: kst.getUTCDate() !== utc.getUTCDate(),
   };
 }
+function timedDisplay(e: Ev): { time: string; suffix: string } | null {
+  if (!e.event_time) return null;
+  if (e.tz === "Asia/Seoul") return { time: e.event_time, suffix: "KST" };
+  if (e.tz === "GMT") {
+    const kst = gmtToKst(e.event_date, e.event_time);
+    return { time: kst.time, suffix: `KST${kst.nextDay ? "+1" : ""}` };
+  }
+  return { time: e.event_time, suffix: e.tz ?? "" };
+}
 function fmtUsd(n: number) {
   if (n >= 1e12) return `$${(n / 1e12).toFixed(2)}T`;
   if (n >= 1e9) return `$${(n / 1e9).toFixed(1)}B`;
@@ -96,6 +105,7 @@ function gcalEventUrl(e: Ev) {
   const sym = e.symbol ? ` (${e.symbol})` : "";
   const text = `${ico} ${ctry}${e.title}${sym}`;
   let dates: string;
+  const q = new URLSearchParams({ action: "TEMPLATE", text });
   if (e.event_time && e.tz === "GMT") {
     const [h, mi] = e.event_time.split(":");
     const s = new Date(`${e.event_date}T${h}:${mi}:00Z`);
@@ -105,6 +115,19 @@ function gcalEventUrl(e: Ev) {
         D.getUTCMinutes(),
       )}00Z`;
     dates = `${f(s)}/${f(en)}`;
+  } else if (e.event_time && e.tz === "Asia/Seoul") {
+    const [h, mi] = e.event_time.split(":").map(Number);
+    const [y, m, d] = e.event_date.split("-").map(Number);
+    const s = new Date(Date.UTC(y, m - 1, d, h - 9, mi));
+    const en = new Date(s.getTime() + 3600_000);
+    const fKst = (D: Date) => {
+      const k = new Date(D.getTime() + 9 * 3600_000);
+      return `${k.getUTCFullYear()}${pad(k.getUTCMonth() + 1)}${pad(k.getUTCDate())}T${pad(k.getUTCHours())}${pad(
+        k.getUTCMinutes(),
+      )}00`;
+    };
+    dates = `${fKst(s)}/${fKst(en)}`;
+    q.set("ctz", "Asia/Seoul");
   } else {
     dates = `${e.event_date.replace(/-/g, "")}/${nextDayYmd(e.event_date)}`;
   }
@@ -116,7 +139,7 @@ function gcalEventUrl(e: Ev) {
   ]
     .filter(Boolean)
     .join(" · ");
-  const q = new URLSearchParams({ action: "TEMPLATE", text, dates });
+  q.set("dates", dates);
   if (det) q.set("details", det);
   return `https://calendar.google.com/calendar/render?${q.toString()}`;
 }
@@ -201,7 +224,7 @@ function loadLocal() {
     const ctry = new Set(ctrySel);
     return events.filter((e) => {
       if (cat.size && !cat.has(e.category)) return false;
-      if (e.country && ctry.size && !ctry.has(e.country)) return false;
+      if (ctry.size && (!e.country || !ctry.has(e.country))) return false;
       if (e.importance < minImp) return false;
       return true;
     });
@@ -231,12 +254,13 @@ function loadLocal() {
     const p = new URLSearchParams();
     if (catSel.length) p.set("category", catSel.join(","));
     if (ctrySel.length) p.set("country", ctrySel.join(","));
+    p.set("minImportance", String(minImp));
     const s = p.toString();
     return s ? `?${s}` : "";
   }
   const personalUrl = feedToken && origin ? `${origin}/api/calendar/ics?u=${feedToken}` : "";
   const filterUrl = origin ? `${origin}/api/calendar/ics${feedQuery()}` : "";
-  const subscribeUrl = personalUrl || filterUrl;
+  const subscribeUrl = filterUrl;
   const webcal = subscribeUrl.replace(/^https?:/, "webcal:");
   const googleSubUrl = subscribeUrl
     ? `https://calendar.google.com/calendar/render?cid=${encodeURIComponent(webcal)}`
@@ -398,9 +422,9 @@ function loadLocal() {
           {savedMsg && <span className="cal-flash">{savedMsg}</span>}
         </div>
         <div className="note" style={{ marginTop: 6 }}>
-          {personalUrl
-            ? "‘구독 URL 복사’는 계정에 저장한 필터가 적용된 개인 피드예요. 구글 캘린더 → 다른 캘린더 + → URL로 추가 에 붙여넣으면 6시간마다 자동 동기화됩니다."
-            : "‘구독 URL 복사’ 후 구글 캘린더 → 다른 캘린더 + → URL로 추가 에 붙여넣으면 자동 동기화돼요. (현재 화면 필터가 그대로 반영됩니다)"}
+          ‘구독 URL 복사’ 후 구글 캘린더 → 다른 캘린더 + → URL로 추가 에 붙여넣으면 자동 동기화돼요.
+          현재 화면 필터가 그대로 반영됩니다
+          {personalUrl ? " · 계정 저장 필터는 ‘내 필터 저장’으로 별도 갱신됩니다." : ""}
         </div>
       </div>
 
@@ -460,7 +484,7 @@ function loadLocal() {
                         >
                           <i className="cal-dot" style={{ background: meta.color }} />
                           {e.category === "macro"
-                            ? `${e.country ?? ""} ${shorten(e.title)}`
+                            ? `${e.country ? COUNTRY_LABEL[e.country] ?? e.country : ""} ${shorten(e.title)}`
                             : e.symbol || shorten(e.title)}
                         </span>
                       );
@@ -531,15 +555,15 @@ function loadLocal() {
 function EventRow({ e, gcal }: { e: Ev; gcal: string }) {
   const meta = KIND_META[kindOf(e)];
   const mcap = mcapLabel(e);
-  const kst = e.event_time && e.tz === "GMT" ? gmtToKst(e.event_date, e.event_time) : null;
+  const time = timedDisplay(e);
   return (
     <div className="cal-ev">
       <span className="cal-ev-bar" style={{ background: meta.color }} />
       <div className="cal-ev-time">
-        {kst ? (
+        {time ? (
           <>
-            <span className="cal-ev-kst">{kst.time}</span>
-            <span className="cal-ev-tz">KST{kst.nextDay ? "+1" : ""}</span>
+            <span className="cal-ev-kst">{time.time}</span>
+            <span className="cal-ev-tz">{time.suffix}</span>
           </>
         ) : (
           <span className="cal-ev-allday">종일</span>

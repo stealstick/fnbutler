@@ -180,6 +180,7 @@ export interface ListOpts {
   q?: string;
   market?: string;
   sector?: string;
+  industry?: string;
   onlyConsensus?: boolean;
   sort?: SortCol;
   dir?: "asc" | "desc";
@@ -200,6 +201,7 @@ export async function listCompanies(opts: ListOpts = {}): Promise<{ total: numbe
   }
   if (opts.market) where.push(`market = ${push(opts.market)}`);
   if (opts.sector) where.push(`sector_code = ${push(opts.sector)}`);
+  if (opts.industry) where.push(`sector = ${push(opts.industry)}`);
   if (opts.onlyConsensus) where.push("has_consensus = 1");
   const w = where.length ? `WHERE ${where.join(" AND ")}` : "";
   const col = SORT_WHITELIST[opts.sort as SortCol] ?? "market_cap";
@@ -355,10 +357,39 @@ export interface SectorAgg {
   pbr_avg: number | null;
   return_rate_avg: number | null;
   cover_securities_sum: number | null;
+  children?: SectorChildAgg[];
+}
+
+export interface SectorChildAgg {
+  sector_code: string;
+  industry: string;
+  label: string;
+  company_count: number;
+  market_cap_sum: number | null;
 }
 
 export async function listSectorAggs(): Promise<SectorAgg[]> {
-  return all<SectorAgg>("SELECT * FROM v_sector_agg ORDER BY market_cap_sum DESC NULLS LAST");
+  const sectors = await all<SectorAgg>("SELECT * FROM v_sector_agg ORDER BY market_cap_sum DESC NULLS LAST");
+  const children = await all<SectorChildAgg>(
+    `SELECT
+       sector_code,
+       sector AS industry,
+       regexp_replace(regexp_replace(sector, ' (제조업|서비스업|사업|업)$', ''), ' 및 ', '·', 'g') AS label,
+       COUNT(*)::int AS company_count,
+       SUM(market_cap) AS market_cap_sum
+     FROM companies
+     WHERE sector_code IS NOT NULL AND sector IS NOT NULL AND sector <> ''
+     GROUP BY sector_code, sector
+     HAVING COUNT(*) > 0
+     ORDER BY sector_code, SUM(market_cap) DESC NULLS LAST, COUNT(*) DESC, sector`,
+  );
+  const bySector = new Map<string, SectorChildAgg[]>();
+  for (const child of children) {
+    const group = bySector.get(child.sector_code) ?? [];
+    group.push(child);
+    bySector.set(child.sector_code, group);
+  }
+  return sectors.map((s) => ({ ...s, children: bySector.get(s.sector_code) ?? [] }));
 }
 
 export async function getSectorAgg(code: string): Promise<SectorAgg | undefined> {
@@ -439,12 +470,112 @@ export interface CalendarQuery {
 const dispRank = (e: CalendarEventRow) =>
   e.category === "macro" ? (e.subcategory === "central_bank" ? 0 : 1) : 2;
 
+const calPad = (n: number) => String(n).padStart(2, "0");
+
+function normalizeCalendarTime(e: CalendarEventRow): CalendarEventRow {
+  const title = translateCalendarTitle(e.title);
+  if (!e.event_time || e.tz !== "GMT") return title === e.title ? e : { ...e, title };
+  const dt = new Date(`${e.event_date}T${e.event_time}:00Z`);
+  const kst = new Date(dt.getTime() + 9 * 3600_000);
+  return {
+    ...e,
+    event_date: `${kst.getUTCFullYear()}-${calPad(kst.getUTCMonth() + 1)}-${calPad(kst.getUTCDate())}`,
+    event_time: `${calPad(kst.getUTCHours())}:${calPad(kst.getUTCMinutes())}`,
+    tz: "Asia/Seoul",
+    title,
+  };
+}
+
+function translateCalendarTitle(title: string): string {
+  const t = title.trim();
+  const rules: Array<[RegExp, string]> = [
+    [/^FOMC Economic Projections$/i, "FOMC 경제전망"],
+    [/^FOMC Press Conference$/i, "FOMC 기자회견"],
+    [/^Fed Interest Rate Decision$/i, "미 연준 기준금리 결정"],
+    [/^FOMC Statement$/i, "FOMC 성명서"],
+    [/^Interest Rate Decision$/i, "기준금리 결정"],
+    [/^BoJ Interest Rate Decision$/i, "일본은행 기준금리 결정"],
+    [/^BoJ Monetary Policy Statement$/i, "일본은행 통화정책 성명서"],
+    [/^BoJ Monetary Policy Meeting Minutes$/i, "일본은행 통화정책회의 의사록"],
+    [/^Monetary Policy Meeting Minutes$/i, "통화정책회의 의사록"],
+    [/^ECB Interest Rate Decision$/i, "ECB 기준금리 결정"],
+    [/^Tokyo Core CPI/i, "도쿄 근원 소비자물가지수(Core CPI)"],
+    [/^Core CPI/i, "근원 소비자물가지수(Core CPI)"],
+    [/^CPI/i, "소비자물가지수(CPI)"],
+    [/^Core PPI/i, "근원 생산자물가지수(Core PPI)"],
+    [/^PPI/i, "생산자물가지수(PPI)"],
+    [/^PCE Price Index/i, "PCE 물가지수"],
+    [/^Core PCE Price Index/i, "근원 PCE 물가지수"],
+    [/^Nonfarm Payrolls/i, "비농업 고용"],
+    [/^Unemployment Rate/i, "실업률"],
+    [/^Initial Jobless Claims/i, "신규 실업수당 청구건수"],
+    [/^Continuing Jobless Claims/i, "계속 실업수당 청구건수"],
+    [/^Retail Sales/i, "소매판매"],
+    [/^Industrial Production/i, "산업생산"],
+    [/^Manufacturing Production/i, "제조업 생산"],
+    [/^Capacity Utilization/i, "설비가동률"],
+    [/^Adjusted Current Account/i, "계절조정 경상수지"],
+    [/^Current Account n\.s\.a\./i, "경상수지(비계절조정)"],
+    [/^Current Account/i, "경상수지"],
+    [/^ADP Employment Change Weekly/i, "ADP 주간 고용 변화"],
+    [/^ADP Nonfarm Employment Change/i, "ADP 민간고용 변화"],
+    [/^Average Hourly Earnings/i, "평균 시간당 임금"],
+    [/^Jobless Claims 4-Week Avg\./i, "실업수당 청구 4주 평균"],
+    [/^Nonfarm Productivity/i, "비농업 생산성"],
+    [/^JOLTs Job Openings/i, "JOLTs 구인건수"],
+    [/^Labor Force Participation Rate/i, "경제활동참가율"],
+    [/^ISM Manufacturing Employment/i, "ISM 제조업 고용"],
+    [/^ISM Manufacturing New Orders/i, "ISM 제조업 신규주문"],
+    [/^ISM Manufacturing Prices/i, "ISM 제조업 가격"],
+    [/^ISM Manufacturing PMI/i, "ISM 제조업 PMI"],
+    [/^ISM Non-Manufacturing Business Activity/i, "ISM 서비스업 사업활동"],
+    [/^ISM Non-Manufacturing Employment/i, "ISM 서비스업 고용"],
+    [/^ISM Non-Manufacturing New Orders/i, "ISM 서비스업 신규주문"],
+    [/^ISM Non-Manufacturing Prices/i, "ISM 서비스업 가격"],
+    [/^ISM Non-Manufacturing PMI/i, "ISM 서비스업 PMI"],
+    [/^S&P Global Manufacturing PMI/i, "S&P 글로벌 제조업 PMI"],
+    [/^S&P Global Services PMI/i, "S&P 글로벌 서비스업 PMI"],
+    [/^S&P Global Composite PMI/i, "S&P 글로벌 종합 PMI"],
+    [/^Manufacturing & Services PMI/i, "제조업·서비스업 PMI"],
+    [/^RatingDog Services PMI/i, "RatingDog 서비스업 PMI"],
+    [/^Manufacturing PMI/i, "제조업 PMI"],
+    [/^Services PMI/i, "서비스업 PMI"],
+    [/^Composite PMI/i, "종합 PMI"],
+    [/^M3 Money Supply/i, "M3 통화공급"],
+    [/^Trade Balance/i, "무역수지"],
+    [/^CB Employment Trends Index/i, "컨퍼런스보드 고용추세지수"],
+    [/^NY Empire State Manufacturing Index/i, "뉴욕 엠파이어스테이트 제조업지수"],
+    [/^Philadelphia Fed Manufacturing Index/i, "필라델피아 연은 제조업지수"],
+    [/^NY Fed 1-Year Consumer Inflation Expectations/i, "뉴욕 연은 1년 기대인플레이션"],
+    [/^NBS Press Conference$/i, "중국 국가통계국 기자회견"],
+    [/^Consumer Confidence/i, "소비자신뢰지수"],
+    [/^Consumer Sentiment/i, "소비자심리지수"],
+    [/^Durable Goods Orders/i, "내구재 주문"],
+    [/^Factory Orders ex transportation/i, "운송 제외 공장주문"],
+    [/^Factory Orders/i, "공장주문"],
+    [/^Housing Starts/i, "주택착공"],
+    [/^Building Permits/i, "건축허가"],
+    [/^GDP Price Index/i, "GDP 물가지수"],
+    [/^GDP Annualized/i, "GDP 연율"],
+    [/^GDP Capital Expenditure/i, "GDP 설비투자"],
+    [/^GDP External Demand/i, "GDP 대외수요"],
+    [/^GDP Private Consumption/i, "GDP 민간소비"],
+    [/^GDP/i, "GDP"],
+    [/^FOMC Member (.+) Speaks$/i, "FOMC 위원 $1 발언"],
+    [/^Fed Chair (.+) Speaks$/i, "연준 의장 $1 발언"],
+  ];
+  for (const [re, ko] of rules) {
+    if (re.test(t)) return t.replace(re, ko);
+  }
+  return t;
+}
+
 export async function getCalendarEvents(q: CalendarQuery = {}): Promise<CalendarEventRow[]> {
-  let evs = (await userStore.getAllCalendarEvents()) as CalendarEventRow[];
+  let evs = ((await userStore.getAllCalendarEvents()) as CalendarEventRow[]).map(normalizeCalendarTime);
   if (q.from) evs = evs.filter((e) => e.event_date >= q.from!);
   if (q.to) evs = evs.filter((e) => e.event_date <= q.to!);
   if (q.categories?.length) evs = evs.filter((e) => q.categories!.includes(e.category));
-  if (q.countries?.length) evs = evs.filter((e) => !e.country || q.countries!.includes(e.country));
+  if (q.countries?.length) evs = evs.filter((e) => e.country != null && q.countries!.includes(e.country));
   if (q.minImportance != null) evs = evs.filter((e) => e.importance >= q.minImportance!);
   evs.sort(
     (a, b) =>
@@ -458,7 +589,7 @@ export async function getCalendarEvents(q: CalendarQuery = {}): Promise<Calendar
 }
 
 export async function getCalendarStats() {
-  const evs = (await userStore.getAllCalendarEvents()) as CalendarEventRow[];
+  const evs = ((await userStore.getAllCalendarEvents()) as CalendarEventRow[]).map(normalizeCalendarTime);
   const dates = evs.map((e) => e.event_date).sort();
   return {
     total: evs.length,

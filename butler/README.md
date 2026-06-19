@@ -24,9 +24,6 @@ npm run db:setup:local
 # 스키마 생성
 npm run db:init
 
-# 기존 SQLite 백필 스냅샷을 Postgres로 이관
-npm run db:migrate-sqlite
-
 # 개발 서버
 npm run dev
 ```
@@ -45,8 +42,7 @@ npm run backfill:changes
 npm run import:har -- ~/Downloads/www.butler.works.har
 ```
 
-이미 백필된 로컬 `db/butler.db` 가 있으면 먼저 `npm run db:migrate-sqlite` 로 옮기는 편이
-빠르고 안전하다. 위 수집 명령은 누락분 보강이나 미래 재수집용이다.
+위 수집 명령은 누락분 보강이나 미래 재수집용이다.
 
 ## 매일 갱신
 
@@ -79,8 +75,6 @@ npm run postgres:import:cloud
 
 ```text
 db/postgres/schema.sql      Postgres 운영 스키마
-db/schema.sql               레거시 SQLite 스키마(이관 참고용)
-scripts/migrate-sqlite-to-postgres.ts
 scripts/refresh-daily.ts
 scripts/gcloud-postgres-bootstrap.sh
 scripts/gcloud-postgres-import-local.sh

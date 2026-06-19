@@ -9,6 +9,7 @@ export async function GET(req: NextRequest) {
     q: sp.get("q") ?? undefined,
     market: sp.get("market") ?? undefined,
     sector: sp.get("sector") ?? undefined,
+    industry: sp.get("industry") ?? undefined,
     onlyConsensus: sp.get("consensus") === "1",
     sort: (sp.get("sort") as ListOpts["sort"]) ?? "market_cap",
     dir: sp.get("dir") === "asc" ? "asc" : "desc",

@@ -7,7 +7,6 @@ data/
 *.db
 *.db-shm
 *.db-wal
-*.sqlite3
 .gstack/
 node_modules/
 .next/

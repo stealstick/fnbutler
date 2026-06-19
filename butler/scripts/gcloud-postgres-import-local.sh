@@ -4,7 +4,6 @@
 # Run after:
 #   npm run db:setup:local
 #   npm run db:init
-#   npm run db:migrate-sqlite
 set -euo pipefail
 
 PROJECT="${PROJECT:-protein-test-469413}"

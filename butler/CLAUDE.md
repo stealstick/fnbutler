@@ -5,7 +5,7 @@ keystone 는 `butler.works` 데이터를 자체 정규화 DB로 모아 기업/�
 
 ## 현재 운영 원칙
 
-- 운영 DB는 **Postgres** 다. SQLite `db/butler.db` 는 레거시 백필 스냅샷/이관 소스일 뿐이다.
+- 운영 DB는 **Postgres** 다.
 - 런타임은 **Cloud Run + Cloud SQL(Postgres)** 이다.
 - 일일 갱신은 **Cloud Scheduler -> Cloud Run Job -> Postgres 직접 업데이트** 흐름이다.
 - DB 파일을 GCS에 올리거나 이미지에 굽는 흐름으로 되돌리지 말 것.
@@ -36,7 +36,6 @@ keystone 는 `butler.works` 데이터를 자체 정규화 DB로 모아 기업/�
 ```bash
 npm run db:setup:local
 npm run db:init
-npm run db:migrate-sqlite
 npm run build
 npm run refresh
 npm run refresh:calendar
@@ -83,7 +82,7 @@ Cloud Scheduler를 만든다. 비용을 30,000원/월 아래로 두기 위해 Cl
 ## 주의
 
 - `src/lib/db.ts` 는 `pg` Pool 기반 async API다. 새 조회/수집 코드는 `await` 를 빠뜨리지 말 것.
-- `better-sqlite3`, `BUTLER_DB_PATH`, GCS `butler.db` 배포 경로를 되살리지 말 것.
+- DB 파일을 런타임 데이터 저장소로 되살리지 말 것.
 - 한국어 UI, 상승=빨강/하락=파랑(한국식).
 - 숫자 포맷은 `src/lib/format.ts` 를 우선 사용한다.
 - 문서 변경 시 `README.md`, `DEPLOYMENT.md`, 이 파일을 같이 맞춘다.

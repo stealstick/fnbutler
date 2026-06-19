@@ -12,7 +12,9 @@ USER_AGENT = (
     "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"
 )
 
-DATABASE_URL = os.environ.get("DATABASE_URL") or f"sqlite:///{PROJECT_ROOT / 'data' / 'fnguide.db'}"
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL is required. Use a PostgreSQL connection string.")
 COOKIE_FILE = Path(os.environ.get("FNGUIDE_COOKIE_FILE") or PROJECT_ROOT / ".secrets" / "cookie.txt")
 PDF_DIR = PROJECT_ROOT / "data" / "pdfs"
 REQUEST_DELAY = float(os.environ.get("FNGUIDE_REQUEST_DELAY", "1.0"))

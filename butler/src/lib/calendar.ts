@@ -595,7 +595,7 @@ export function buildIcs(
     if (ev.previous) descParts.push(`이전 ${ev.previous}`);
     if (ev.actual) descParts.push(`실제 ${ev.actual}`);
     if (ev.note) descParts.push(ev.note);
-    if (ev.event_time && ev.tz) descParts.push(`발표 ${ev.event_time} ${ev.tz}`);
+    if (ev.event_time && ev.tz) descParts.push(`발표 ${ev.event_time} ${ev.tz === "Asia/Seoul" ? "KST" : ev.tz}`);
     if (ev.url) descParts.push(ev.url);
 
     lines.push("BEGIN:VEVENT");
@@ -617,6 +617,22 @@ export function buildIcs(
       const end = `${endDt.getUTCFullYear()}${String(endDt.getUTCMonth() + 1).padStart(2, "0")}${String(endDt.getUTCDate()).padStart(2, "0")}T${String(endDt.getUTCHours()).padStart(2, "0")}${String(endDt.getUTCMinutes()).padStart(2, "0")}00Z`;
       lines.push(`DTSTART:${start}`);
       lines.push(`DTEND:${end}`);
+    } else if (ev.event_time && ev.tz === "Asia/Seoul") {
+      const [h, mi] = ev.event_time.split(":");
+      const start = `${ymd(ev.event_date)}T${h}${mi}00`;
+      const endDt = new Date(
+        Date.UTC(
+          Number(ev.event_date.slice(0, 4)),
+          Number(ev.event_date.slice(5, 7)) - 1,
+          Number(ev.event_date.slice(8, 10)),
+          Number(h) - 9,
+          Number(mi),
+        ) + 3600_000,
+      );
+      const endKst = new Date(endDt.getTime() + 9 * 3600_000);
+      const end = `${endKst.getUTCFullYear()}${String(endKst.getUTCMonth() + 1).padStart(2, "0")}${String(endKst.getUTCDate()).padStart(2, "0")}T${String(endKst.getUTCHours()).padStart(2, "0")}${String(endKst.getUTCMinutes()).padStart(2, "0")}00`;
+      lines.push(`DTSTART;TZID=Asia/Seoul:${start}`);
+      lines.push(`DTEND;TZID=Asia/Seoul:${end}`);
     } else {
       // 실적/시각미상: 종일 이벤트
       lines.push(`DTSTART;VALUE=DATE:${ymd(ev.event_date)}`);

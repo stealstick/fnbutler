@@ -21,7 +21,8 @@ export async function GET(req: NextRequest) {
   let categories = sp.get("category")?.split(",").map((s) => s.trim()).filter(Boolean);
   let countries = sp.get("country")?.split(",").map((s) => s.trim()).filter(Boolean);
   let subcategories: string[] | undefined;
-  let minImportance: number | undefined;
+  let minImportance: number | undefined = Number(sp.get("minImportance"));
+  if (!Number.isFinite(minImportance) || minImportance < 1 || minImportance > 3) minImportance = undefined;
   let name = "keystone 경제·실적 캘린더";
 
   // 개인 구독 토큰이 있으면 계정 저장 필터를 적용(쿼리 필터보다 우선).

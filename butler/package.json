@@ -10,7 +10,6 @@
     "lint": "next lint",
     "db:setup:local": "tsx scripts/setup-local-postgres.ts",
     "db:init": "tsx scripts/init-db.ts",
-    "db:migrate-sqlite": "tsx scripts/migrate-sqlite-to-postgres.ts --source db/butler.db",
     "ingest:companies": "tsx scripts/ingest.ts --companies",
     "ingest:seed": "tsx scripts/ingest.ts --companies --detail --limit 40",
     "ingest:detail": "tsx scripts/ingest.ts --detail",

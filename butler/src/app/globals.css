@@ -184,6 +184,25 @@ table.grid th.sortable.active { color: var(--accent); }
   border-radius: 999px; padding: 0 6px; min-width: 18px; text-align: center;
 }
 .tab.active .tab-count { color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.subtabs {
+  display: flex; flex-wrap: wrap; gap: 7px;
+  margin: -4px 0 14px; padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.subtab {
+  display: inline-flex; align-items: center; gap: 6px;
+  max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  background: color-mix(in srgb, var(--panel-2) 70%, white 30%);
+  border: 1px solid transparent; color: var(--muted);
+  border-radius: 7px; padding: 6px 10px; font-size: 12px; cursor: pointer;
+  transition: color .12s, border-color .12s, background .12s;
+}
+.subtab:hover { color: var(--text); border-color: var(--border); }
+.subtab.active {
+  color: var(--accent); font-weight: 600;
+  background: color-mix(in srgb, var(--accent-soft) 62%, white 38%);
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
+}
 
 .rowlink { cursor: pointer; }
 table.grid tbody tr.selected { background: color-mix(in srgb, var(--broker) 14%, transparent); box-shadow: inset 3px 0 0 var(--broker); }
