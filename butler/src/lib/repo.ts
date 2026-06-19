@@ -328,21 +328,23 @@ export async function getChanges(corpCode: string, limit = 100): Promise<ChangeR
   );
 }
 
-export async function getRecentChanges(limit = 100, entityType?: string): Promise<ChangeRow[]> {
-  if (entityType) {
-    return all<ChangeRow>(
-      `SELECT c.*, co.name AS corp_name FROM change_logs c
-       JOIN companies co ON co.corp_code = c.corp_code
-       WHERE c.entity_type = $1
-       ORDER BY COALESCE(c.occurred_at, c.observed_at) DESC, c.id DESC LIMIT $2`,
-      [entityType, limit],
-    );
-  }
+export async function getRecentChanges(limit = 100, entityType?: string, changeKind?: string): Promise<ChangeRow[]> {
+  const where: string[] = [];
+  const params: unknown[] = [];
+  const push = (v: unknown) => {
+    params.push(v);
+    return `$${params.length}`;
+  };
+  if (entityType) where.push(`c.entity_type = ${push(entityType)}`);
+  if (changeKind) where.push(`c.change_kind = ${push(changeKind)}`);
+  const w = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  params.push(limit);
   return all<ChangeRow>(
     `SELECT c.*, co.name AS corp_name FROM change_logs c
      JOIN companies co ON co.corp_code = c.corp_code
-     ORDER BY COALESCE(c.occurred_at, c.observed_at) DESC, c.id DESC LIMIT $1`,
-    [limit],
+     ${w}
+     ORDER BY COALESCE(c.occurred_at, c.observed_at) DESC, c.id DESC LIMIT $${params.length}`,
+    params,
   );
 }
 

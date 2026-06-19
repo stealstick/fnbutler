@@ -108,11 +108,25 @@ export default async function Dashboard() {
       {/* 최근 목표주가 상향/하향 */}
       <div className="two-col">
         <div className="panel">
-          <h2>최근 목표주가 상향</h2>
+          <h2>
+            <Link href="/changes?type=target_price&kind=up" className="panel-title-link">
+              최근 목표주가 상향
+            </Link>
+            <Link href="/changes?type=target_price&kind=up" className="btn ghost panel-title-action">
+              전체 보기 →
+            </Link>
+          </h2>
           <MoverList rows={ups} kind="up" />
         </div>
         <div className="panel">
-          <h2>최근 목표주가 하향</h2>
+          <h2>
+            <Link href="/changes?type=target_price&kind=down" className="panel-title-link">
+              최근 목표주가 하향
+            </Link>
+            <Link href="/changes?type=target_price&kind=down" className="btn ghost panel-title-action">
+              전체 보기 →
+            </Link>
+          </h2>
           <MoverList rows={downs} kind="down" />
         </div>
       </div>

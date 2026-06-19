@@ -10,14 +10,26 @@ const FILTERS = [
   { k: "consensus_avg", label: "평균목표가" },
   { k: "financial", label: "실적 QoQ/YoY" },
 ];
+const KIND_FILTERS = [
+  { k: "", label: "전체 방향" },
+  { k: "up", label: "상향" },
+  { k: "down", label: "하향" },
+  { k: "new", label: "신규" },
+];
 
 export default async function ChangesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ type?: string }>;
+  searchParams: Promise<{ type?: string; kind?: string }>;
 }) {
-  const { type } = await searchParams;
-  const changes = (await getRecentChanges(150, type || undefined)) as Array<ChangeRow & { corp_name?: string }>;
+  const { type, kind } = await searchParams;
+  const activeType = FILTERS.some((f) => f.k === (type || "")) ? type || "" : "";
+  const activeKind = KIND_FILTERS.some((f) => f.k === (kind || "")) ? kind || "" : "";
+  const changes = (await getRecentChanges(
+    150,
+    activeType || undefined,
+    activeKind || undefined,
+  )) as Array<ChangeRow & { corp_name?: string }>;
   const stats = await getStats();
 
   return (
@@ -37,9 +49,21 @@ export default async function ChangesPage({
           {FILTERS.map((f) => (
             <Link
               key={f.k}
-              href={f.k ? `/changes?type=${f.k}` : "/changes"}
-              className={"btn ghost" + ((type || "") === f.k ? " " : "")}
-              style={(type || "") === f.k ? { borderColor: "var(--accent)", color: "var(--text)" } : {}}
+              href={changeHref(f.k, activeKind)}
+              className="btn ghost"
+              style={activeType === f.k ? { borderColor: "var(--accent)", color: "var(--text)" } : {}}
+            >
+              {f.label}
+            </Link>
+          ))}
+        </div>
+        <div className="toolbar">
+          {KIND_FILTERS.map((f) => (
+            <Link
+              key={f.k}
+              href={changeHref(activeType, f.k)}
+              className="btn ghost"
+              style={activeKind === f.k ? { borderColor: "var(--accent)", color: "var(--text)" } : {}}
             >
               {f.label}
             </Link>
@@ -72,8 +96,8 @@ export default async function ChangesPage({
                     <span className="pill">{labelEntity(c.entity_type)}</span>
                   </td>
                   <td className="l">{c.entity_key || c.field || "-"}</td>
-                  <td className="mono muted">{c.old_value ?? "-"}</td>
-                  <td className="mono">{c.new_value ?? "-"}</td>
+                  <td className="mono muted">{displayValue(c, c.old_value)}</td>
+                  <td className="mono">{displayValue(c, c.new_value)}</td>
                   <td className={"mono " + kindClass(c.change_kind)}>
                     {c.delta_pct != null ? pct(c.delta_pct) : c.change_kind === "new" ? "신규" : "-"}
                   </td>
@@ -98,6 +122,14 @@ export default async function ChangesPage({
   );
 }
 
+function changeHref(type: string, kind: string) {
+  const p = new URLSearchParams();
+  if (type) p.set("type", type);
+  if (kind) p.set("kind", kind);
+  const q = p.toString();
+  return q ? `/changes?${q}` : "/changes";
+}
+
 function S({ n, l }: { n: number; l: string }) {
   return (
     <div className="s">
@@ -118,4 +150,15 @@ function kindClass(k: string | null) {
   if (k === "up" || k === "yoy") return "up";
   if (k === "down") return "down";
   return "flat";
+}
+function displayValue(c: ChangeRow, v: string | null) {
+  if (v == null || v === "") return "-";
+  const n = Number(v);
+  if (
+    Number.isFinite(n) &&
+    (c.entity_type === "target_price" || c.entity_type === "consensus_avg" || c.field === "target_price_avg")
+  ) {
+    return num(n);
+  }
+  return v;
 }
