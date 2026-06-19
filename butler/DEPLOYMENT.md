@@ -94,7 +94,8 @@ gcloud run jobs execute fnbutler-calendar-refresh \
 GitHub의 `.github/workflows/refresh.yml` 은 같은 Job들을 수동 실행하는 비상 버튼이다.
 DB 파일을 내려받거나 이미지를 다시 굽지 않는다.
 
-FMP 무료 플랜은 250 calls/day 기준이다. 일일 Job은 기본적으로 `FMP_DAILY_CALL_BUDGET=240`만 쓰고,
+FMP 무료 플랜은 250 calls/day 기준이다. 일일 Job은 기본적으로 `FMP_DAILY_CALL_BUDGET=240`만 쓰고
+`FMP_CALL_DELAY_MS=2500`으로 천천히 호출해 분당 rate limit도 피한다.
 Nasdaq 기업 중 `fmp_estimates_at`이 오래된 순서로 연간 추정치를 갱신한다. 무료 플랜에서
 `analyst-estimates?period=quarter`와 `price-target-summary-bulk`는 제한되므로, 기본값으로는
 연간 추정치 기반 `YoY`/`EPS성장E`만 채운다. 목표가는 `FMP_TARGET_CALLS_PER_DAY`를 별도로 주면

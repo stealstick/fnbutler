@@ -5,6 +5,7 @@
  *   FMP_API_KEY=... tsx scripts/backfill-fmp-nasdaq-estimates.ts --budget 240
  *   FMP_API_KEY=... tsx scripts/backfill-fmp-nasdaq-estimates.ts --symbol AAPL --budget 1
  *   FMP_API_KEY=... tsx scripts/backfill-fmp-nasdaq-estimates.ts --estimate-calls 220 --target-calls 20
+ *   FMP_API_KEY=... tsx scripts/backfill-fmp-nasdaq-estimates.ts --call-delay-ms 2500
  */
 import { closeDb, getDb, migrate, nowIso, query } from "../src/lib/db";
 import { backfillFmpNasdaqEstimates } from "../src/lib/fmp";
@@ -33,6 +34,7 @@ async function main() {
     estimateCalls,
     targetCalls,
     estimateLimit,
+    callDelayMs: Number(argOf("call-delay-ms") || process.env.FMP_CALL_DELAY_MS || "2500"),
     corpCode: argOf("corp"),
     symbol: argOf("symbol"),
     log: has("quiet") ? undefined : (message) => process.stdout.write(message),

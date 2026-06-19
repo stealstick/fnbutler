@@ -3,6 +3,7 @@ import { fetchUsdKrwRate } from "./nasdaq";
 
 const FMP_BASE = "https://financialmodelingprep.com/stable";
 const DEFAULT_CALL_BUDGET = 240;
+const DEFAULT_CALL_DELAY_MS = 2500;
 const DEFAULT_ESTIMATE_LIMIT = 10;
 const ESTIMATE_SOURCE = "fmp:analyst-estimates";
 const TARGET_SOURCE = "fmp:price-target";
@@ -35,6 +36,7 @@ export interface FmpNasdaqBackfillOptions {
   estimateCalls?: number;
   targetCalls?: number;
   estimateLimit?: number;
+  callDelayMs?: number;
   corpCode?: string;
   symbol?: string;
   currentYear?: number;
@@ -72,21 +74,32 @@ function analystCount(row: FmpAnnualEstimate): number | null {
   return n > 0 ? Math.round(n) : null;
 }
 
-async function fetchFmpJson<T>(path: string, apiKey: string, params: Record<string, string | number>): Promise<T> {
+async function fetchFmpJson<T>(
+  path: string,
+  apiKey: string,
+  params: Record<string, string | number>,
+  retries = 2,
+): Promise<T> {
   const sp = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) sp.set(k, String(v));
   sp.set("apikey", apiKey);
   const url = `${FMP_BASE}${path}?${sp}`;
-  const res = await fetch(url, { headers: { accept: "application/json" } });
-  const text = await res.text();
-  if (!res.ok) {
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(url, { headers: { accept: "application/json" } });
+    const text = await res.text();
+    if (res.ok) {
+      try {
+        return JSON.parse(text) as T;
+      } catch {
+        throw new Error(`FMP non-JSON response: ${text.slice(0, 120)}`);
+      }
+    }
     const msg = text.trim().replace(/\s+/g, " ").slice(0, 180);
+    if ((res.status === 429 || res.status >= 500) && attempt < retries) {
+      await sleep(res.status === 429 ? 65_000 : 5_000 * (attempt + 1));
+      continue;
+    }
     throw new Error(`FMP HTTP ${res.status}${msg ? `: ${msg}` : ""}`);
-  }
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    throw new Error(`FMP non-JSON response: ${text.slice(0, 120)}`);
   }
 }
 
@@ -246,6 +259,10 @@ export async function backfillFmpNasdaqEstimates(
   const estimateCalls = Math.max(0, Math.floor(options.estimateCalls ?? DEFAULT_CALL_BUDGET));
   const targetCalls = Math.max(0, Math.floor(options.targetCalls ?? 0));
   const estimateLimit = Math.max(1, Math.floor(options.estimateLimit ?? DEFAULT_ESTIMATE_LIMIT));
+  const callDelayMs = Math.max(
+    0,
+    Math.floor(options.callDelayMs ?? Number(process.env.FMP_CALL_DELAY_MS || DEFAULT_CALL_DELAY_MS)),
+  );
   const currentYear = options.currentYear ?? new Date().getFullYear();
   const usdKrw = await fetchUsdKrwRate();
 
@@ -269,7 +286,7 @@ export async function backfillFmpNasdaqEstimates(
       log(`  estimates [${i + 1}/${estimateTargets.length}] ${c.stock_code} ERROR ${(e as Error).message}\n`);
     } finally {
       usedEstimateCalls++;
-      await sleep(120);
+      if (callDelayMs > 0) await sleep(callDelayMs);
     }
   }
 
@@ -285,7 +302,7 @@ export async function backfillFmpNasdaqEstimates(
       log(`  targets [${i + 1}/${targetTargets.length}] ${c.stock_code} ERROR ${(e as Error).message}\n`);
     } finally {
       usedTargetCalls++;
-      await sleep(120);
+      if (callDelayMs > 0) await sleep(callDelayMs);
     }
   }
 

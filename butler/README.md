@@ -56,7 +56,7 @@ npm run refresh:calendar
 - 시세/목표가는 값이 바뀐 경우에만 UPDATE 하므로 같은 데이터를 여러 번 돌려도 안전하다.
 - 운영 환경에서는 Cloud Scheduler/GitHub Actions가 Cloud Run Job `fnbutler-refresh` 를 매일 18:30 KST에 실행한다.
 - 일일 갱신은 Nasdaq screener의 시총 상위 500개 기업도 `companies`에 보강한다. 가져오지 못하는 PER/PBR/목표가/재무 성장률은 화면에서 `-`로 표시한다.
-- `FMP_API_KEY`가 있으면 FMP 무료 플랜 한도에 맞춰 Nasdaq 연간 컨센서스 추정치를 회전 보강한다. 기본 `FMP_DAILY_CALL_BUDGET=240` 이라 500개 기업은 약 2일에 한 바퀴 돈다. 무료 플랜에서 확인된 `period=annual`만 사용하므로 `YoY`/`EPS성장E`는 채워지고, 분기 추정 기반 `QoQ 현재→다음E`는 유료 분기 endpoint 권한이 없으면 `-`로 남는다.
+- `FMP_API_KEY`가 있으면 FMP 무료 플랜 한도에 맞춰 Nasdaq 연간 컨센서스 추정치를 회전 보강한다. 기본 `FMP_DAILY_CALL_BUDGET=240`, `FMP_CALL_DELAY_MS=2500` 이라 500개 기업은 약 2일에 한 바퀴 돈다. 무료 플랜에서 확인된 `period=annual`만 사용하므로 `YoY`/`EPS성장E`는 채워지고, 분기 추정 기반 `QoQ 현재→다음E`는 유료 분기 endpoint 권한이 없으면 `-`로 남는다.
 - Nasdaq 실적 캘린더는 수집 범위 안에서 시총 상위 500개 해외/미국 상장기업 실적발표 일정을 캘린더에 넣는다.
 - 국내 100대 기업 DART 잠정실적 공시는 `DART_API_KEY` secret이 있는 `fnbutler-calendar-refresh`
   Job이 매주 토요일 08:00 KST에 캘린더 전용으로 보강한다.
@@ -99,6 +99,7 @@ src/lib/ingest.ts           async upsert + 변경 감지
 | `DART_API_KEY` | 국내 실적발표 캘린더 수집용 |
 | `FMP_API_KEY` | Nasdaq 연간 컨센서스 추정치 수집용 |
 | `FMP_DAILY_CALL_BUDGET` | FMP 하루 호출 예산(기본 240, 무료 250 calls/day 여유분 보존) |
+| `FMP_CALL_DELAY_MS` | FMP 호출 간격(기본 2500ms, 무료 플랜 rate limit 보호) |
 | `FMP_TARGET_CALLS_PER_DAY` | FMP 목표가 per-symbol 호출 예산(기본 0, bulk target은 무료 제한) |
 
 ## 데이터 모델

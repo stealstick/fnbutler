@@ -146,6 +146,7 @@ async function main() {
         estimateCalls,
         targetCalls,
         estimateLimit: Number(argOf("fmp-estimate-limit") || process.env.FMP_ESTIMATE_LIMIT || "10"),
+        callDelayMs: Number(argOf("fmp-call-delay-ms") || process.env.FMP_CALL_DELAY_MS || "2500"),
         log: (message) => process.stdout.write(`   fmp-nasdaq-estimates ${message}`),
       });
       fmpNasdaqMsg = `estimateOk=${summary.estimateOk}/${summary.estimateTargeted},estimateFail=${summary.estimateFail},targetOk=${summary.targetOk}/${summary.targetTargeted},targetFail=${summary.targetFail},calls=${summary.estimateCalls + summary.targetCalls},writes=${summary.writes}`;
