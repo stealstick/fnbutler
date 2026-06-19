@@ -8,6 +8,10 @@ const YAHOO_HEADERS = {
   accept: "application/json,text/plain,*/*",
 };
 const YAHOO_MODULES = "financialData,earningsTrend,price";
+const YAHOO_CRUMB_URLS = [
+  "https://query1.finance.yahoo.com/v1/test/getcrumb",
+  "https://query2.finance.yahoo.com/v1/test/getcrumb",
+];
 const ESTIMATE_SOURCE = "yahoo:earningsTrend";
 const TARGET_SOURCE = "yahoo:financialData";
 
@@ -117,14 +121,23 @@ async function getYahooSession(log: (message: string) => void = () => {}): Promi
       const cookie = cookieHeader(getSetCookies(fc.headers));
       if (!cookie) throw new Error("Yahoo did not provide a session cookie");
 
-      const crumbRes = await fetch("https://query1.finance.yahoo.com/v1/test/getcrumb", {
-        headers: { ...YAHOO_HEADERS, cookie },
-      });
-      const crumb = (await crumbRes.text()).trim();
-      if (!crumbRes.ok || !crumb || /<html|Too Many Requests|Unauthorized/i.test(crumb)) {
-        throw new Error(`Yahoo crumb failed: HTTP ${crumbRes.status}`);
+      let crumb = "";
+      let crumbHeaders: Headers | null = null;
+      let crumbError: Error | null = null;
+      for (const crumbUrl of YAHOO_CRUMB_URLS) {
+        const crumbRes = await fetch(crumbUrl, {
+          headers: { ...YAHOO_HEADERS, cookie },
+        });
+        const text = (await crumbRes.text()).trim();
+        if (crumbRes.ok && text && !/<html|Too Many Requests|Unauthorized/i.test(text)) {
+          crumb = text;
+          crumbHeaders = crumbRes.headers;
+          break;
+        }
+        crumbError = new Error(`Yahoo crumb failed: HTTP ${crumbRes.status}`);
       }
-      const cookie2 = cookieHeader([...getSetCookies(fc.headers), ...getSetCookies(crumbRes.headers)]) || cookie;
+      if (!crumb || !crumbHeaders) throw crumbError ?? new Error("Yahoo crumb failed");
+      const cookie2 = cookieHeader([...getSetCookies(fc.headers), ...getSetCookies(crumbHeaders)]) || cookie;
       return { cookie: cookie2, crumb };
     } catch (e) {
       lastError = e as Error;
