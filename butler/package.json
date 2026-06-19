@@ -19,6 +19,7 @@
     "backfill:dart-financials": "tsx scripts/backfill-dart-financials.ts --latest",
     "backfill:wisereport-estimates": "tsx scripts/backfill-wisereport-estimates.ts",
     "backfill:fmp-nasdaq-estimates": "tsx scripts/backfill-fmp-nasdaq-estimates.ts",
+    "backfill:yahoo-nasdaq-estimates": "tsx scripts/backfill-yahoo-nasdaq-estimates.ts",
     "backfill:summaries": "tsx scripts/backfill-summaries.ts",
     "import:har": "tsx scripts/import-har.ts",
     "poll": "tsx scripts/poll-daily.ts",

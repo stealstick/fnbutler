@@ -12,9 +12,10 @@
  *  - 증분: 피드는 최신순이라 이미 가진 report_id 를 만나면 중단 → 최근 신규분만 받음.
  *  - 멱등: 시세/목표가는 값이 바뀐 경우에만 UPDATE. 같은 데이터면 updated_at 도 그대로.
  *  - DART_API_KEY가 있으면 현재연도/전년도 정기보고서 재무 누락분을 함께 보강한다.
- *  - WiseReport/FnGuide 공개 재무요약에서 컨센서스 추정치를 함께 보강한다.
+ *  - WiseReport/FnGuide 공개 재무요약에서 국내 컨센서스 추정치를 함께 보강한다.
  *  - Nasdaq screener 공개 JSON에서 NASDAQ 시총 상위 500개 기업을 함께 보강한다.
  *  - FMP_API_KEY가 있으면 무료 플랜 한도 안에서 NASDAQ 연간 추정치를 회전 보강한다.
+ *  - Yahoo Finance 웹 JSON이 열리면 NASDAQ 분기/연간 EPS·매출 추정치와 목표가를 보강한다.
  *  - Postgres가 영속 저장소이므로 GCS DB 업로드/이미지 재배포는 하지 않는다.
  */
 import { all, closeDb, getDb, migrate, nowIso, query } from "../src/lib/db";
@@ -23,6 +24,7 @@ import { recordDailySnapshot, dispatchAlerts } from "../src/lib/poll";
 import { ingestCalendar } from "../src/lib/calendar";
 import { ingestNasdaqTopCompanies } from "../src/lib/nasdaq";
 import { backfillFmpNasdaqEstimates } from "../src/lib/fmp";
+import { backfillYahooNasdaqEstimates } from "../src/lib/yahoo";
 import { backfillDartFinancials } from "./backfill-dart-financials";
 import { backfillWiseReportEstimates } from "./backfill-wisereport-estimates";
 
@@ -187,19 +189,36 @@ async function main() {
     wiseEstimatesMsg = `targeted=${summary.targeted},writes=${summary.writes},fail=${summary.fail}`;
   }
 
+  let yahooNasdaqMsg = "skip";
+  if (!has("no-yahoo-nasdaq-estimates")) {
+    try {
+      const summary = await backfillYahooNasdaqEstimates(db, {
+        limit: Number(argOf("yahoo-nasdaq-limit") || process.env.YAHOO_NASDAQ_LIMIT || "200"),
+        callDelayMs: Number(argOf("yahoo-call-delay-ms") || process.env.YAHOO_CALL_DELAY_MS || "800"),
+        overwriteEstimates: has("yahoo-overwrite-estimates") || process.env.YAHOO_OVERWRITE_ESTIMATES === "1",
+        overwriteTargets: has("yahoo-overwrite-targets") || process.env.YAHOO_OVERWRITE_TARGETS === "1",
+        log: (message) => process.stdout.write(`   yahoo-nasdaq-estimates ${message}`),
+      });
+      yahooNasdaqMsg = `targeted=${summary.targeted},ok=${summary.ok},fail=${summary.fail},writes=${summary.writes}`;
+    } catch (e) {
+      yahooNasdaqMsg = `error: ${(e as Error).message}`;
+      process.stdout.write(`   yahoo-nasdaq-estimates error ${(e as Error).message}\n`);
+    }
+  }
+
   const { sent } = await dispatchAlerts(db, { sinceIso: runStart, baseUrl: BASE_URL });
   await query(
     "INSERT INTO ingest_runs (kind, started_at, finished_at, ok, note) VALUES ('refresh-daily', $1, $2, 1, $3)",
     [
       runStart,
       nowIso(),
-      `targets=${targets.length} newReports=${newReports} quoteUpdated=${quoteUpdated} unchanged=${unchanged} alerts=${sent} errors=${errors} nasdaq=${nasdaqMsg} calendar=${calendarMsg} fmpNasdaq=${fmpNasdaqMsg} dartFinancials=${dartFinancialsMsg} wiseEstimates=${wiseEstimatesMsg}`,
+      `targets=${targets.length} newReports=${newReports} quoteUpdated=${quoteUpdated} unchanged=${unchanged} alerts=${sent} errors=${errors} nasdaq=${nasdaqMsg} calendar=${calendarMsg} fmpNasdaq=${fmpNasdaqMsg} yahooNasdaq=${yahooNasdaqMsg} dartFinancials=${dartFinancialsMsg} wiseEstimates=${wiseEstimatesMsg}`,
     ],
     db,
   );
 
   process.stdout.write(
-    `갱신 완료 — 신규리포트 ${newReports} · 시세변경 ${quoteUpdated} · 무변경 ${unchanged} · 알림 ${sent} · 오류 ${errors} · Nasdaq ${nasdaqMsg} · FMP해외추정 ${fmpNasdaqMsg} · DART재무 ${dartFinancialsMsg} · 추정치 ${wiseEstimatesMsg}\n`,
+    `갱신 완료 — 신규리포트 ${newReports} · 시세변경 ${quoteUpdated} · 무변경 ${unchanged} · 알림 ${sent} · 오류 ${errors} · Nasdaq ${nasdaqMsg} · FMP해외추정 ${fmpNasdaqMsg} · Yahoo나스닥 ${yahooNasdaqMsg} · DART재무 ${dartFinancialsMsg} · 추정치 ${wiseEstimatesMsg}\n`,
   );
 }
 
