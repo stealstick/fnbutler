@@ -14,6 +14,7 @@
  *  - DART_API_KEY가 있으면 현재연도/전년도 정기보고서 재무 누락분을 함께 보강한다.
  *  - WiseReport/FnGuide 공개 재무요약에서 컨센서스 추정치를 함께 보강한다.
  *  - Nasdaq screener 공개 JSON에서 NASDAQ 시총 상위 500개 기업을 함께 보강한다.
+ *  - FMP_API_KEY가 있으면 무료 플랜 한도 안에서 NASDAQ 연간 추정치를 회전 보강한다.
  *  - Postgres가 영속 저장소이므로 GCS DB 업로드/이미지 재배포는 하지 않는다.
  */
 import { all, closeDb, getDb, migrate, nowIso, query } from "../src/lib/db";
@@ -21,6 +22,7 @@ import { ingestNewReports, refreshCompanyQuote } from "../src/lib/ingest";
 import { recordDailySnapshot, dispatchAlerts } from "../src/lib/poll";
 import { ingestCalendar } from "../src/lib/calendar";
 import { ingestNasdaqTopCompanies } from "../src/lib/nasdaq";
+import { backfillFmpNasdaqEstimates } from "../src/lib/fmp";
 import { backfillDartFinancials } from "./backfill-dart-financials";
 import { backfillWiseReportEstimates } from "./backfill-wisereport-estimates";
 
@@ -126,6 +128,30 @@ async function main() {
     return;
   }
 
+  let fmpNasdaqMsg = "skip";
+  if (!has("no-fmp-nasdaq-estimates")) {
+    const fmpKey = process.env.FMP_API_KEY;
+    if (!fmpKey) {
+      fmpNasdaqMsg = "skip:no-key";
+      process.stdout.write("   fmp-nasdaq-estimates FMP_API_KEY 미설정 → 건너뜀\n");
+    } else {
+      const budget = Math.max(0, Number(argOf("fmp-budget") || process.env.FMP_DAILY_CALL_BUDGET || "240"));
+      const targetCalls = Math.max(0, Number(argOf("fmp-target-calls") || process.env.FMP_TARGET_CALLS_PER_DAY || "0"));
+      const estimateCalls = Math.max(
+        0,
+        Number(argOf("fmp-estimate-calls") || String(Math.max(0, budget - targetCalls))),
+      );
+      const summary = await backfillFmpNasdaqEstimates(db, {
+        apiKey: fmpKey,
+        estimateCalls,
+        targetCalls,
+        estimateLimit: Number(argOf("fmp-estimate-limit") || process.env.FMP_ESTIMATE_LIMIT || "10"),
+        log: (message) => process.stdout.write(`   fmp-nasdaq-estimates ${message}`),
+      });
+      fmpNasdaqMsg = `estimateOk=${summary.estimateOk}/${summary.estimateTargeted},estimateFail=${summary.estimateFail},targetOk=${summary.targetOk}/${summary.targetTargeted},targetFail=${summary.targetFail},calls=${summary.estimateCalls + summary.targetCalls},writes=${summary.writes}`;
+    }
+  }
+
   let dartFinancialsMsg = "skip";
   if (!has("no-dart-financials")) {
     const dartKey = process.env.DART_API_KEY;
@@ -166,13 +192,13 @@ async function main() {
     [
       runStart,
       nowIso(),
-      `targets=${targets.length} newReports=${newReports} quoteUpdated=${quoteUpdated} unchanged=${unchanged} alerts=${sent} errors=${errors} nasdaq=${nasdaqMsg} calendar=${calendarMsg} dartFinancials=${dartFinancialsMsg} wiseEstimates=${wiseEstimatesMsg}`,
+      `targets=${targets.length} newReports=${newReports} quoteUpdated=${quoteUpdated} unchanged=${unchanged} alerts=${sent} errors=${errors} nasdaq=${nasdaqMsg} calendar=${calendarMsg} fmpNasdaq=${fmpNasdaqMsg} dartFinancials=${dartFinancialsMsg} wiseEstimates=${wiseEstimatesMsg}`,
     ],
     db,
   );
 
   process.stdout.write(
-    `갱신 완료 — 신규리포트 ${newReports} · 시세변경 ${quoteUpdated} · 무변경 ${unchanged} · 알림 ${sent} · 오류 ${errors} · Nasdaq ${nasdaqMsg} · DART재무 ${dartFinancialsMsg} · 추정치 ${wiseEstimatesMsg}\n`,
+    `갱신 완료 — 신규리포트 ${newReports} · 시세변경 ${quoteUpdated} · 무변경 ${unchanged} · 알림 ${sent} · 오류 ${errors} · Nasdaq ${nasdaqMsg} · FMP해외추정 ${fmpNasdaqMsg} · DART재무 ${dartFinancialsMsg} · 추정치 ${wiseEstimatesMsg}\n`,
   );
 }
 

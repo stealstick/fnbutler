@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { num, pct, price as stockPrice, signClass } from "@/lib/format";
+import { pct, price as stockPrice, signClass } from "@/lib/format";
 import { useTableSort, SortTh } from "@/components/sortable";
 import type { CompanyRow } from "@/lib/repo";
 
@@ -83,7 +83,7 @@ export default function WatchlistPage() {
                   </td>
                   <td className="mono">{stockPrice(c.price, c.currency)}</td>
                   <td className={"mono " + signClass(c.fluctuation_rate)}>{pct(c.fluctuation_rate)}</td>
-                  <td className="mono">{c.target_price_avg ? num(c.target_price_avg) : "-"}</td>
+                  <td className="mono">{c.target_price_avg ? stockPrice(c.target_price_avg, c.currency) : "-"}</td>
                   <td className={"mono " + signClass(c.target_return_rate)}>
                     {c.target_return_rate != null ? pct(c.target_return_rate) : "-"}
                   </td>

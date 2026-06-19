@@ -27,6 +27,8 @@ export interface CompanyRow {
   currency: string;
   country: string | null;
   active: number;
+  fmp_estimates_at: string | null;
+  fmp_targets_at: string | null;
   has_consensus: number;
   cover_securities: number | null;
   target_price_avg: number | null;

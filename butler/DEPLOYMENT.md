@@ -17,7 +17,7 @@
 | Cloud Scheduler | `fnbutler-calendar-weekly` | 선택 운영 경로, 권한이 있으면 토요일 08:00 KST 캘린더 Job 실행 |
 | Cloud SQL | `fnbutler-pg` | Postgres 16, `db-f1-micro` |
 | DB | `butler` / user `butler` | 시세·컨센서스·재무 운영 DB |
-| Secret | `fnbutler-db-password`, `DART_API_KEY` | DB 비밀번호, 국내 실적 캘린더 키 |
+| Secret | `fnbutler-db-password`, `DART_API_KEY`, `FMP_API_KEY` | DB 비밀번호, 국내 실적 캘린더 키, 해외 컨센서스 추정치 키 |
 
 ## 1. 로컬 Postgres 준비
 
@@ -51,13 +51,14 @@ npm run deploy:postgres
 - Cloud Scheduler 권한이 있으면 토요일 08:00 KST 캘린더 전용 스케줄도 생성/업데이트
 
 선택 secret을 이미 Secret Manager에 만들어 둔 경우 환경변수로 이름을 넘길 수 있다.
-GitHub Actions 배포는 repo secret `DART_API_KEY` 가 있으면 Cloud Run Job env 로 직접 주입하고,
-GCP Secret Manager `DART_API_KEY` 가 있으면 Secret Manager 값을 우선 사용한다.
+GitHub Actions 배포는 repo secret `DART_API_KEY`, `FMP_API_KEY` 가 있으면 Cloud Run Job env 로 직접 주입하고,
+GCP Secret Manager에 같은 이름의 secret이 있으면 Secret Manager 값을 우선 사용한다.
 
 ```bash
 TG_TOKEN_SECRET=BUTLER_TELEGRAM_BOT_TOKEN \
 TG_WEBHOOK_SECRET=BUTLER_TELEGRAM_WEBHOOK_SECRET \
 DART_API_KEY_SECRET=DART_API_KEY \
+FMP_API_KEY_SECRET=FMP_API_KEY \
 npm run deploy:postgres
 ```
 
@@ -92,6 +93,12 @@ gcloud run jobs execute fnbutler-calendar-refresh \
 
 GitHub의 `.github/workflows/refresh.yml` 은 같은 Job들을 수동 실행하는 비상 버튼이다.
 DB 파일을 내려받거나 이미지를 다시 굽지 않는다.
+
+FMP 무료 플랜은 250 calls/day 기준이다. 일일 Job은 기본적으로 `FMP_DAILY_CALL_BUDGET=240`만 쓰고,
+Nasdaq 기업 중 `fmp_estimates_at`이 오래된 순서로 연간 추정치를 갱신한다. 무료 플랜에서
+`analyst-estimates?period=quarter`와 `price-target-summary-bulk`는 제한되므로, 기본값으로는
+연간 추정치 기반 `YoY`/`EPS성장E`만 채운다. 목표가는 `FMP_TARGET_CALLS_PER_DAY`를 별도로 주면
+per-symbol `price-target-consensus`로 천천히 채울 수 있다.
 
 ## 5. 배포 업데이트
 
@@ -145,4 +152,5 @@ gcloud sql connect fnbutler-pg \
 | Job이 실행되지만 데이터 변화 없음 | `ingest_runs`, 최신 `report_id`, 업스트림 rate limit |
 | 텔레그램 알림 없음 | `BUTLER_TELEGRAM_BOT_TOKEN`, Firestore userStore, 유저 `alertsEnabled` |
 | 캘린더 국내 실적 없음 | `DART_API_KEY` secret 누락 가능 |
+| Nasdaq 성장률 없음 | `FMP_API_KEY` secret 누락, 아직 회전 갱신 순서 미도달, 또는 FMP 무료 플랜에서 해당 symbol 추정치 미제공 |
 | Cloud SQL 비용 증가 | HA/backup/autostorage가 켜졌는지 확인 |

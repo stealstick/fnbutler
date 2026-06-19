@@ -87,7 +87,7 @@ export default function SectorCompaniesTable({
                 <td className="mono">{won(c.market_cap)}</td>
                 <td className="mono">{c.per != null ? num(c.per, 1) : "-"}</td>
                 <td className="mono">{c.pbr != null ? num(c.pbr, 2) : "-"}</td>
-                <td className="mono">{c.target_price_avg ? num(c.target_price_avg) : "-"}</td>
+                <td className="mono">{c.target_price_avg ? stockPrice(c.target_price_avg, c.currency) : "-"}</td>
                 <td className={"mono " + signClass(c.target_return_rate)}>
                   {c.target_return_rate != null ? pct(c.target_return_rate) : "-"}
                 </td>

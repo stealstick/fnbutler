@@ -9,7 +9,7 @@ on:
         description: "refresh mode"
         type: choice
         default: full
-        options: [full, calendar-only, dart-financials, dart-2024-financials, dart-2025-financials, wisereport-estimates, nasdaq-companies]
+        options: [full, calendar-only, dart-financials, dart-2024-financials, dart-2025-financials, wisereport-estimates, nasdaq-companies, fmp-nasdaq-estimates]
       wait:
         description: "wait for job completion"
         type: boolean
@@ -67,6 +67,9 @@ jobs:
           fi
           if [ "$MODE" = "nasdaq-companies" ]; then
             EXTRA_ARGS=(--args tsx,scripts/ingest-nasdaq.ts)
+          fi
+          if [ "$MODE" = "fmp-nasdaq-estimates" ]; then
+            EXTRA_ARGS=(--args tsx,scripts/backfill-fmp-nasdaq-estimates.ts)
           fi
 
           gcloud run jobs execute "$TARGET_JOB" \

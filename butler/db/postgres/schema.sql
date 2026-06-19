@@ -35,6 +35,8 @@ CREATE TABLE IF NOT EXISTS companies (
     currency           TEXT NOT NULL DEFAULT 'KRW',
     country            TEXT,
     active             INTEGER NOT NULL DEFAULT 1,
+    fmp_estimates_at   TEXT,
+    fmp_targets_at     TEXT,
     detail_ingested_at TEXT,
     source             TEXT NOT NULL DEFAULT 'butler',
     created_at         TEXT NOT NULL,
@@ -43,6 +45,8 @@ CREATE TABLE IF NOT EXISTS companies (
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'KRW';
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS country TEXT;
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS active INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS fmp_estimates_at TEXT;
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS fmp_targets_at TEXT;
 ALTER TABLE companies ALTER COLUMN price TYPE DOUBLE PRECISION USING price::double precision;
 ALTER TABLE companies ALTER COLUMN target_price_avg TYPE DOUBLE PRECISION USING target_price_avg::double precision;
 CREATE INDEX IF NOT EXISTS idx_companies_stock ON companies(stock_code);
@@ -50,6 +54,7 @@ CREATE INDEX IF NOT EXISTS idx_companies_name ON companies(name);
 CREATE INDEX IF NOT EXISTS idx_companies_mcap ON companies(market_cap DESC);
 CREATE INDEX IF NOT EXISTS idx_companies_market ON companies(market, market_cap DESC);
 CREATE INDEX IF NOT EXISTS idx_companies_active ON companies(active, market_cap DESC);
+CREATE INDEX IF NOT EXISTS idx_companies_fmp_estimates ON companies(fmp_estimates_at, market_cap DESC);
 CREATE INDEX IF NOT EXISTS idx_companies_cover ON companies(has_consensus, market_cap DESC);
 
 CREATE TABLE IF NOT EXISTS brokers (
@@ -91,6 +96,10 @@ CREATE TABLE IF NOT EXISTS target_price_monthly (
     source           TEXT NOT NULL DEFAULT 'butler',
     PRIMARY KEY (corp_code, month)
 );
+ALTER TABLE target_price_monthly ALTER COLUMN tp_max TYPE DOUBLE PRECISION USING tp_max::double precision;
+ALTER TABLE target_price_monthly ALTER COLUMN tp_avg TYPE DOUBLE PRECISION USING tp_avg::double precision;
+ALTER TABLE target_price_monthly ALTER COLUMN tp_min TYPE DOUBLE PRECISION USING tp_min::double precision;
+ALTER TABLE target_price_monthly ALTER COLUMN price TYPE DOUBLE PRECISION USING price::double precision;
 
 CREATE TABLE IF NOT EXISTS financials (
     corp_code   TEXT NOT NULL REFERENCES companies(corp_code),
@@ -150,8 +159,8 @@ CREATE TABLE IF NOT EXISTS ingest_runs (
 CREATE TABLE IF NOT EXISTS daily_snapshots (
     corp_code          TEXT NOT NULL REFERENCES companies(corp_code),
     snapshot_date      TEXT NOT NULL,
-    price              BIGINT,
-    target_price_avg   BIGINT,
+    price              DOUBLE PRECISION,
+    target_price_avg   DOUBLE PRECISION,
     target_return_rate DOUBLE PRECISION,
     cover_securities   INTEGER,
     per                DOUBLE PRECISION,
@@ -159,6 +168,8 @@ CREATE TABLE IF NOT EXISTS daily_snapshots (
     source             TEXT NOT NULL DEFAULT 'butler',
     PRIMARY KEY (corp_code, snapshot_date)
 );
+ALTER TABLE daily_snapshots ALTER COLUMN price TYPE DOUBLE PRECISION USING price::double precision;
+ALTER TABLE daily_snapshots ALTER COLUMN target_price_avg TYPE DOUBLE PRECISION USING target_price_avg::double precision;
 
 CREATE TABLE IF NOT EXISTS users (
     id               BIGSERIAL PRIMARY KEY,

@@ -67,7 +67,7 @@ function buildMetricCells(rows: CompareGrowthRow[]): CompanyMetricCells {
 
 function trans(from: GrowthBox, to: GrowthBox, chgBox: GrowthBox, la: string, lb: string): GrowthTrans {
   const parts: string[] = [];
-  if (from) parts.push(`${la} ${from.period} ${won(from.value)}`);
+  if (from) parts.push(`${la} ${from.period}${from.isEst ? "E" : ""} ${won(from.value)}`);
   if (to) parts.push(`${lb} ${to.period}${to.isEst ? "E" : ""} ${won(to.value)}`);
   return { p: chgBox?.chg ?? null, t: parts.join("  ->  ") };
 }
