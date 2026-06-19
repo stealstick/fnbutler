@@ -161,6 +161,14 @@ CREATE TABLE IF NOT EXISTS ingest_runs (
     note        TEXT
 );
 
+CREATE TABLE IF NOT EXISTS provider_sessions (
+    provider     TEXT NOT NULL,
+    session_key  TEXT NOT NULL,
+    session_json TEXT NOT NULL,
+    updated_at   TEXT NOT NULL,
+    PRIMARY KEY (provider, session_key)
+);
+
 CREATE TABLE IF NOT EXISTS daily_snapshots (
     corp_code          TEXT NOT NULL REFERENCES companies(corp_code),
     snapshot_date      TEXT NOT NULL,

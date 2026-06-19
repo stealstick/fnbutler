@@ -41,6 +41,8 @@ jobs:
         env:
           DART_API_KEY_VALUE: ${{ secrets.DART_API_KEY }}
           FMP_API_KEY_VALUE: ${{ secrets.FMP_API_KEY }}
+          YAHOO_COOKIE_VALUE: ${{ secrets.YAHOO_COOKIE }}
+          YAHOO_CRUMB_VALUE: ${{ secrets.YAHOO_CRUMB }}
         run: |
           if [ -n "$DART_API_KEY_VALUE" ]; then
             echo "DART_API_KEY GitHub Actions secret is configured."
@@ -51,6 +53,11 @@ jobs:
             echo "FMP_API_KEY GitHub Actions secret is configured."
           else
             echo "FMP_API_KEY GitHub Actions secret is not configured; Nasdaq FMP estimates will be skipped unless a GCP Secret Manager secret exists."
+          fi
+          if [ -n "$YAHOO_COOKIE_VALUE" ] && [ -n "$YAHOO_CRUMB_VALUE" ]; then
+            echo "YAHOO_COOKIE/YAHOO_CRUMB GitHub Actions secrets are configured."
+          else
+            echo "YAHOO_COOKIE/YAHOO_CRUMB secrets are not configured; Yahoo will try DB cache and live session minting."
           fi
 
       - name: Build & push images
@@ -95,6 +102,8 @@ jobs:
         env:
           DART_API_KEY_VALUE: ${{ secrets.DART_API_KEY }}
           FMP_API_KEY_VALUE: ${{ secrets.FMP_API_KEY }}
+          YAHOO_COOKIE_VALUE: ${{ secrets.YAHOO_COOKIE }}
+          YAHOO_CRUMB_VALUE: ${{ secrets.YAHOO_CRUMB }}
         run: |
           CONNECTION="${PROJECT}:${REGION}:${SQL_INSTANCE}"
           SECRET_VARS="PGPASSWORD=${DB_PASSWORD_SECRET}:latest"
@@ -111,6 +120,16 @@ jobs:
             SECRET_VARS="${SECRET_VARS},FMP_API_KEY=FMP_API_KEY:latest"
           elif [ -n "$FMP_API_KEY_VALUE" ]; then
             ENV_VARS="${ENV_VARS},FMP_API_KEY=${FMP_API_KEY_VALUE}"
+          fi
+          if gcloud secrets describe YAHOO_COOKIE --project "$PROJECT" >/dev/null 2>&1; then
+            SECRET_VARS="${SECRET_VARS},YAHOO_COOKIE=YAHOO_COOKIE:latest"
+          elif [ -n "$YAHOO_COOKIE_VALUE" ]; then
+            ENV_VARS="${ENV_VARS},YAHOO_COOKIE=${YAHOO_COOKIE_VALUE}"
+          fi
+          if gcloud secrets describe YAHOO_CRUMB --project "$PROJECT" >/dev/null 2>&1; then
+            SECRET_VARS="${SECRET_VARS},YAHOO_CRUMB=YAHOO_CRUMB:latest"
+          elif [ -n "$YAHOO_CRUMB_VALUE" ]; then
+            ENV_VARS="${ENV_VARS},YAHOO_CRUMB=${YAHOO_CRUMB_VALUE}"
           fi
 
           if gcloud run jobs describe "$JOB" --region "$REGION" --project "$PROJECT" >/dev/null 2>&1; then

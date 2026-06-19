@@ -57,7 +57,7 @@ npm run refresh:calendar
 - 운영 환경에서는 Cloud Scheduler/GitHub Actions가 Cloud Run Job `fnbutler-refresh` 를 매일 18:30 KST에 실행한다.
 - 일일 갱신은 Nasdaq screener의 시총 상위 500개 기업도 `companies`에 보강한다. 가져오지 못하는 PER/PBR/목표가/재무 성장률은 화면에서 `-`로 표시한다.
 - `FMP_API_KEY`가 있으면 FMP 무료 플랜 한도에 맞춰 Nasdaq 연간 컨센서스 추정치를 회전 보강한다. 기본 `FMP_DAILY_CALL_BUDGET=240`, `FMP_CALL_DELAY_MS=2500` 이라 500개 기업은 약 2일에 한 바퀴 돈다. 무료 플랜에서 확인된 `period=annual`만 사용하므로 `YoY`/`EPS성장E`는 채워지고, 분기 추정 기반 `QoQ 현재→다음E`는 유료 분기 endpoint 권한이 없으면 `-`로 남는다.
-- Yahoo Finance 웹 JSON이 열리면 NASDAQ 기업의 목표가와 `0q/+1q/0y/+1y` EPS·매출 추정치를 보강한다. 기본은 기존 FMP 추정치를 덮어쓰지 않고 빈칸만 채운다. Yahoo 실패 시 기존 데이터는 보존하고 다음 실행 때 재시도한다.
+- Yahoo Finance 웹 JSON이 열리면 NASDAQ 기업의 목표가와 `0q/+1q/0y/+1y` EPS·매출 추정치를 보강한다. 기본은 기존 FMP 추정치를 덮어쓰지 않고 빈칸만 채운다. Yahoo 세션은 DB에 캐시하고, 실패 시 기존 데이터는 보존한 채 다음 실행 때 재시도한다.
 - Nasdaq 실적 캘린더는 수집 범위 안에서 시총 상위 500개 해외/미국 상장기업 실적발표 일정을 캘린더에 넣는다.
 - 국내 100대 기업 DART 잠정실적 공시는 `DART_API_KEY` secret이 있는 `fnbutler-calendar-refresh`
   Job이 매주 토요일 08:00 KST에 캘린더 전용으로 보강한다.
@@ -102,10 +102,12 @@ src/lib/ingest.ts           async upsert + 변경 감지
 | `FMP_DAILY_CALL_BUDGET` | FMP 하루 호출 예산(기본 240, 무료 250 calls/day 여유분 보존) |
 | `FMP_CALL_DELAY_MS` | FMP 호출 간격(기본 2500ms, 무료 플랜 rate limit 보호) |
 | `FMP_TARGET_CALLS_PER_DAY` | FMP 목표가 per-symbol 호출 예산(기본 0, bulk target은 무료 제한) |
-| `YAHOO_NASDAQ_LIMIT` | Yahoo NASDAQ 추정치 일일 보강 대상 수(기본 200) |
-| `YAHOO_CALL_DELAY_MS` | Yahoo 호출 간격(기본 800ms) |
+| `YAHOO_NASDAQ_LIMIT` | Yahoo NASDAQ 추정치 일일 보강 대상 수(기본 30) |
+| `YAHOO_CALL_DELAY_MS` | Yahoo 호출 간격(기본 2500ms) |
+| `YAHOO_JITTER_MS` | Yahoo 호출 간 랜덤 추가 대기시간(기본 750ms) |
 | `YAHOO_SESSION_RETRIES` | Yahoo cookie/crumb 발급 재시도 횟수(기본 3) |
 | `YAHOO_SESSION_RETRY_DELAY_MS` | Yahoo cookie/crumb 재시도 대기시간(기본 60000ms) |
+| `YAHOO_COOKIE` / `YAHOO_CRUMB` | Cloud Run에서 cookie/crumb 발급이 막힐 때 수동 bootstrap으로 넣는 Yahoo 세션 |
 | `YAHOO_OVERWRITE_ESTIMATES` | `1`이면 기존 추정치도 Yahoo 값으로 덮어쓰기 |
 | `YAHOO_OVERWRITE_TARGETS` | `1`이면 기존 평균 목표주가도 Yahoo 값으로 덮어쓰기 |
 

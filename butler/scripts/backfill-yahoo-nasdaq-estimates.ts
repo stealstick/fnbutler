@@ -1,7 +1,7 @@
 /**
  * Yahoo Finance quoteSummary에서 NASDAQ 목표가와 EPS/매출 추정치를 보강한다.
  *
- *   tsx scripts/backfill-yahoo-nasdaq-estimates.ts --limit 100
+ *   tsx scripts/backfill-yahoo-nasdaq-estimates.ts --limit 30
  *   tsx scripts/backfill-yahoo-nasdaq-estimates.ts --symbol AAPL --limit 1
  *   tsx scripts/backfill-yahoo-nasdaq-estimates.ts --overwrite-estimates --overwrite-targets
  */
@@ -19,10 +19,11 @@ async function main() {
   await migrate(db);
   const started = nowIso();
   const summary = await backfillYahooNasdaqEstimates(db, {
-    limit: Number(argOf("limit") || process.env.YAHOO_NASDAQ_LIMIT || "200"),
+    limit: Number(argOf("limit") || process.env.YAHOO_NASDAQ_LIMIT || "30"),
     corpCode: argOf("corp"),
     symbol: argOf("symbol"),
-    callDelayMs: Number(argOf("call-delay-ms") || process.env.YAHOO_CALL_DELAY_MS || "800"),
+    callDelayMs: Number(argOf("call-delay-ms") || process.env.YAHOO_CALL_DELAY_MS || "2500"),
+    jitterMs: Number(argOf("jitter-ms") || process.env.YAHOO_JITTER_MS || "750"),
     overwriteEstimates: has("overwrite-estimates") || process.env.YAHOO_OVERWRITE_ESTIMATES === "1",
     overwriteTargets: has("overwrite-targets") || process.env.YAHOO_OVERWRITE_TARGETS === "1",
     log: has("quiet") ? undefined : (message) => process.stdout.write(message),

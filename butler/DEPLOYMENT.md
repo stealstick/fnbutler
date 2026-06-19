@@ -101,16 +101,17 @@ Nasdaq 기업 중 `fmp_estimates_at`이 오래된 순서로 연간 추정치를 
 연간 추정치 기반 `YoY`/`EPS성장E`만 채운다. 목표가는 `FMP_TARGET_CALLS_PER_DAY`를 별도로 주면
 per-symbol `price-target-consensus`로 천천히 채울 수 있다.
 
-Yahoo NASDAQ 추정치는 비공식 웹 JSON 경로다. 실행 시 쿠키+crumb를 새로 발급받아 `quoteSummary`를 호출한다.
-기본값은 `YAHOO_NASDAQ_LIMIT=200`, `YAHOO_CALL_DELAY_MS=800`, `YAHOO_SESSION_RETRIES=3`,
-`YAHOO_SESSION_RETRY_DELAY_MS=60000`이며, 기존 FMP 데이터는 덮어쓰지 않고
-비어 있는 `financials.is_estimate=1` 행과 목표가만 보강한다.
+Yahoo NASDAQ 추정치는 비공식 웹 JSON 경로다. 실행 시 DB 캐시 세션,
+`YAHOO_COOKIE`/`YAHOO_CRUMB` env, 새 쿠키+crumb 발급 순서로 `quoteSummary`를 호출한다. 기본값은
+`YAHOO_NASDAQ_LIMIT=30`, `YAHOO_CALL_DELAY_MS=2500`, `YAHOO_JITTER_MS=750`,
+`YAHOO_SESSION_RETRIES=3`, `YAHOO_SESSION_RETRY_DELAY_MS=60000`이며, 기존 FMP 데이터는
+덮어쓰지 않고 비어 있는 `financials.is_estimate=1` 행과 목표가만 보강한다.
 
 Yahoo 실패 시 운영 플랜:
 
-- crumb/cookie 실패: 해당 실행은 Yahoo 보강만 스킵하고 기존 FMP NASDAQ 갱신은 계속 사용한다.
+- crumb/cookie 실패: 해당 실행은 `ok=0, fail=대상수`로 기록하고 프로세스는 성공 종료한다. 기존 FMP NASDAQ 갱신은 계속 사용한다.
 - 개별 종목 실패: `yahoo_estimates_at`을 갱신하지 않아 다음 일일 Job에서 재시도한다.
-- 장기 차단: `--no-yahoo-nasdaq-estimates` 또는 `YAHOO_NASDAQ_LIMIT=0`으로 즉시 비활성화하고, NASDAQ 추정치는 FMP 연간 추정치로 유지한다.
+- Cloud Run 장기 차단: 로컬/브라우저에서 발급한 `YAHOO_COOKIE`/`YAHOO_CRUMB`를 Secret Manager로 넣어 bootstrap한다. 그래도 막히면 `--no-yahoo-nasdaq-estimates` 또는 `YAHOO_NASDAQ_LIMIT=0`으로 즉시 비활성화하고, NASDAQ 추정치는 FMP 연간 추정치로 유지한다.
 - 데이터 품질 이슈: 기본값은 덮어쓰지 않으므로 기존 FMP/FnGuide 컨센서스가 우선이다. 검증 후 `YAHOO_OVERWRITE_ESTIMATES=1` 또는 `YAHOO_OVERWRITE_TARGETS=1`만 선택적으로 켠다.
 
 ## 5. 배포 업데이트

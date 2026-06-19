@@ -12,6 +12,11 @@ const YAHOO_CRUMB_URLS = [
   "https://query1.finance.yahoo.com/v1/test/getcrumb",
   "https://query2.finance.yahoo.com/v1/test/getcrumb",
 ];
+const YAHOO_SESSION_PROVIDER = "yahoo";
+const YAHOO_SESSION_KEY = "finance";
+const DEFAULT_LIMIT = 30;
+const DEFAULT_CALL_DELAY_MS = 2500;
+const DEFAULT_JITTER_MS = 750;
 const ESTIMATE_SOURCE = "yahoo:earningsTrend";
 const TARGET_SOURCE = "yahoo:financialData";
 
@@ -46,7 +51,9 @@ type YahooSummary = {
   };
   finance?: { error?: { code?: string; description?: string } };
 };
-type YahooSession = { cookie: string; crumb: string };
+type YahooSessionSource = "cache" | "env" | "minted";
+type YahooSession = { cookie: string; crumb: string; source?: YahooSessionSource };
+type StoredYahooSession = YahooSession & { updated_at?: string };
 
 type NasdaqCandidate = {
   corp_code: string;
@@ -60,6 +67,7 @@ export interface YahooNasdaqBackfillOptions {
   corpCode?: string;
   symbol?: string;
   callDelayMs?: number;
+  jitterMs?: number;
   overwriteEstimates?: boolean;
   overwriteTargets?: boolean;
   log?: (message: string) => void;
@@ -76,6 +84,9 @@ export interface YahooNasdaqBackfillSummary {
 }
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+const isAuthError = (e: unknown) => /Unauthorized|Invalid Crumb|HTTP 401/i.test((e as Error).message);
+const isRateLimitError = (e: unknown) => /Too Many Requests|HTTP 429/i.test((e as Error).message);
 
 function getSetCookies(headers: Headers): string[] {
   const h = headers as Headers & { getSetCookie?: () => string[] };
@@ -110,7 +121,48 @@ function yearFromDate(date: string | undefined): number | null {
   return Number.isInteger(year) && year > 1900 ? year : null;
 }
 
-async function getYahooSession(log: (message: string) => void = () => {}): Promise<YahooSession> {
+function envYahooSession(): YahooSession | null {
+  const cookie = process.env.YAHOO_COOKIE || process.env.YAHOO_FINANCE_COOKIE;
+  const crumb = process.env.YAHOO_CRUMB || process.env.YAHOO_FINANCE_CRUMB;
+  return cookie && crumb ? { cookie, crumb, source: "env" } : null;
+}
+
+async function loadCachedYahooSession(db: Queryable): Promise<YahooSession | null> {
+  const rows = await all<{ session_json: string }>(
+    `SELECT session_json
+     FROM provider_sessions
+     WHERE provider = $1 AND session_key = $2`,
+    [YAHOO_SESSION_PROVIDER, YAHOO_SESSION_KEY],
+    db,
+  );
+  const rawSession = rows[0]?.session_json;
+  if (!rawSession) return null;
+  try {
+    const parsed = JSON.parse(rawSession) as StoredYahooSession;
+    return parsed.cookie && parsed.crumb ? { cookie: parsed.cookie, crumb: parsed.crumb, source: "cache" } : null;
+  } catch {
+    return null;
+  }
+}
+
+async function saveYahooSession(db: Queryable, session: YahooSession): Promise<void> {
+  const updatedAt = nowIso();
+  await query(
+    `INSERT INTO provider_sessions (provider, session_key, session_json, updated_at)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT(provider, session_key)
+     DO UPDATE SET session_json = excluded.session_json, updated_at = excluded.updated_at`,
+    [
+      YAHOO_SESSION_PROVIDER,
+      YAHOO_SESSION_KEY,
+      JSON.stringify({ cookie: session.cookie, crumb: session.crumb, updated_at: updatedAt } satisfies StoredYahooSession),
+      updatedAt,
+    ],
+    db,
+  );
+}
+
+async function mintYahooSession(log: (message: string) => void = () => {}): Promise<YahooSession> {
   const attempts = Math.max(1, Math.floor(Number(process.env.YAHOO_SESSION_RETRIES || "3")));
   const retryDelayMs = Math.max(0, Math.floor(Number(process.env.YAHOO_SESSION_RETRY_DELAY_MS || "60000")));
   let lastError: Error | null = null;
@@ -138,7 +190,7 @@ async function getYahooSession(log: (message: string) => void = () => {}): Promi
       }
       if (!crumb || !crumbHeaders) throw crumbError ?? new Error("Yahoo crumb failed");
       const cookie2 = cookieHeader([...getSetCookies(fc.headers), ...getSetCookies(crumbHeaders)]) || cookie;
-      return { cookie: cookie2, crumb };
+      return { cookie: cookie2, crumb, source: "minted" };
     } catch (e) {
       lastError = e as Error;
       if (attempt >= attempts) break;
@@ -148,6 +200,34 @@ async function getYahooSession(log: (message: string) => void = () => {}): Promi
   }
 
   throw lastError ?? new Error("Yahoo session failed");
+}
+
+async function getYahooSession(
+  db: Queryable,
+  log: (message: string) => void = () => {},
+  forceRefresh = false,
+  skipEnv = false,
+): Promise<YahooSession> {
+  if (!forceRefresh) {
+    const cached = await loadCachedYahooSession(db);
+    if (cached) {
+      log("  yahoo session using cached cookie/crumb\n");
+      return cached;
+    }
+  }
+
+  if (!skipEnv) {
+    const envSession = envYahooSession();
+    if (envSession) {
+      log("  yahoo session using env cookie/crumb\n");
+      return envSession;
+    }
+  }
+
+  const fresh = await mintYahooSession(log);
+  await saveYahooSession(db, fresh);
+  log("  yahoo session refreshed\n");
+  return fresh;
 }
 
 async function fetchYahooSummary(
@@ -332,15 +412,33 @@ export async function backfillYahooNasdaqEstimates(
   db: Queryable,
   options: YahooNasdaqBackfillOptions = {},
 ): Promise<YahooNasdaqBackfillSummary> {
-  const limit = Math.max(0, Math.floor(options.limit ?? Number(process.env.YAHOO_NASDAQ_LIMIT || "200")));
-  const callDelayMs = Math.max(0, Math.floor(options.callDelayMs ?? Number(process.env.YAHOO_CALL_DELAY_MS || "800")));
+  const limit = Math.max(0, Math.floor(options.limit ?? Number(process.env.YAHOO_NASDAQ_LIMIT || String(DEFAULT_LIMIT))));
+  const callDelayMs = Math.max(
+    0,
+    Math.floor(options.callDelayMs ?? Number(process.env.YAHOO_CALL_DELAY_MS || String(DEFAULT_CALL_DELAY_MS))),
+  );
+  const jitterMs = Math.max(0, Math.floor(options.jitterMs ?? Number(process.env.YAHOO_JITTER_MS || String(DEFAULT_JITTER_MS))));
   const overwriteEstimates = options.overwriteEstimates ?? false;
   const overwriteTargets = options.overwriteTargets ?? false;
   const log = options.log ?? (() => {});
   const [targets, usdKrw] = await Promise.all([candidates(db, limit, options), fetchUsdKrwRate()]);
   if (targets.length === 0) return { targeted: 0, ok: 0, fail: 0, writes: 0, estimateWrites: 0, targetWrites: 0, usdKrw };
 
-  let session = await getYahooSession(log);
+  let session: YahooSession;
+  try {
+    session = await getYahooSession(db, log);
+  } catch (e) {
+    log(`  yahoo session unavailable ${(e as Error).message}\n`);
+    return {
+      targeted: targets.length,
+      ok: 0,
+      fail: targets.length,
+      writes: 0,
+      estimateWrites: 0,
+      targetWrites: 0,
+      usdKrw,
+    };
+  }
   let ok = 0;
   let fail = 0;
   let writes = 0;
@@ -355,8 +453,8 @@ export async function backfillYahooNasdaqEstimates(
       try {
         result = await fetchYahooSummary(symbol, session);
       } catch (e) {
-        if (!/Unauthorized|Invalid Crumb|HTTP 401/i.test((e as Error).message)) throw e;
-        session = await getYahooSession(log);
+        if (!isAuthError(e)) throw e;
+        session = await getYahooSession(db, log, true, session.source === "env");
         result = await fetchYahooSummary(symbol, session);
       }
       const r = await tx((client) =>
@@ -368,10 +466,16 @@ export async function backfillYahooNasdaqEstimates(
       targetWrites += r.targetWrites;
       log(`  yahoo [${i + 1}/${targets.length}] ${symbol} ok writes=${r.writes}\n`);
     } catch (e) {
+      if (isRateLimitError(e)) {
+        fail += targets.length - i;
+        log(`  yahoo [${i + 1}/${targets.length}] ${symbol} RATE_LIMIT ${(e as Error).message}; stop run\n`);
+        break;
+      }
       fail++;
       log(`  yahoo [${i + 1}/${targets.length}] ${symbol} ERROR ${(e as Error).message}\n`);
     } finally {
-      if (callDelayMs > 0) await sleep(callDelayMs);
+      const delay = callDelayMs + (jitterMs > 0 ? Math.floor(Math.random() * jitterMs) : 0);
+      if (delay > 0) await sleep(delay);
     }
   }
 

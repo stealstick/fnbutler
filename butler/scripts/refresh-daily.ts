@@ -193,8 +193,9 @@ async function main() {
   if (!has("no-yahoo-nasdaq-estimates")) {
     try {
       const summary = await backfillYahooNasdaqEstimates(db, {
-        limit: Number(argOf("yahoo-nasdaq-limit") || process.env.YAHOO_NASDAQ_LIMIT || "200"),
-        callDelayMs: Number(argOf("yahoo-call-delay-ms") || process.env.YAHOO_CALL_DELAY_MS || "800"),
+        limit: Number(argOf("yahoo-nasdaq-limit") || process.env.YAHOO_NASDAQ_LIMIT || "30"),
+        callDelayMs: Number(argOf("yahoo-call-delay-ms") || process.env.YAHOO_CALL_DELAY_MS || "2500"),
+        jitterMs: Number(argOf("yahoo-jitter-ms") || process.env.YAHOO_JITTER_MS || "750"),
         overwriteEstimates: has("yahoo-overwrite-estimates") || process.env.YAHOO_OVERWRITE_ESTIMATES === "1",
         overwriteTargets: has("yahoo-overwrite-targets") || process.env.YAHOO_OVERWRITE_TARGETS === "1",
         log: (message) => process.stdout.write(`   yahoo-nasdaq-estimates ${message}`),
