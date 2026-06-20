@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import Link from "next/link";
 import { won, num, pct, price as stockPrice, signClass } from "@/lib/format";
 import { useTableSort, SortTh } from "@/components/sortable";
@@ -12,9 +12,7 @@ const GROWTH_METRICS: Array<{ key: GrowthMetric; label: string }> = [
   { key: "OPERATING_PROFIT", label: "영업이익" },
   { key: "NET_INCOME", label: "당기순이익" },
 ];
-
-const getVal = (c: CompanyRow, k: string) =>
-  k === "name" ? c.name : ((c as unknown as Record<string, number | null>)[k] ?? null);
+const GROWTH_SORT_KEYS = new Set(["epsGrowth", "qoqPrevCur", "qoqCurNext", "yoyPrevThis", "yoyThisNext", "yoyNextNext2"]);
 
 export default function SectorCompaniesTable({
   companies,
@@ -24,6 +22,15 @@ export default function SectorCompaniesTable({
   growthByCompany: Record<string, GrowthByMetric>;
 }) {
   const [metric, setMetric] = useState<GrowthMetric>("REVENUE");
+  const getVal = useCallback(
+    (c: CompanyRow, k: string) => {
+      if (k === "name") return c.name;
+      if (k === "epsGrowth") return epsGrowth(c);
+      if (GROWTH_SORT_KEYS.has(k)) return growthByCompany[c.corp_code]?.[metric]?.[k as keyof GrowthBundle]?.p ?? null;
+      return (c as unknown as Record<string, number | null>)[k] ?? null;
+    },
+    [growthByCompany, metric],
+  );
   const { sorted, sortKey, dir, onSort } = useTableSort(companies, getVal, "target_return_rate");
   const th = (label: string, k: string, align?: "l", defaultDir?: "asc" | "desc") => (
     <SortTh label={label} k={k} sortKey={sortKey} dir={dir} onSort={onSort} align={align} defaultDir={defaultDir} />
@@ -51,12 +58,12 @@ export default function SectorCompaniesTable({
           <thead>
             <tr>
               {th("종목", "name", "l", "asc")}
-              <th title="(선행 EPS − EPS) / |EPS|. 향후 1년 이익 성장 추정">EPS성장E</th>
-              <th title="직전분기 대비 현재분기 실적 증감률">QoQ 직전→현재</th>
-              <th title="현재분기 대비 다음분기 추정 증감률">QoQ 현재→다음E</th>
-              <th title="전년 대비 올해 증감률">YoY 전년→올해E</th>
-              <th title="올해 대비 다음년도 추정 증감률">YoY 올해→다음년E</th>
-              <th title="다음년도 대비 2년뒤 추정 증감률">YoY 다음년→2년뒤E</th>
+              {th("EPS성장E", "epsGrowth")}
+              {th("QoQ 직전→현재", "qoqPrevCur")}
+              {th("QoQ 현재→다음E", "qoqCurNext")}
+              {th("YoY 전년→올해E", "yoyPrevThis")}
+              {th("YoY 올해→다음년E", "yoyThisNext")}
+              {th("YoY 다음년→2년뒤E", "yoyNextNext2")}
               {th("현재가", "price")}
               {th("등락", "fluctuation_rate")}
               {th("시가총액", "market_cap")}

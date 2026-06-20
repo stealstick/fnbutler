@@ -157,10 +157,11 @@ function buildTable(rows: GrowthRow[], valuations: Val[], mode: "Q" | "A") {
     val[v.metric][key] = v.value;
   }
 
-  // 최근순(내림차순), 최대 16개 컬럼
+  // 최근 기간을 최대 개수만큼 고른 뒤, 좌→우가 과거→현재/미래가 되도록 오름차순 표시.
   const periods = [...periodMap.values()]
     .sort((a, b) => b.y - a.y || b.q - a.q)
-    .slice(0, mode === "Q" ? 16 : 12);
+    .slice(0, mode === "Q" ? 16 : 12)
+    .sort((a, b) => a.y - b.y || a.q - b.q);
 
   return { periods, cells, val };
 }

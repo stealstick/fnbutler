@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { won, num, pct, price as stockPrice, signClass } from "@/lib/format";
@@ -13,6 +13,8 @@ const GROWTH_METRICS: Array<{ key: GrowthMetric; label: string }> = [
   { key: "OPERATING_PROFIT", label: "영업이익" },
   { key: "NET_INCOME", label: "당기순이익" },
 ];
+const GROWTH_SORT_KEYS = new Set(["epsGrowth", "qoqPrevCur", "qoqCurNext", "yoyPrevThis", "yoyThisNext", "yoyNextNext2"]);
+type GrowthSortKey = "epsGrowth" | keyof GrowthBundle;
 
 type CompanyListRow = CompanyRow & {
   epsGrowth: number | null;
@@ -25,6 +27,17 @@ interface ApiResp {
 }
 
 type Dir = "asc" | "desc";
+
+function isGrowthSortKey(key: string): key is GrowthSortKey {
+  return GROWTH_SORT_KEYS.has(key);
+}
+
+function compareNullableNumber(a: number | null, b: number | null, dir: Dir) {
+  if (a == null && b == null) return 0;
+  if (a == null) return 1;
+  if (b == null) return -1;
+  return dir === "asc" ? a - b : b - a;
+}
 
 export default function CompaniesPage() {
   const router = useRouter();
@@ -44,6 +57,9 @@ export default function CompaniesPage() {
   // 비교 선택 — 페이지/필터가 바뀌어도 유지(코드+이름을 들고 다님)
   const [sel, setSel] = useState<{ code: string; name: string }[]>([]);
   const limit = 50;
+  const growthSort = isGrowthSortKey(sort);
+  const apiSort = growthSort ? "market_cap" : sort;
+  const apiDir = growthSort ? "desc" : dir;
 
   const selCodes = new Set(sel.map((s) => s.code));
   const toggleSel = (c: CompanyListRow) =>
@@ -68,8 +84,8 @@ export default function CompaniesPage() {
     const sp = new URLSearchParams({
       q,
       market,
-      sort,
-      dir,
+      sort: apiSort,
+      dir: apiDir,
       limit: String(limit),
       offset: String(page * limit),
     });
@@ -79,7 +95,7 @@ export default function CompaniesPage() {
     const r = await fetch(`/api/companies?${sp}`);
     setData(await r.json());
     setLoading(false);
-  }, [q, market, sector, industry, sort, dir, onlyConsensus, page]);
+  }, [q, market, sector, industry, apiSort, apiDir, onlyConsensus, page]);
 
   useEffect(() => {
     const t = setTimeout(load, 200);
@@ -132,6 +148,16 @@ export default function CompaniesPage() {
     const t = growthByCode[c.corp_code]?.[metric]?.[key];
     return <GrowthPct p={t?.p ?? null} title={t?.t} />;
   };
+  const growthSortValue = useCallback(
+    (c: CompanyListRow, key: GrowthSortKey) =>
+      key === "epsGrowth" ? c.epsGrowth : (growthByCode[c.corp_code]?.[metric]?.[key]?.p ?? null),
+    [growthByCode, metric],
+  );
+  const results = useMemo(() => {
+    const rows = data?.results ?? [];
+    if (!isGrowthSortKey(sort)) return rows;
+    return [...rows].sort((a, b) => compareNullableNumber(growthSortValue(a, sort), growthSortValue(b, sort), dir));
+  }, [data?.results, dir, growthSortValue, sort]);
 
   return (
     <div className="panel">
@@ -165,6 +191,12 @@ export default function CompaniesPage() {
           <option value="per">PER순</option>
           <option value="pbr">PBR순</option>
           <option value="name">가나다순</option>
+          <option value="epsGrowth">EPS성장E순</option>
+          <option value="qoqPrevCur">QoQ 직전→현재순</option>
+          <option value="qoqCurNext">QoQ 현재→다음E순</option>
+          <option value="yoyPrevThis">YoY 전년→올해E순</option>
+          <option value="yoyThisNext">YoY 올해→다음년E순</option>
+          <option value="yoyNextNext2">YoY 다음년→2년뒤E순</option>
         </select>
         <label className="muted" style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <input type="checkbox" checked={onlyConsensus} onChange={(e) => setOnlyConsensus(e.target.checked)} />
@@ -245,12 +277,12 @@ export default function CompaniesPage() {
             <tr>
               <th title="비교 선택" style={{ width: 34, textAlign: "center" }}>비교</th>
               <Th label="종목" k="name" align="l" dd="asc" />
-              <th title="(선행 EPS − EPS) / |EPS|. 향후 1년 이익 성장 추정">EPS성장E</th>
-              <th title="직전분기 대비 현재분기 실적 증감률">QoQ 직전→현재</th>
-              <th title="현재분기 대비 다음분기 추정 증감률">QoQ 현재→다음E</th>
-              <th title="전년 대비 올해 증감률">YoY 전년→올해E</th>
-              <th title="올해 대비 다음년도 추정 증감률">YoY 올해→다음년E</th>
-              <th title="다음년도 대비 2년뒤 추정 증감률">YoY 다음년→2년뒤E</th>
+              <Th label="EPS성장E" k="epsGrowth" />
+              <Th label="QoQ 직전→현재" k="qoqPrevCur" />
+              <Th label="QoQ 현재→다음E" k="qoqCurNext" />
+              <Th label="YoY 전년→올해E" k="yoyPrevThis" />
+              <Th label="YoY 올해→다음년E" k="yoyThisNext" />
+              <Th label="YoY 다음년→2년뒤E" k="yoyNextNext2" />
               <th className="l">섹터</th>
               <Th label="현재가" k="price" />
               <Th label="등락" k="fluctuation_rate" />
@@ -263,7 +295,7 @@ export default function CompaniesPage() {
             </tr>
           </thead>
           <tbody>
-            {data?.results.map((c) => (
+            {results.map((c) => (
               <tr key={c.corp_code} className={selCodes.has(c.corp_code) ? "selected" : undefined}>
                 <td style={{ textAlign: "center" }}>
                   <input
@@ -302,7 +334,7 @@ export default function CompaniesPage() {
                 <td className="mono">{c.cover_securities ? <span className="pill">{c.cover_securities}</span> : "-"}</td>
               </tr>
             ))}
-            {data && data.results.length === 0 && (
+            {data && results.length === 0 && (
               <tr><td colSpan={17} className="empty">검색 결과가 없습니다.</td></tr>
             )}
           </tbody>
