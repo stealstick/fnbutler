@@ -1,3 +1,5 @@
+@import url("https://cdn.jsdelivr.net/gh/moonspam/NanumSquare@1.0/nanumsquare.css");
+
 :root {
   --bg: #f7f1e6;
   --panel: #fffaf1;
@@ -14,8 +16,9 @@
   --est: #8f6a2e;    /* 추정치 */
   --broker: #b68a36; /* 선택 증권사 오버레이(브래스) */
   --radius: 8px;
-  --mono: ui-monospace, "SF Mono", "Roboto Mono", Menlo, monospace;
-  --brand-font: "Cormorant Garamond", "Bodoni 72", Didot, "Times New Roman", serif;
+  --font-sans: "NanumSquare", "NanumSquare Neo", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --mono: var(--font-sans);
+  --brand-font: var(--font-sans);
   --shadow: 0 14px 38px rgba(78, 50, 25, 0.08);
 }
 
@@ -27,8 +30,7 @@ html, body {
     linear-gradient(180deg, rgba(255, 252, 246, 0.9), rgba(247, 241, 230, 0.9)),
     var(--bg);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Pretendard", "Apple SD Gothic Neo",
-    "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-sans);
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
@@ -75,16 +77,16 @@ header.topbar {
   color: #fff8ed;
   font-family: var(--brand-font);
   font-size: 17px;
-  font-weight: 700;
+  font-weight: 800;
   line-height: 1;
 }
 .brand-word {
   font-family: var(--brand-font);
   font-size: 22px;
-  font-weight: 700;
+  font-weight: 800;
   line-height: 1;
   color: var(--accent);
-  font-variant: small-caps;
+  letter-spacing: 0;
 }
 .topbar nav { display: flex; gap: 18px; color: var(--muted); font-size: 13px; }
 .topbar nav a.active { color: var(--text); font-weight: 600; }
