@@ -166,10 +166,6 @@ function hasScaledUnit(values: string[]): boolean {
   return values.some((v) => /-?\d+(?:\.\d+)?\s*[KMBT]$/i.test(v.replace(/,/g, "").trim()));
 }
 
-function allPercent(values: string[]): boolean {
-  return values.length > 0 && values.every((v) => /%$/.test(v.trim()));
-}
-
 function maxMagnitude(row: any): number {
   const nums = metricValues(row)
     .map(numericMagnitude)
@@ -180,20 +176,78 @@ function maxMagnitude(row: any): number {
 function macroVariant(row: any, group: any[]): string | null {
   if (group.length <= 1) return null;
   const values = metricValues(row);
-  if (hasScaledUnit(values)) return "수치";
   if (values.some((v) => /%$/.test(v.trim()))) {
-    if (!allPercent(values)) return "변동률";
-    const ordered = [...group].sort((a, b) => maxMagnitude(b) - maxMagnitude(a));
+    const pctRows = group.filter((g) => metricValues(g).some((v) => /%$/.test(v.trim())));
+    const ordered = [...pctRows].sort((a, b) => maxMagnitude(b) - maxMagnitude(a));
     const idx = ordered.indexOf(row);
     if (idx === 0) return "YoY";
     if (idx === 1) return "MoM";
-    return `변동률 ${idx + 1}`;
+    return "변동률";
   }
-  return String(group.indexOf(row) + 1);
+  if (hasScaledUnit(values)) return "수치";
+  if (maxMagnitude(row) >= 20) return "지수";
+  return "수치";
 }
 
-function macroTitle(name: string, variant: string | null): string {
-  return variant ? `${name} (${variant})` : name;
+const MACRO_VARIANT_ORDER: Record<string, number> = {
+  YoY: 0,
+  MoM: 1,
+  QoQ: 2,
+  변동률: 3,
+  수치: 4,
+  지수: 5,
+};
+
+function combinedMetric(group: any[], field: "actual" | "consensus" | "previous"): string | null {
+  const parts = group
+    .map((row, idx) => {
+      const value = txt(row[field]);
+      if (!value) return null;
+      const label = macroVariant(row, group);
+      return {
+        idx,
+        label,
+        value,
+        order: label ? (MACRO_VARIANT_ORDER[label] ?? 50) : idx,
+      };
+    })
+    .filter((p): p is { idx: number; label: string | null; value: string; order: number } => !!p)
+    .sort((a, b) => a.order - b.order || a.idx - b.idx);
+  if (parts.length === 0) return null;
+  return parts.map((p) => (p.label ? `${p.label} ${p.value}` : p.value)).join(" · ");
+}
+
+export function buildNasdaqMacroEvent(slug: string, date: string, group: any[], now = new Date()): CalEvent | null {
+  const first = group[0];
+  const name = txt(first?.eventName);
+  if (!name) return null;
+  const { sub, importance } = classifyMacro(name);
+  if (sub === "central_bank" && importance === 1) return null;
+  const eventTime = parseTime(first.gmt);
+  const eventBase = {
+    event_date: date,
+    event_time: eventTime,
+    tz: "GMT",
+  };
+  return {
+    id: makeId(["macro", slug, date, eventTime, name]),
+    category: "macro",
+    subcategory: sub,
+    country: slug,
+    event_date: date,
+    event_time: eventTime,
+    tz: "GMT",
+    title: name,
+    symbol: null,
+    importance,
+    actual: hasStarted(eventBase, now) ? combinedMetric(group, "actual") : null,
+    consensus: combinedMetric(group, "consensus"),
+    previous: combinedMetric(group, "previous"),
+    market_cap: null,
+    url: null,
+    note: null,
+    source: "nasdaq",
+  };
 }
 
 function eventStartMs(ev: Pick<CalEvent, "event_date" | "event_time" | "tz">): number {
@@ -400,42 +454,10 @@ export async function ingestCalendar(db: Queryable, opts: IngestOpts = {}): Prom
       if (group) group.push(r);
       else groups.set(key, [r]);
     }
-    for (const r of rows) {
-      const slug = COUNTRY_SLUG[String(r.country ?? "").trim()];
-      if (!slug || !countries.includes(slug)) continue;
-      const name = txt(r.eventName);
-      if (!name) continue;
-      const { sub, importance } = classifyMacro(name);
-      // 유의미한 지표는 모두 저장(화면/계정에서 필터). 세부 점도표(개별 projection dots)만 제외.
-      if (sub === "central_bank" && importance === 1) continue;
-      const eventTime = parseTime(r.gmt);
-      const eventBase = {
-        event_date: d,
-        event_time: eventTime,
-        tz: "GMT",
-      };
-      const group = groups.get([slug, d, eventTime ?? "", name].join("|")) ?? [r];
-      const variant = macroVariant(r, group);
-      const title = macroTitle(name, variant);
-      events.push({
-        id: makeId(["macro", slug, d, eventTime, name, variant]),
-        category: "macro",
-        subcategory: sub,
-        country: slug,
-        event_date: d,
-        event_time: eventTime,
-        tz: "GMT",
-        title,
-        symbol: null,
-        importance,
-        actual: hasStarted(eventBase) ? txt(r.actual) : null,
-        consensus: txt(r.consensus),
-        previous: txt(r.previous),
-        market_cap: null,
-        url: null,
-        note: null,
-        source: "nasdaq",
-      });
+    for (const [key, group] of groups) {
+      const [slug] = key.split("|");
+      const event = buildNasdaqMacroEvent(slug, d, group);
+      if (event) events.push(event);
     }
     await sleep(120);
   }
