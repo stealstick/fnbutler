@@ -151,6 +151,51 @@ function parseTime(v: unknown): string | null {
   return `${String(h).padStart(2, "0")}:${m[2]}`;
 }
 
+function metricValues(row: any): string[] {
+  return [txt(row.consensus), txt(row.previous), txt(row.actual)].filter((v): v is string => !!v);
+}
+
+function numericMagnitude(value: string): number | null {
+  const cleaned = value.replace(/,/g, "").replace(/[KMBT%]/gi, "").trim();
+  if (!/^-?\d+(?:\.\d+)?$/.test(cleaned)) return null;
+  const n = Math.abs(Number(cleaned));
+  return Number.isFinite(n) ? n : null;
+}
+
+function hasScaledUnit(values: string[]): boolean {
+  return values.some((v) => /-?\d+(?:\.\d+)?\s*[KMBT]$/i.test(v.replace(/,/g, "").trim()));
+}
+
+function allPercent(values: string[]): boolean {
+  return values.length > 0 && values.every((v) => /%$/.test(v.trim()));
+}
+
+function maxMagnitude(row: any): number {
+  const nums = metricValues(row)
+    .map(numericMagnitude)
+    .filter((n): n is number => n != null);
+  return nums.length ? Math.max(...nums) : 0;
+}
+
+function macroVariant(row: any, group: any[]): string | null {
+  if (group.length <= 1) return null;
+  const values = metricValues(row);
+  if (hasScaledUnit(values)) return "수치";
+  if (values.some((v) => /%$/.test(v.trim()))) {
+    if (!allPercent(values)) return "변동률";
+    const ordered = [...group].sort((a, b) => maxMagnitude(b) - maxMagnitude(a));
+    const idx = ordered.indexOf(row);
+    if (idx === 0) return "YoY";
+    if (idx === 1) return "MoM";
+    return `변동률 ${idx + 1}`;
+  }
+  return String(group.indexOf(row) + 1);
+}
+
+function macroTitle(name: string, variant: string | null): string {
+  return variant ? `${name} (${variant})` : name;
+}
+
 function eventStartMs(ev: Pick<CalEvent, "event_date" | "event_time" | "tz">): number {
   if (ev.event_time && ev.tz === "GMT") {
     return Date.parse(`${ev.event_date}T${ev.event_time}:00Z`);
@@ -328,17 +373,32 @@ export async function ingestCalendar(db: Queryable, opts: IngestOpts = {}): Prom
   const minDate = dates[0];
   const maxDate = dates[dates.length - 1];
   const events: CalEvent[] = [];
-  // 출처 건강도 — fetch 실패(null)가 하나라도 있으면 전량 교체 대신 기존 분을 보존한다.
-  let nasdaqFailures = 0;
+  // 출처 건강도 — 실패한 날짜/카테고리만 기존 분을 보존한다.
+  const failedNasdaqMacroDates = new Set<string>();
+  const failedNasdaqEarningsDates = new Set<string>();
 
   // 1) 거시 일정 -----------------------------------------------------------
   for (const d of dates) {
     const rows = await nasdaqEconomic(d);
     if (rows === null) {
-      nasdaqFailures++;
+      failedNasdaqMacroDates.add(d);
       onLog(`  ⚠️ econ ${d}: fetch 실패`);
       await sleep(120);
       continue;
+    }
+    const groups = new Map<string, any[]>();
+    for (const r of rows) {
+      const slug = COUNTRY_SLUG[String(r.country ?? "").trim()];
+      if (!slug || !countries.includes(slug)) continue;
+      const name = txt(r.eventName);
+      if (!name) continue;
+      const { sub, importance } = classifyMacro(name);
+      if (sub === "central_bank" && importance === 1) continue;
+      const eventTime = parseTime(r.gmt);
+      const key = [slug, d, eventTime ?? "", name].join("|");
+      const group = groups.get(key);
+      if (group) group.push(r);
+      else groups.set(key, [r]);
     }
     for (const r of rows) {
       const slug = COUNTRY_SLUG[String(r.country ?? "").trim()];
@@ -354,15 +414,18 @@ export async function ingestCalendar(db: Queryable, opts: IngestOpts = {}): Prom
         event_time: eventTime,
         tz: "GMT",
       };
+      const group = groups.get([slug, d, eventTime ?? "", name].join("|")) ?? [r];
+      const variant = macroVariant(r, group);
+      const title = macroTitle(name, variant);
       events.push({
-        id: makeId(["macro", slug, d, name]),
+        id: makeId(["macro", slug, d, eventTime, name, variant]),
         category: "macro",
         subcategory: sub,
         country: slug,
         event_date: d,
         event_time: eventTime,
         tz: "GMT",
-        title: name,
+        title,
         symbol: null,
         importance,
         actual: hasStarted(eventBase) ? txt(r.actual) : null,
@@ -398,7 +461,7 @@ export async function ingestCalendar(db: Queryable, opts: IngestOpts = {}): Prom
   for (const d of dates) {
     const rows = await nasdaqEarnings(d);
     if (rows === null) {
-      nasdaqFailures++;
+      failedNasdaqEarningsDates.add(d);
       onLog(`  ⚠️ earnings ${d}: fetch 실패`);
       await sleep(120);
       continue;
@@ -458,11 +521,18 @@ export async function ingestCalendar(db: Queryable, opts: IngestOpts = {}): Prom
 
   // 4) 전량 교체 적재 (userStore: prod=Firestore / 로컬=Postgres).
   //    수집 윈도우(±N일)가 사실상 전부라 매 수집 = 전량 교체. 단, 데이터 손실 방지:
-  //    Nasdaq fetch 실패 시 기존 nasdaq 분을 보존하고 받은 것만 덮어쓴다(부분차단/네트워크 대비).
+  //    Nasdaq fetch 실패 시 실패한 날짜/카테고리만 기존 분을 보존하고, 성공한 날짜는 현재 원천으로 교체한다.
   //    DART 실패 시 기존 국내실적 보존. 한국은행은 결정적 큐레이션이라 항상 갱신.
+  const nasdaqFailures = failedNasdaqMacroDates.size + failedNasdaqEarningsDates.size;
   const nasdaqHealthy = nasdaqFailures === 0;
-  if (!nasdaqHealthy)
-    onLog(`  ⚠️ Nasdaq fetch 실패 ${nasdaqFailures}건 — 전량 교체 대신 기존 nasdaq 보존+받은 분 갱신`);
+  if (!nasdaqHealthy) {
+    const macroDates = [...failedNasdaqMacroDates].join(",") || "-";
+    const earningsDates = [...failedNasdaqEarningsDates].join(",") || "-";
+    onLog(
+      `  ⚠️ Nasdaq fetch 실패 ${nasdaqFailures}건 — 실패분만 보존` +
+        ` (macro=${macroDates}, earnings=${earningsDates})`,
+    );
+  }
 
   const nasdaqEvents = events.filter((e) => e.source === "nasdaq");
   const bokEvents = events.filter((e) => e.source === "bok");
@@ -476,7 +546,12 @@ export async function ingestCalendar(db: Queryable, opts: IngestOpts = {}): Prom
     return [...m.values()];
   };
 
-  const finalNasdaq = nasdaqHealthy ? nasdaqEvents : mergeById(keep("nasdaq") as CalEvent[], nasdaqEvents);
+  const preserveNasdaq = (keep("nasdaq") as CalEvent[]).filter((e) => {
+    if (e.category === "macro") return failedNasdaqMacroDates.has(e.event_date);
+    if (e.category === "earnings_intl") return failedNasdaqEarningsDates.has(e.event_date);
+    return false;
+  });
+  const finalNasdaq = mergeById(preserveNasdaq, nasdaqEvents);
   const finalDart = dartOk ? dartEvents : (keep("dart") as CalEvent[]);
   const finalEvents = [...finalNasdaq, ...bokEvents, ...finalDart];
 
