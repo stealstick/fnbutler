@@ -338,10 +338,40 @@ table.grid tbody tr.selected:hover { background: color-mix(in srgb, var(--broker
 .bar { height: 6px; border-radius: 3px; background: var(--panel-2); overflow: hidden; min-width: 60px; }
 .bar > span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), #60a5fa); }
 
-details.ai { margin-top: 4px; }
-details.ai summary { cursor: pointer; color: var(--muted); font-size: 12px; list-style: none; }
-details.ai summary::-webkit-details-marker { display: none; }
-details.ai .body { color: var(--muted); font-size: 12.5px; margin-top: 8px; padding: 10px 12px; background: var(--panel-2); border-radius: 8px; border: 1px solid var(--border); max-width: 520px; line-height: 1.6; }
+.ai-summary-toggle {
+  display: block;
+  margin-top: 5px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.ai-summary-toggle:hover,
+.ai-summary-toggle.on {
+  color: var(--accent);
+}
+table.grid tr.ai-summary-row:hover {
+  background: transparent;
+}
+table.grid tr.ai-summary-row td {
+  padding: 0 10px 12px;
+  text-align: left;
+  white-space: normal;
+}
+.ai-summary-row .body {
+  color: var(--muted);
+  font-size: 12.5px;
+  margin: 0;
+  padding: 14px 16px;
+  background: var(--panel-2);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
 .ai-md { display: flex; flex-direction: column; gap: 4px; }
 .ai-li { display: flex; gap: 6px; margin-top: 4px; color: var(--text); }
 .ai-li:first-child { margin-top: 0; }

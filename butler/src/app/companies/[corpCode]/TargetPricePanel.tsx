@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useMemo, useState, type ReactNode } from "react";
 import { num, pct, ratingChangeBadge, signClass } from "@/lib/format";
 import InfoTip from "@/components/InfoTip";
 import { useTableSort, SortTh } from "@/components/sortable";
@@ -67,6 +67,7 @@ export default function TargetPricePanel({
 }) {
   const [query, setQuery] = useState("");
   const [selectedBroker, setSelectedBroker] = useState<string | null>(null);
+  const [expandedSummaryId, setExpandedSummaryId] = useState<string | null>(null);
   const q = query.trim().toLowerCase();
 
   const latestChangeByBroker = useMemo(() => {
@@ -224,57 +225,71 @@ export default function TargetPricePanel({
                 const selected = selectedBroker === b.broker;
                 const reportCount = history.filter((h) => h.broker === b.broker).length;
                 return (
-                  <tr
-                    key={b.report_id}
-                    className={"rowlink" + (selected ? " selected" : "")}
-                    onClick={() => setSelectedBroker(selected ? null : b.broker)}
-                    title={`${b.broker} 목표주가 추이 ${selected ? "숨기기" : "차트에 표시"} (리포트 ${reportCount}건)`}
-                  >
-                    <td className="l">
-                      <span className="brokmark" aria-hidden style={{ opacity: selected ? 1 : 0 }} />
-                      {b.research_url ? (
-                        <a
-                          href={b.research_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                        >
+                  <Fragment key={b.report_id}>
+                    <tr
+                      className={"rowlink" + (selected ? " selected" : "")}
+                      onClick={() => setSelectedBroker(selected ? null : b.broker)}
+                      title={`${b.broker} 목표주가 추이 ${selected ? "숨기기" : "차트에 표시"} (리포트 ${reportCount}건)`}
+                    >
+                      <td className="l">
+                        <span className="brokmark" aria-hidden style={{ opacity: selected ? 1 : 0 }} />
+                        {b.research_url ? (
+                          <a
+                            href={b.research_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <strong>{b.broker}</strong>
+                          </a>
+                        ) : (
                           <strong>{b.broker}</strong>
-                        </a>
-                      ) : (
-                        <strong>{b.broker}</strong>
-                      )}
-                      {reportCount > 1 ? <span className="hist-badge">{reportCount}</span> : null}
-                      {b.ai_summary && (
-                        <details className="ai" onClick={(e) => e.stopPropagation()}>
-                          <summary>AI 요약</summary>
+                        )}
+                        {reportCount > 1 ? <span className="hist-badge">{reportCount}</span> : null}
+                        {b.ai_summary && (
+                          <button
+                            type="button"
+                            className={"ai-summary-toggle" + (expandedSummaryId === b.report_id ? " on" : "")}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExpandedSummaryId((id) => (id === b.report_id ? null : b.report_id));
+                            }}
+                          >
+                            AI 요약
+                          </button>
+                        )}
+                      </td>
+                      <td className="l muted">{b.analyst || "-"}</td>
+                      <td className="mono muted">{b.report_date}</td>
+                      <td className="l">
+                        <span className={"pill " + (isBuy ? "buy" : "")}>{b.rating || "-"}</span>
+                      </td>
+                      <td className="mono">
+                        <strong>{num(b.target_price)}</strong>
+                      </td>
+                      <td className={"mono " + signClass(latestChange?.target_delta_pct)}>
+                        {latestChange?.target_delta_pct != null ? pct(latestChange.target_delta_pct) : "-"}
+                      </td>
+                      <td className="l">
+                        <div className="bar">
+                          <span style={{ width: `${((b.target_price ?? 0) / maxTarget) * 100}%` }} />
+                        </div>
+                      </td>
+                      <td>
+                        <span className={"pill " + badge.kind}>{badge.label}</span>
+                      </td>
+                      <td className={"mono " + signClass(b.return_rate)}>{pct(b.return_rate)}</td>
+                    </tr>
+                    {expandedSummaryId === b.report_id && b.ai_summary ? (
+                      <tr className="ai-summary-row" onClick={(e) => e.stopPropagation()}>
+                        <td colSpan={9}>
                           <div className="body">
                             <AiSummaryBody text={b.ai_summary} />
                           </div>
-                        </details>
-                      )}
-                    </td>
-                    <td className="l muted">{b.analyst || "-"}</td>
-                    <td className="mono muted">{b.report_date}</td>
-                    <td className="l">
-                      <span className={"pill " + (isBuy ? "buy" : "")}>{b.rating || "-"}</span>
-                    </td>
-                    <td className="mono">
-                      <strong>{num(b.target_price)}</strong>
-                    </td>
-                    <td className={"mono " + signClass(latestChange?.target_delta_pct)}>
-                      {latestChange?.target_delta_pct != null ? pct(latestChange.target_delta_pct) : "-"}
-                    </td>
-                    <td className="l">
-                      <div className="bar">
-                        <span style={{ width: `${((b.target_price ?? 0) / maxTarget) * 100}%` }} />
-                      </div>
-                    </td>
-                    <td>
-                      <span className={"pill " + badge.kind}>{badge.label}</span>
-                    </td>
-                    <td className={"mono " + signClass(b.return_rate)}>{pct(b.return_rate)}</td>
-                  </tr>
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
                 );
               })}
             </tbody>
