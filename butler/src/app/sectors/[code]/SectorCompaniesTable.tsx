@@ -77,6 +77,9 @@ export default function SectorCompaniesTable({
               {th("등락", "fluctuation_rate")}
               {th("시가총액", "market_cap")}
               {th("PER", "per", undefined, "asc")}
+              {th("PER 올해E", "forward_per_y0", undefined, "asc")}
+              {th("PER 다음년E", "forward_per_y1", undefined, "asc")}
+              {th("PER 2년뒤E", "forward_per_y2", undefined, "asc")}
               {th("PBR", "pbr", undefined, "asc")}
               {th("평균 목표주가", "target_price_avg")}
               {th("상승여력", "target_return_rate")}
@@ -102,6 +105,9 @@ export default function SectorCompaniesTable({
                 <td className={"mono " + signClass(c.fluctuation_rate)}>{pct(c.fluctuation_rate)}</td>
                 <td className="mono">{won(c.market_cap)}</td>
                 <td className="mono">{c.per != null ? num(c.per, 1) : "-"}</td>
+                <td className="mono">{c.forward_per_y0 != null ? num(c.forward_per_y0, 1) : "-"}</td>
+                <td className="mono">{c.forward_per_y1 != null ? num(c.forward_per_y1, 1) : "-"}</td>
+                <td className="mono">{c.forward_per_y2 != null ? num(c.forward_per_y2, 1) : "-"}</td>
                 <td className="mono">{c.pbr != null ? num(c.pbr, 2) : "-"}</td>
                 <td className="mono">{c.target_price_avg ? stockPrice(c.target_price_avg, c.currency) : "-"}</td>
                 <td className={"mono " + signClass(c.target_return_rate)}>

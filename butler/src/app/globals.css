@@ -130,7 +130,7 @@ table.grid td.l, table.grid th.l { text-align: left; }
 table.grid tbody tr:hover { background: color-mix(in srgb, var(--accent-soft) 62%, white 38%); }
 table.grid td .y { display: block; font-size: 11px; color: var(--muted); }
 .scrollx { max-width: 100%; overflow-x: auto; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
-.companies-table { min-width: 1680px; }
+.companies-table { min-width: 1980px; }
 table.grid .sticky-col {
   position: sticky;
   background: var(--panel);

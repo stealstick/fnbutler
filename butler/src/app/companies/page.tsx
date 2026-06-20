@@ -201,6 +201,9 @@ export default function CompaniesPage() {
           <option value="target_return_rate">상승여력순</option>
           <option value="cover_securities">커버 증권사순</option>
           <option value="per">PER순</option>
+          <option value="forward_per_y0">PER 올해E순</option>
+          <option value="forward_per_y1">PER 다음년E순</option>
+          <option value="forward_per_y2">PER 2년뒤E순</option>
           <option value="pbr">PBR순</option>
           <option value="name">가나다순</option>
           <option value="epsGrowth">EPS성장E순</option>
@@ -300,6 +303,9 @@ export default function CompaniesPage() {
               <Th label="등락" k="fluctuation_rate" />
               <Th label="시가총액" k="market_cap" />
               <Th label="PER" k="per" dd="asc" />
+              <Th label="PER 올해E" k="forward_per_y0" dd="asc" />
+              <Th label="PER 다음년E" k="forward_per_y1" dd="asc" />
+              <Th label="PER 2년뒤E" k="forward_per_y2" dd="asc" />
               <Th label="PBR" k="pbr" dd="asc" />
               <Th label="평균 목표주가" k="target_price_avg" />
               <Th label="상승여력" k="target_return_rate" />
@@ -338,6 +344,9 @@ export default function CompaniesPage() {
                 <td className={"mono " + signClass(c.fluctuation_rate)}>{pct(c.fluctuation_rate)}</td>
                 <td className="mono">{won(c.market_cap)}</td>
                 <td className="mono">{c.per != null ? num(c.per, 1) : "-"}</td>
+                <td className="mono">{c.forward_per_y0 != null ? num(c.forward_per_y0, 1) : "-"}</td>
+                <td className="mono">{c.forward_per_y1 != null ? num(c.forward_per_y1, 1) : "-"}</td>
+                <td className="mono">{c.forward_per_y2 != null ? num(c.forward_per_y2, 1) : "-"}</td>
                 <td className="mono">{c.pbr != null ? num(c.pbr, 2) : "-"}</td>
                 <td className="mono">{c.target_price_avg ? stockPrice(c.target_price_avg, c.currency) : "-"}</td>
                 <td className={"mono " + signClass(c.target_return_rate)}>
@@ -347,14 +356,14 @@ export default function CompaniesPage() {
               </tr>
             ))}
             {data && results.length === 0 && (
-              <tr><td colSpan={17} className="empty">검색 결과가 없습니다.</td></tr>
+              <tr><td colSpan={20} className="empty">검색 결과가 없습니다.</td></tr>
             )}
           </tbody>
         </table>
       </div>
       <p className="note">
-        성장률 컬럼은 선택한 지표 기준입니다. QoQ는 분기 대비, YoY는 연간 대비입니다. 추정치(E)는 데이터가 적재된
-        기업·기간에서만 표시됩니다.
+        성장률 컬럼은 선택한 지표 기준입니다. QoQ는 분기 대비, YoY는 연간 대비입니다. PER 추정치는 현재가 ÷ 연간 EPS
+        컨센서스로 계산하며, 추정 EPS가 없는 연도는 - 로 표시합니다.
       </p>
 
       {pages > 1 && (

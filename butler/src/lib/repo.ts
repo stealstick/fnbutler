@@ -29,12 +29,16 @@ export interface CompanyRow {
   active: number;
   fmp_estimates_at: string | null;
   fmp_targets_at: string | null;
+  seekingalpha_estimates_at: string | null;
   yahoo_estimates_at: string | null;
   yahoo_targets_at: string | null;
   has_consensus: number;
   cover_securities: number | null;
   target_price_avg: number | null;
   target_return_rate: number | null;
+  forward_per_y0: number | null;
+  forward_per_y1: number | null;
+  forward_per_y2: number | null;
   detail_ingested_at: string | null;
   source: string;
   updated_at: string;
@@ -169,6 +173,9 @@ export type SortCol =
   | "price"
   | "fluctuation_rate"
   | "per"
+  | "forward_per_y0"
+  | "forward_per_y1"
+  | "forward_per_y2"
   | "pbr"
   | "target_price_avg";
 
@@ -180,9 +187,58 @@ const SORT_WHITELIST: Record<SortCol, string> = {
   price: "price",
   fluctuation_rate: "fluctuation_rate",
   per: "per",
+  forward_per_y0: "forward_per_y0",
+  forward_per_y1: "forward_per_y1",
+  forward_per_y2: "forward_per_y2",
   pbr: "pbr",
   target_price_avg: "target_price_avg",
 };
+
+const COMPANY_WITH_FORWARD_PER_SELECT = `
+  c.*,
+  CASE WHEN c.price IS NOT NULL AND eps_y0.value > 0 THEN ROUND((c.price / eps_y0.value)::numeric, 1)::double precision END AS forward_per_y0,
+  CASE WHEN c.price IS NOT NULL AND eps_y1.value > 0 THEN ROUND((c.price / eps_y1.value)::numeric, 1)::double precision END AS forward_per_y1,
+  CASE WHEN c.price IS NOT NULL AND eps_y2.value > 0 THEN ROUND((c.price / eps_y2.value)::numeric, 1)::double precision END AS forward_per_y2
+`;
+
+const COMPANY_FORWARD_PER_JOINS = `
+  LEFT JOIN LATERAL (
+    SELECT value
+    FROM financials f
+    WHERE f.corp_code = c.corp_code
+      AND f.metric = 'EPS'
+      AND f.period_type = 'A'
+      AND f.is_estimate = 1
+      AND f.fiscal_year = EXTRACT(YEAR FROM CURRENT_DATE)::int
+      AND f.value IS NOT NULL
+    ORDER BY f.source DESC NULLS LAST
+    LIMIT 1
+  ) eps_y0 ON TRUE
+  LEFT JOIN LATERAL (
+    SELECT value
+    FROM financials f
+    WHERE f.corp_code = c.corp_code
+      AND f.metric = 'EPS'
+      AND f.period_type = 'A'
+      AND f.is_estimate = 1
+      AND f.fiscal_year = EXTRACT(YEAR FROM CURRENT_DATE)::int + 1
+      AND f.value IS NOT NULL
+    ORDER BY f.source DESC NULLS LAST
+    LIMIT 1
+  ) eps_y1 ON TRUE
+  LEFT JOIN LATERAL (
+    SELECT value
+    FROM financials f
+    WHERE f.corp_code = c.corp_code
+      AND f.metric = 'EPS'
+      AND f.period_type = 'A'
+      AND f.is_estimate = 1
+      AND f.fiscal_year = EXTRACT(YEAR FROM CURRENT_DATE)::int + 2
+      AND f.value IS NOT NULL
+    ORDER BY f.source DESC NULLS LAST
+    LIMIT 1
+  ) eps_y2 ON TRUE
+`;
 
 export interface ListOpts {
   q?: string;
@@ -219,7 +275,11 @@ export async function listCompanies(opts: ListOpts = {}): Promise<{ total: numbe
 
   const total = Number(await value("SELECT COUNT(*)::int AS c FROM companies " + w, params));
   const rows = await all<CompanyRow>(
-    `SELECT * FROM companies ${w} ORDER BY ${col} ${dir} NULLS LAST LIMIT ${push(limit)} OFFSET ${push(offset)}`,
+    `SELECT ${COMPANY_WITH_FORWARD_PER_SELECT}
+     FROM companies c
+     ${COMPANY_FORWARD_PER_JOINS}
+     ${w}
+     ORDER BY ${col} ${dir} NULLS LAST LIMIT ${push(limit)} OFFSET ${push(offset)}`,
     params,
   );
   return { total, rows };
@@ -408,7 +468,14 @@ export async function getSectorAgg(code: string): Promise<SectorAgg | undefined>
 
 export async function getSectorCompanies(code: string, sort = "market_cap"): Promise<CompanyRow[]> {
   const order = sort === "target_return_rate" ? "target_return_rate DESC" : "market_cap DESC";
-  return all<CompanyRow>(`SELECT * FROM companies WHERE active = 1 AND sector_code = $1 ORDER BY ${order} NULLS LAST`, [code]);
+  return all<CompanyRow>(
+    `SELECT ${COMPANY_WITH_FORWARD_PER_SELECT}
+     FROM companies c
+     ${COMPANY_FORWARD_PER_JOINS}
+     WHERE active = 1 AND sector_code = $1
+     ORDER BY ${order} NULLS LAST`,
+    [code],
+  );
 }
 
 /** 섹터 내 증권사별 목표가 상향/하향 카운트 (최근 N일). */
