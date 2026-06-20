@@ -9,8 +9,7 @@ keystone 는 `butler.works` 데이터를 자체 정규화 DB로 모아 기업/�
 - 런타임은 **Cloud Run + Cloud SQL(Postgres)** 이다.
 - 일일 갱신은 **Cloud Scheduler -> Cloud Run Job -> Postgres 직접 업데이트** 흐름이다.
 - DB 파일을 GCS에 올리거나 이미지에 굽는 흐름으로 되돌리지 말 것.
-- 운영 유저/세션/관심목록/알림/캘린더는 `BUTLER_USERSTORE=firestore` 일 때 Firestore에 저장한다.
-  로컬 개발에서는 같은 인터페이스가 Postgres 테이블로 폴백한다.
+- 운영/로컬 유저·세션·관심목록·알림·캘린더는 모두 Postgres에 저장한다.
 
 ## 라이브/로컬
 
@@ -25,7 +24,7 @@ keystone 는 `butler.works` 데이터를 자체 정규화 DB로 모아 기업/�
 | 프레임워크 | Next.js 15 App Router, React 19, TypeScript |
 | 운영 DB | Cloud SQL Postgres 16 |
 | 로컬 DB | Postgres |
-| 유저 저장소 | Firestore(prod) / Postgres(local fallback) |
+| 유저 저장소 | Postgres |
 | 수집/배치 | `tsx` scripts |
 | 호스팅 | Cloud Run service + Cloud Run Job |
 | 스케줄 | Cloud Scheduler |

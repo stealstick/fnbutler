@@ -9,6 +9,7 @@
 # Optional env overrides:
 #   PROJECT REGION SERVICE INSTANCE DB_NAME DB_USER DB_PASSWORD BASE_URL
 #   GITHUB_DEPLOYER_SA TG_TOKEN_SECRET TG_WEBHOOK_SECRET DART_API_KEY_SECRET FMP_API_KEY_SECRET
+#   SEEKING_ALPHA_NASDAQ_LIMIT SEEKING_ALPHA_BATCH_SIZE SEEKING_ALPHA_CALL_DELAY_MS SEEKING_ALPHA_USE_CURL SEEKING_ALPHA_COOKIE_SECRET
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -24,6 +25,10 @@ DB_NAME="${DB_NAME:-butler}"
 DB_USER="${DB_USER:-butler}"
 DB_PASSWORD_SECRET="${DB_PASSWORD_SECRET:-fnbutler-db-password}"
 BASE_URL="${BASE_URL:-https://fnbutler-l3why3suea-du.a.run.app}"
+SEEKING_ALPHA_NASDAQ_LIMIT="${SEEKING_ALPHA_NASDAQ_LIMIT:-500}"
+SEEKING_ALPHA_BATCH_SIZE="${SEEKING_ALPHA_BATCH_SIZE:-5}"
+SEEKING_ALPHA_CALL_DELAY_MS="${SEEKING_ALPHA_CALL_DELAY_MS:-60000}"
+SEEKING_ALPHA_USE_CURL="${SEEKING_ALPHA_USE_CURL:-1}"
 BUCKET="${BUCKET:-protein-test-469413-fnbutler}"
 REPO="${REPO:-cloud-run-source-deploy}"
 SA_NAME="${SA_NAME:-fnbutler-runner}"
@@ -44,7 +49,7 @@ echo "==> Ensuring service account"
 if ! gcloud iam service-accounts describe "$SA_EMAIL" --project "$PROJECT" >/dev/null 2>&1; then
   gcloud iam service-accounts create "$SA_NAME" --display-name "FnButler runtime" --project "$PROJECT"
 fi
-for role in roles/cloudsql.client roles/datastore.user roles/run.developer roles/run.invoker roles/iam.serviceAccountUser roles/secretmanager.secretAccessor; do
+for role in roles/cloudsql.client roles/run.developer roles/run.invoker roles/iam.serviceAccountUser roles/secretmanager.secretAccessor; do
   gcloud projects add-iam-policy-binding "$PROJECT" \
     --member "serviceAccount:${SA_EMAIL}" \
     --role "$role" \
@@ -114,12 +119,13 @@ docker build --platform linux/amd64 --target worker -t "$JOB_IMG" "$ROOT"
 docker push "$APP_IMG"
 docker push "$JOB_IMG"
 
-ENV_VARS="PGHOST=/cloudsql/${CONNECTION},PGDATABASE=${DB_NAME},PGUSER=${DB_USER},BUTLER_USERSTORE=firestore,BUTLER_BASE_URL=${BASE_URL},BUTLER_RATE_PER_MIN=80"
+ENV_VARS="PGHOST=/cloudsql/${CONNECTION},PGDATABASE=${DB_NAME},PGUSER=${DB_USER},BUTLER_BASE_URL=${BASE_URL},BUTLER_RATE_PER_MIN=80,SEEKING_ALPHA_NASDAQ_LIMIT=${SEEKING_ALPHA_NASDAQ_LIMIT},SEEKING_ALPHA_BATCH_SIZE=${SEEKING_ALPHA_BATCH_SIZE},SEEKING_ALPHA_CALL_DELAY_MS=${SEEKING_ALPHA_CALL_DELAY_MS},SEEKING_ALPHA_USE_CURL=${SEEKING_ALPHA_USE_CURL}"
 SECRET_VARS="PGPASSWORD=${DB_PASSWORD_SECRET}:latest"
 if [[ -n "${TG_TOKEN_SECRET:-}" ]]; then SECRET_VARS="${SECRET_VARS},BUTLER_TELEGRAM_BOT_TOKEN=${TG_TOKEN_SECRET}:latest"; fi
 if [[ -n "${TG_WEBHOOK_SECRET:-}" ]]; then SECRET_VARS="${SECRET_VARS},BUTLER_TELEGRAM_WEBHOOK_SECRET=${TG_WEBHOOK_SECRET}:latest"; fi
 if [[ -n "${DART_API_KEY_SECRET:-}" ]]; then SECRET_VARS="${SECRET_VARS},DART_API_KEY=${DART_API_KEY_SECRET}:latest"; fi
 if [[ -n "${FMP_API_KEY_SECRET:-}" ]]; then SECRET_VARS="${SECRET_VARS},FMP_API_KEY=${FMP_API_KEY_SECRET}:latest"; fi
+if [[ -n "${SEEKING_ALPHA_COOKIE_SECRET:-}" ]]; then SECRET_VARS="${SECRET_VARS},SEEKING_ALPHA_COOKIE=${SEEKING_ALPHA_COOKIE_SECRET}:latest"; fi
 
 echo "==> Deploying Cloud Run service"
 gcloud run deploy "$SERVICE" \

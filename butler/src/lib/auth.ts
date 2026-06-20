@@ -1,7 +1,7 @@
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { userStore, type StoredUser } from "./userstore";
 
-/** 경량 인증 — scrypt 해시 + 세션 토큰(httpOnly 쿠키). 저장은 userStore(Firestore/Postgres). */
+/** 경량 인증 — scrypt 해시 + 세션 토큰(httpOnly 쿠키). 저장은 Postgres userStore. */
 
 export const SESSION_COOKIE = "butler_session";
 const SESSION_DAYS = 30;

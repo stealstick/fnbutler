@@ -1,16 +1,10 @@
 /**
  * 유저 데이터 저장소 (회원·세션·관심목록·알림).
  *
- * 시세/컨센서스 데이터는 배포마다 GCS에서 다시 구워지므로 유실이 없지만,
- * 라이브에서 생기는 유저 데이터는 영속 저장이 필요하다.
- *  - prod(Cloud Run): Firestore  (BUTLER_USERSTORE=firestore) — 배포해도 유지, 사실상 무료.
- *  - local dev: Postgres (기본)  — GCP 인증 없이 로컬 DB 로 개발 가능.
- *
- * 모든 함수는 async. user.id 는 불투명 문자열.
- *   Postgres: BIGSERIAL id 문자열.  Firestore: 정규화 이메일.
+ * Postgres가 운영/로컬 공통 영속 저장소다. 모든 함수는 async이고
+ * user.id는 BIGSERIAL id를 문자열로 노출한다.
  */
-import { Firestore } from "@google-cloud/firestore";
-import { all, one, query, tx, nowIso } from "./db";
+import { all, ensureMigrated, one, query, tx, nowIso } from "./db";
 
 export interface StoredUser {
   id: string;
@@ -41,8 +35,8 @@ export interface CalendarPrefsRecord {
 
 /**
  * 경제·실적 캘린더 이벤트 — 런타임에 자주 갱신되고 재배포 없이 반영돼야 하므로
- * 시세/컨센서스 Postgres와 별도로, prod에서는 유저 데이터와 같은 Firestore 계층에 둔다.
- * 수집 윈도우(±N일)가 사실상 전부라 매 수집 = 전량 교체(putAll). 로컬 dev 는 Postgres 폴백.
+ * Postgres calendar_events에 저장한다. 수집 윈도우(±N일)가 사실상 전부라
+ * 매 수집 = 전량 교체(putAll)로 중복 없이 갱신한다.
  */
 export interface CalendarEventRecord {
   id: string;
@@ -64,139 +58,7 @@ export interface CalendarEventRecord {
   source: string;
 }
 
-const useFirestore = process.env.BUTLER_USERSTORE === "firestore";
-
-/* ============================ Firestore 백엔드 ============================ */
-let _fs: Firestore | null = null;
-function fs(): Firestore {
-  if (!_fs) _fs = new Firestore({ databaseId: process.env.BUTLER_FIRESTORE_DB || "(default)" });
-  return _fs;
-}
 const norm = (email: string) => email.toLowerCase().trim();
-const watchId = (uid: string, corp: string) => `${uid}|${corp}`;
-const notifId = (uid: string, changeId: number) => `${uid}|${changeId}`;
-
-const firestoreBackend = {
-  async getUserByEmail(email: string): Promise<StoredUser | null> {
-    const doc = await fs().collection("users").doc(norm(email)).get();
-    if (!doc.exists) return null;
-    const d = doc.data()!;
-    return {
-      id: doc.id,
-      email: doc.id,
-      passwordHash: d.passwordHash,
-      telegramChatId: d.telegramChatId ?? null,
-      alertsEnabled: d.alertsEnabled !== false,
-    };
-  },
-  async getUserById(id: string) {
-    return this.getUserByEmail(id);
-  },
-  async createUser(email: string, passwordHash: string): Promise<StoredUser> {
-    const ref = fs().collection("users").doc(norm(email));
-    await fs().runTransaction(async (tx) => {
-      const snap = await tx.get(ref);
-      if (snap.exists) throw new Error("UNIQUE email");
-      tx.set(ref, { passwordHash, telegramChatId: null, alertsEnabled: true, createdAt: nowIso() });
-    });
-    return { id: ref.id, email: ref.id, passwordHash, telegramChatId: null, alertsEnabled: true };
-  },
-  async updateUserTelegram(id: string, p: { telegramChatId?: string | null; alertsEnabled?: boolean }) {
-    const patch: Record<string, unknown> = {};
-    if (p.telegramChatId !== undefined) patch.telegramChatId = p.telegramChatId || null;
-    if (p.alertsEnabled !== undefined) patch.alertsEnabled = p.alertsEnabled;
-    await fs().collection("users").doc(id).set(patch, { merge: true });
-  },
-  async createSession(token: string, userId: string, expiresAt: string) {
-    await fs().collection("sessions").doc(token).set({ userId, expiresAt, createdAt: nowIso() });
-  },
-  async getSession(token: string) {
-    const doc = await fs().collection("sessions").doc(token).get();
-    if (!doc.exists) return null;
-    const d = doc.data()!;
-    return { userId: d.userId as string, expiresAt: d.expiresAt as string };
-  },
-  async deleteSession(token: string) {
-    await fs().collection("sessions").doc(token).delete();
-  },
-  async addWatch(userId: string, corpCode: string) {
-    await fs()
-      .collection("watchlist")
-      .doc(watchId(userId, corpCode))
-      .set({ userId, corpCode, createdAt: nowIso() });
-  },
-  async removeWatch(userId: string, corpCode: string) {
-    await fs().collection("watchlist").doc(watchId(userId, corpCode)).delete();
-  },
-  async isWatched(userId: string, corpCode: string) {
-    return (await fs().collection("watchlist").doc(watchId(userId, corpCode)).get()).exists;
-  },
-  async listWatchCorpCodes(userId: string): Promise<string[]> {
-    const snap = await fs().collection("watchlist").where("userId", "==", userId).get();
-    return snap.docs.map((d) => d.data().corpCode as string);
-  },
-  async listAlertTargets(): Promise<AlertTarget[]> {
-    const users = await fs().collection("users").where("alertsEnabled", "==", true).get();
-    const out: AlertTarget[] = [];
-    for (const u of users.docs) {
-      const chat = u.data().telegramChatId;
-      if (!chat) continue;
-      out.push({ userId: u.id, telegramChatId: chat, corpCodes: await this.listWatchCorpCodes(u.id) });
-    }
-    return out;
-  },
-  async hasNotification(userId: string, changeId: number) {
-    return (await fs().collection("notifications").doc(notifId(userId, changeId)).get()).exists;
-  },
-  async recordNotification(userId: string, changeId: number, status: string) {
-    await fs()
-      .collection("notifications")
-      .doc(notifId(userId, changeId))
-      .set({ userId, changeId, status, sentAt: nowIso() });
-  },
-  async createLinkToken(token: string, userId: string, expiresAt: string) {
-    await fs().collection("tg_link_tokens").doc(token).set({ userId, expiresAt, createdAt: nowIso() });
-  },
-  // 일회성: 존재하면 즉시 삭제하고, 만료 전이면 userId 반환(아니면 null).
-  async consumeLinkToken(token: string): Promise<string | null> {
-    const ref = fs().collection("tg_link_tokens").doc(token);
-    return fs().runTransaction(async (tx) => {
-      const snap = await tx.get(ref);
-      if (!snap.exists) return null;
-      const d = snap.data()!;
-      tx.delete(ref);
-      return new Date(d.expiresAt) < new Date() ? null : (d.userId as string);
-    });
-  },
-  async getCalendarPrefs(userId: string): Promise<CalendarPrefsRecord | null> {
-    const doc = await fs().collection("calendar_prefs").doc(userId).get();
-    if (!doc.exists) return null;
-    const d = doc.data()!;
-    return { userId, prefs: (d.prefs as CalendarPrefsData) ?? {}, feedToken: d.feedToken ?? null };
-  },
-  async upsertCalendarPrefs(userId: string, prefs: CalendarPrefsData, feedToken: string): Promise<void> {
-    await fs()
-      .collection("calendar_prefs")
-      .doc(userId)
-      .set({ prefs, feedToken, updatedAt: nowIso() }, { merge: true });
-  },
-  async getCalendarPrefsByToken(token: string): Promise<CalendarPrefsRecord | null> {
-    const snap = await fs().collection("calendar_prefs").where("feedToken", "==", token).limit(1).get();
-    if (snap.empty) return null;
-    const doc = snap.docs[0];
-    const d = doc.data();
-    return { userId: doc.id, prefs: (d.prefs as CalendarPrefsData) ?? {}, feedToken: d.feedToken ?? null };
-  },
-  // 캘린더 이벤트는 단일 문서(calendar/events)에 배열로 보관 — 1 read/write 로 저렴.
-  async getAllCalendarEvents(): Promise<CalendarEventRecord[]> {
-    const doc = await fs().collection("calendar").doc("events").get();
-    if (!doc.exists) return [];
-    return (doc.data()!.events as CalendarEventRecord[]) ?? [];
-  },
-  async putAllCalendarEvents(events: CalendarEventRecord[]): Promise<void> {
-    await fs().collection("calendar").doc("events").set({ events, updatedAt: nowIso() });
-  },
-};
 
 /* ============================== Postgres 백엔드 ============================== */
 const postgresBackend = {
@@ -350,7 +212,7 @@ const postgresBackend = {
       ? { userId: String(r.user_id), prefs: JSON.parse(r.prefs_json || "{}"), feedToken: r.feed_token }
       : null;
   },
-  // 로컬 dev 폴백: calendar_events 테이블에 전량 교체.
+  // calendar_events 테이블에 전량 교체.
   async getAllCalendarEvents(): Promise<CalendarEventRecord[]> {
     return all<CalendarEventRecord>(
       `SELECT id, category, subcategory, country, event_date, event_time, tz, title, symbol,
@@ -403,5 +265,20 @@ const postgresBackend = {
   },
 };
 
-export const userStore = useFirestore ? firestoreBackend : postgresBackend;
-export const userStoreKind = useFirestore ? "firestore" : "postgres";
+type UserStoreBackend = typeof postgresBackend;
+
+function withMigration<T extends Record<string, (...args: any[]) => Promise<any>>>(backend: T): T {
+  return new Proxy(backend, {
+    get(target, prop, receiver) {
+      const value = Reflect.get(target, prop, receiver);
+      if (typeof value !== "function") return value;
+      return async (...args: any[]) => {
+        await ensureMigrated();
+        return value.apply(target, args);
+      };
+    },
+  }) as T;
+}
+
+export const userStore: UserStoreBackend = withMigration(postgresBackend);
+export const userStoreKind = "postgres";

@@ -15,6 +15,7 @@
  *  - WiseReport/FnGuide 공개 재무요약에서 국내 컨센서스 추정치를 함께 보강한다.
  *  - Nasdaq screener 공개 JSON에서 NASDAQ 시총 상위 500개 기업을 함께 보강한다.
  *  - FMP_API_KEY가 있으면 무료 플랜 한도 안에서 NASDAQ 연간 추정치를 회전 보강한다.
+ *  - Seeking Alpha 공개 JSON이 열리면 NASDAQ 분기/연간 EPS·매출 실제치/추정치를 회전 보강한다.
  *  - Yahoo Finance 웹 JSON이 열리면 NASDAQ 분기/연간 EPS·매출 추정치와 목표가를 보강한다.
  *  - Postgres가 영속 저장소이므로 GCS DB 업로드/이미지 재배포는 하지 않는다.
  */
@@ -24,6 +25,7 @@ import { recordDailySnapshot, dispatchAlerts } from "../src/lib/poll";
 import { ingestCalendar } from "../src/lib/calendar";
 import { ingestNasdaqTopCompanies } from "../src/lib/nasdaq";
 import { backfillFmpNasdaqEstimates } from "../src/lib/fmp";
+import { backfillSeekingAlphaNasdaqEstimates } from "../src/lib/seekingalpha";
 import { backfillYahooNasdaqEstimates } from "../src/lib/yahoo";
 import { backfillDartFinancials } from "./backfill-dart-financials";
 import { backfillWiseReportEstimates } from "./backfill-wisereport-estimates";
@@ -189,6 +191,24 @@ async function main() {
     wiseEstimatesMsg = `targeted=${summary.targeted},writes=${summary.writes},fail=${summary.fail}`;
   }
 
+  let seekingAlphaNasdaqMsg = "skip";
+  if (!has("no-seekingalpha-nasdaq-estimates")) {
+    try {
+      const summary = await backfillSeekingAlphaNasdaqEstimates(db, {
+        limit: Number(argOf("seekingalpha-nasdaq-limit") || process.env.SEEKING_ALPHA_NASDAQ_LIMIT || "500"),
+        batchSize: Number(argOf("seekingalpha-batch-size") || process.env.SEEKING_ALPHA_BATCH_SIZE || "5"),
+        callDelayMs: Number(argOf("seekingalpha-call-delay-ms") || process.env.SEEKING_ALPHA_CALL_DELAY_MS || "60000"),
+        overwriteEstimates:
+          has("seekingalpha-overwrite-estimates") || process.env.SEEKING_ALPHA_OVERWRITE_ESTIMATES === "1",
+        log: (message) => process.stdout.write(`   seekingalpha-nasdaq-estimates ${message}`),
+      });
+      seekingAlphaNasdaqMsg = `targeted=${summary.targeted},mapped=${summary.mapped},ok=${summary.ok},fail=${summary.fail},writes=${summary.writes}`;
+    } catch (e) {
+      seekingAlphaNasdaqMsg = `error: ${(e as Error).message}`;
+      process.stdout.write(`   seekingalpha-nasdaq-estimates error ${(e as Error).message}\n`);
+    }
+  }
+
   let yahooNasdaqMsg = "skip";
   if (!has("no-yahoo-nasdaq-estimates")) {
     try {
@@ -213,13 +233,13 @@ async function main() {
     [
       runStart,
       nowIso(),
-      `targets=${targets.length} newReports=${newReports} quoteUpdated=${quoteUpdated} unchanged=${unchanged} alerts=${sent} errors=${errors} nasdaq=${nasdaqMsg} calendar=${calendarMsg} fmpNasdaq=${fmpNasdaqMsg} yahooNasdaq=${yahooNasdaqMsg} dartFinancials=${dartFinancialsMsg} wiseEstimates=${wiseEstimatesMsg}`,
+      `targets=${targets.length} newReports=${newReports} quoteUpdated=${quoteUpdated} unchanged=${unchanged} alerts=${sent} errors=${errors} nasdaq=${nasdaqMsg} calendar=${calendarMsg} fmpNasdaq=${fmpNasdaqMsg} seekingAlphaNasdaq=${seekingAlphaNasdaqMsg} yahooNasdaq=${yahooNasdaqMsg} dartFinancials=${dartFinancialsMsg} wiseEstimates=${wiseEstimatesMsg}`,
     ],
     db,
   );
 
   process.stdout.write(
-    `갱신 완료 — 신규리포트 ${newReports} · 시세변경 ${quoteUpdated} · 무변경 ${unchanged} · 알림 ${sent} · 오류 ${errors} · Nasdaq ${nasdaqMsg} · FMP해외추정 ${fmpNasdaqMsg} · Yahoo나스닥 ${yahooNasdaqMsg} · DART재무 ${dartFinancialsMsg} · 추정치 ${wiseEstimatesMsg}\n`,
+    `갱신 완료 — 신규리포트 ${newReports} · 시세변경 ${quoteUpdated} · 무변경 ${unchanged} · 알림 ${sent} · 오류 ${errors} · Nasdaq ${nasdaqMsg} · FMP해외추정 ${fmpNasdaqMsg} · SA나스닥 ${seekingAlphaNasdaqMsg} · Yahoo나스닥 ${yahooNasdaqMsg} · DART재무 ${dartFinancialsMsg} · 추정치 ${wiseEstimatesMsg}\n`,
   );
 }
 

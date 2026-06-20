@@ -57,6 +57,7 @@ npm run refresh:calendar
 - 운영 환경에서는 Cloud Scheduler/GitHub Actions가 Cloud Run Job `fnbutler-refresh` 를 매일 18:30 KST에 실행한다.
 - 일일 갱신은 Nasdaq screener의 시총 상위 500개 기업도 `companies`에 보강한다. 가져오지 못하는 PER/PBR/목표가/재무 성장률은 화면에서 `-`로 표시한다.
 - `FMP_API_KEY`가 있으면 FMP 무료 플랜 한도에 맞춰 Nasdaq 연간 컨센서스 추정치를 회전 보강한다. 기본 `FMP_DAILY_CALL_BUDGET=240`, `FMP_CALL_DELAY_MS=2500` 이라 500개 기업은 약 2일에 한 바퀴 돈다. 무료 플랜에서 확인된 `period=annual`만 사용하므로 `YoY`/`EPS성장E`는 채워지고, 분기 추정 기반 `QoQ 현재→다음E`는 유료 분기 endpoint 권한이 없으면 `-`로 남는다.
+- Seeking Alpha 공개 JSON이 열리면 Nasdaq 기업의 최근/다음 분기 및 연간 EPS·매출 실제치/추정치를 보강한다. 별도 인증은 기본적으로 필요 없고, `SEEKING_ALPHA_NASDAQ_LIMIT=500`, `SEEKING_ALPHA_BATCH_SIZE=5`, `SEEKING_ALPHA_CALL_DELAY_MS=60000`으로 천천히 갱신한다. 운영 Job은 `SEEKING_ALPHA_USE_CURL=1`로 curl 경로를 사용한다. PerimeterX/captcha로 차단되면 즉시 멈추며, 허용된 데이터 소스나 세션이 필요하다.
 - Yahoo Finance 웹 JSON이 열리면 NASDAQ 기업의 목표가와 `0q/+1q/0y/+1y` EPS·매출 추정치를 보강한다. 기본은 기존 FMP 추정치를 덮어쓰지 않고 빈칸만 채운다. Yahoo 세션은 DB에 캐시하고, 실패 시 기존 데이터는 보존한 채 다음 실행 때 재시도한다.
 - Nasdaq 실적 캘린더는 수집 범위 안에서 시총 상위 500개 해외/미국 상장기업 실적발표 일정을 캘린더에 넣는다.
 - 국내 100대 기업 DART 잠정실적 공시는 `DART_API_KEY` secret이 있는 `fnbutler-calendar-refresh`
@@ -92,7 +93,6 @@ src/lib/ingest.ts           async upsert + 변경 감지
 |---|---|
 | `BUTLER_DATABASE_URL` / `DATABASE_URL` | Postgres 접속 URL |
 | `PGHOST`, `PGDATABASE`, `PGUSER`, `PGPASSWORD` | URL 미사용 시 Postgres 접속값 |
-| `BUTLER_USERSTORE` | `firestore`면 유저/세션/알림/캘린더를 Firestore에 저장 |
 | `BUTLER_BASE_URL` | 알림 링크용 외부 URL |
 | `BUTLER_TELEGRAM_BOT_TOKEN` | 텔레그램 봇 토큰 |
 | `BUTLER_TELEGRAM_WEBHOOK_SECRET` | 텔레그램 웹훅 secret token |
@@ -102,6 +102,12 @@ src/lib/ingest.ts           async upsert + 변경 감지
 | `FMP_DAILY_CALL_BUDGET` | FMP 하루 호출 예산(기본 240, 무료 250 calls/day 여유분 보존) |
 | `FMP_CALL_DELAY_MS` | FMP 호출 간격(기본 2500ms, 무료 플랜 rate limit 보호) |
 | `FMP_TARGET_CALLS_PER_DAY` | FMP 목표가 per-symbol 호출 예산(기본 0, bulk target은 무료 제한) |
+| `SEEKING_ALPHA_NASDAQ_LIMIT` | Seeking Alpha NASDAQ 추정치 일일 보강 대상 수(기본 500) |
+| `SEEKING_ALPHA_BATCH_SIZE` | Seeking Alpha 배치당 심볼 수(기본 5) |
+| `SEEKING_ALPHA_CALL_DELAY_MS` | Seeking Alpha 배치 호출 간격(기본 60000ms) |
+| `SEEKING_ALPHA_USE_CURL` | `1`이면 Node fetch 대신 curl 호출 사용(배포 기본값) |
+| `SEEKING_ALPHA_OVERWRITE_ESTIMATES` | `1`이면 기존 추정치도 Seeking Alpha 값으로 덮어쓰기 |
+| `SEEKING_ALPHA_COOKIE` | Cloud Run에서 공개 JSON이 차단될 때만 선택적으로 넣는 허용된 Seeking Alpha 세션 쿠키 |
 | `YAHOO_NASDAQ_LIMIT` | Yahoo NASDAQ 추정치 일일 보강 대상 수(기본 30) |
 | `YAHOO_CALL_DELAY_MS` | Yahoo 호출 간격(기본 2500ms) |
 | `YAHOO_JITTER_MS` | Yahoo 호출 간 랜덤 추가 대기시간(기본 750ms) |
@@ -121,8 +127,8 @@ src/lib/ingest.ts           async upsert + 변경 감지
 - `valuations`: PER/PBR 시계열
 - `change_logs`: 목표가/컨센서스/재무 변경 이력
 - `daily_snapshots`: 일별 핵심 지표 스냅샷
-- `users`, `sessions`, `watchlist`, `notifications`: 로컬 Postgres 유저 저장소
-- `calendar_events`, `calendar_prefs`: 로컬 Postgres 캘린더 저장소
+- `users`, `sessions`, `watchlist`, `notifications`: Postgres 유저 저장소
+- `calendar_events`, `calendar_prefs`: Postgres 캘린더 저장소
 
-운영에서는 `BUTLER_USERSTORE=firestore` 를 써서 유저/알림/캘린더를 Firestore에 두고,
-시세·컨센서스·재무 본체는 Cloud SQL Postgres에 둔다.
+운영/로컬 모두 Postgres를 단일 저장소로 쓴다. 캘린더는 크론/수동 refresh로
+`calendar_events`를 전량 교체하므로 중복 없이 재생성된다.

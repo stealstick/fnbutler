@@ -24,6 +24,10 @@ env:
   DB_PASSWORD_SECRET: fnbutler-db-password
   RUN_SA: fnbutler-runner
   URL: https://fnbutler-l3why3suea-du.a.run.app
+  SEEKING_ALPHA_NASDAQ_LIMIT: "500"
+  SEEKING_ALPHA_BATCH_SIZE: "5"
+  SEEKING_ALPHA_CALL_DELAY_MS: "60000"
+  SEEKING_ALPHA_USE_CURL: "1"
 
 jobs:
   deploy:
@@ -59,6 +63,7 @@ jobs:
           else
             echo "YAHOO_COOKIE/YAHOO_CRUMB secrets are not configured; Yahoo will try DB cache and live session minting."
           fi
+          echo "Seeking Alpha Nasdaq estimates use public JSON by default; optional SEEKING_ALPHA_COOKIE Secret Manager secret is only needed if Cloud Run gets blocked."
 
       - name: Build & push images
         run: |
@@ -88,6 +93,9 @@ jobs:
           if gcloud secrets describe FMP_API_KEY --project "$PROJECT" >/dev/null 2>&1; then
             SECRET_VARS="${SECRET_VARS},FMP_API_KEY=FMP_API_KEY:latest"
           fi
+          if gcloud secrets describe SEEKING_ALPHA_COOKIE --project "$PROJECT" >/dev/null 2>&1; then
+            SECRET_VARS="${SECRET_VARS},SEEKING_ALPHA_COOKIE=SEEKING_ALPHA_COOKIE:latest"
+          fi
 
           gcloud run deploy "$SERVICE" \
             --image "$APP_IMG" --project "$PROJECT" --region "$REGION" \
@@ -95,7 +103,7 @@ jobs:
             --min-instances 0 --max-instances 2 --port 8080 \
             --service-account "${RUN_SA}@${PROJECT}.iam.gserviceaccount.com" \
             --set-cloudsql-instances "$CONNECTION" \
-            --set-env-vars "PGHOST=/cloudsql/${CONNECTION},PGDATABASE=${DB_NAME},PGUSER=${DB_USER},BUTLER_USERSTORE=firestore,BUTLER_BASE_URL=${URL},BUTLER_RATE_PER_MIN=80" \
+            --set-env-vars "PGHOST=/cloudsql/${CONNECTION},PGDATABASE=${DB_NAME},PGUSER=${DB_USER},BUTLER_BASE_URL=${URL},BUTLER_RATE_PER_MIN=80,SEEKING_ALPHA_NASDAQ_LIMIT=${SEEKING_ALPHA_NASDAQ_LIMIT},SEEKING_ALPHA_BATCH_SIZE=${SEEKING_ALPHA_BATCH_SIZE},SEEKING_ALPHA_CALL_DELAY_MS=${SEEKING_ALPHA_CALL_DELAY_MS},SEEKING_ALPHA_USE_CURL=${SEEKING_ALPHA_USE_CURL}" \
             --set-secrets "$SECRET_VARS"
 
       - name: Update refresh job image
@@ -107,7 +115,7 @@ jobs:
         run: |
           CONNECTION="${PROJECT}:${REGION}:${SQL_INSTANCE}"
           SECRET_VARS="PGPASSWORD=${DB_PASSWORD_SECRET}:latest"
-          ENV_VARS="PGHOST=/cloudsql/${CONNECTION},PGDATABASE=${DB_NAME},PGUSER=${DB_USER},BUTLER_USERSTORE=firestore,BUTLER_BASE_URL=${URL},BUTLER_RATE_PER_MIN=80"
+          ENV_VARS="PGHOST=/cloudsql/${CONNECTION},PGDATABASE=${DB_NAME},PGUSER=${DB_USER},BUTLER_BASE_URL=${URL},BUTLER_RATE_PER_MIN=80,SEEKING_ALPHA_NASDAQ_LIMIT=${SEEKING_ALPHA_NASDAQ_LIMIT},SEEKING_ALPHA_BATCH_SIZE=${SEEKING_ALPHA_BATCH_SIZE},SEEKING_ALPHA_CALL_DELAY_MS=${SEEKING_ALPHA_CALL_DELAY_MS},SEEKING_ALPHA_USE_CURL=${SEEKING_ALPHA_USE_CURL}"
           if gcloud secrets describe BUTLER_TELEGRAM_BOT_TOKEN --project "$PROJECT" >/dev/null 2>&1; then
             SECRET_VARS="${SECRET_VARS},BUTLER_TELEGRAM_BOT_TOKEN=BUTLER_TELEGRAM_BOT_TOKEN:latest"
           fi
@@ -130,6 +138,9 @@ jobs:
             SECRET_VARS="${SECRET_VARS},YAHOO_CRUMB=YAHOO_CRUMB:latest"
           elif [ -n "$YAHOO_CRUMB_VALUE" ]; then
             ENV_VARS="${ENV_VARS},YAHOO_CRUMB=${YAHOO_CRUMB_VALUE}"
+          fi
+          if gcloud secrets describe SEEKING_ALPHA_COOKIE --project "$PROJECT" >/dev/null 2>&1; then
+            SECRET_VARS="${SECRET_VARS},SEEKING_ALPHA_COOKIE=SEEKING_ALPHA_COOKIE:latest"
           fi
 
           if gcloud run jobs describe "$JOB" --region "$REGION" --project "$PROJECT" >/dev/null 2>&1; then
@@ -182,7 +193,7 @@ jobs:
         run: |
           CONNECTION="${PROJECT}:${REGION}:${SQL_INSTANCE}"
           SECRET_VARS="PGPASSWORD=${DB_PASSWORD_SECRET}:latest"
-          ENV_VARS="PGHOST=/cloudsql/${CONNECTION},PGDATABASE=${DB_NAME},PGUSER=${DB_USER},BUTLER_USERSTORE=firestore,BUTLER_BASE_URL=${URL},BUTLER_RATE_PER_MIN=80"
+          ENV_VARS="PGHOST=/cloudsql/${CONNECTION},PGDATABASE=${DB_NAME},PGUSER=${DB_USER},BUTLER_BASE_URL=${URL},BUTLER_RATE_PER_MIN=80,SEEKING_ALPHA_NASDAQ_LIMIT=${SEEKING_ALPHA_NASDAQ_LIMIT},SEEKING_ALPHA_BATCH_SIZE=${SEEKING_ALPHA_BATCH_SIZE},SEEKING_ALPHA_CALL_DELAY_MS=${SEEKING_ALPHA_CALL_DELAY_MS},SEEKING_ALPHA_USE_CURL=${SEEKING_ALPHA_USE_CURL}"
           if gcloud secrets describe DART_API_KEY --project "$PROJECT" >/dev/null 2>&1; then
             SECRET_VARS="${SECRET_VARS},DART_API_KEY=DART_API_KEY:latest"
           elif [ -n "$DART_API_KEY_VALUE" ]; then
@@ -192,6 +203,9 @@ jobs:
             SECRET_VARS="${SECRET_VARS},FMP_API_KEY=FMP_API_KEY:latest"
           elif [ -n "$FMP_API_KEY_VALUE" ]; then
             ENV_VARS="${ENV_VARS},FMP_API_KEY=${FMP_API_KEY_VALUE}"
+          fi
+          if gcloud secrets describe SEEKING_ALPHA_COOKIE --project "$PROJECT" >/dev/null 2>&1; then
+            SECRET_VARS="${SECRET_VARS},SEEKING_ALPHA_COOKIE=SEEKING_ALPHA_COOKIE:latest"
           fi
 
           if gcloud run jobs describe "$CALENDAR_JOB" --region "$REGION" --project "$PROJECT" >/dev/null 2>&1; then

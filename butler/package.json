@@ -19,6 +19,7 @@
     "backfill:dart-financials": "tsx scripts/backfill-dart-financials.ts --latest",
     "backfill:wisereport-estimates": "tsx scripts/backfill-wisereport-estimates.ts",
     "backfill:fmp-nasdaq-estimates": "tsx scripts/backfill-fmp-nasdaq-estimates.ts",
+    "backfill:seekingalpha-nasdaq-estimates": "tsx scripts/backfill-seekingalpha-nasdaq-estimates.ts",
     "backfill:yahoo-nasdaq-estimates": "tsx scripts/backfill-yahoo-nasdaq-estimates.ts",
     "backfill:summaries": "tsx scripts/backfill-summaries.ts",
     "import:har": "tsx scripts/import-har.ts",
@@ -34,7 +35,6 @@
     "telegram:setup": "tsx scripts/telegram-setup.ts"
   },
   "dependencies": {
-    "@google-cloud/firestore": "^8.6.0",
     "next": "^15.5.19",
     "pg": "^8.21.0",
     "react": "19.0.0",

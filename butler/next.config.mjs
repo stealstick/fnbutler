@@ -7,7 +7,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const nextConfig = {
   output: "standalone",
   outputFileTracingRoot: __dirname,
-  serverExternalPackages: ["pg", "@google-cloud/firestore"],
+  serverExternalPackages: ["pg"],
 };
 
 export default nextConfig;

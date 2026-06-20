@@ -9,7 +9,7 @@ on:
         description: "refresh mode"
         type: choice
         default: full
-        options: [full, calendar-only, dart-financials, dart-2024-financials, dart-2025-financials, wisereport-estimates, nasdaq-companies, fmp-nasdaq-estimates, yahoo-nasdaq-estimates]
+        options: [full, calendar-only, dart-financials, dart-2024-financials, dart-2025-financials, wisereport-estimates, nasdaq-companies, fmp-nasdaq-estimates, seekingalpha-nasdaq-estimates, yahoo-nasdaq-estimates]
       wait:
         description: "wait for job completion"
         type: boolean
@@ -70,6 +70,9 @@ jobs:
           fi
           if [ "$MODE" = "fmp-nasdaq-estimates" ]; then
             EXTRA_ARGS=(--args tsx,scripts/backfill-fmp-nasdaq-estimates.ts)
+          fi
+          if [ "$MODE" = "seekingalpha-nasdaq-estimates" ]; then
+            EXTRA_ARGS=(--args tsx,scripts/backfill-seekingalpha-nasdaq-estimates.ts)
           fi
           if [ "$MODE" = "yahoo-nasdaq-estimates" ]; then
             EXTRA_ARGS=(--args tsx,scripts/backfill-yahoo-nasdaq-estimates.ts)

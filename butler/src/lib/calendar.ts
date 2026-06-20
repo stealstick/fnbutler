@@ -396,7 +396,7 @@ async function nasdaqEarnings(date: string): Promise<any[] | null> {
 }
 
 // ---------------------------------------------------------------------------
-// 적재 (userStore: prod=Firestore 단일문서 / 로컬=Postgres 테이블)
+// 적재 (Postgres calendar_events 전량 교체)
 // ---------------------------------------------------------------------------
 export interface IngestOpts {
   daysBack?: number;
@@ -541,7 +541,7 @@ export async function ingestCalendar(db: Queryable, opts: IngestOpts = {}): Prom
     onLog("  국내 실적: DART_API_KEY 미설정 → 건너뜀");
   }
 
-  // 4) 전량 교체 적재 (userStore: prod=Firestore / 로컬=Postgres).
+  // 4) 전량 교체 적재 (Postgres).
   //    수집 윈도우(±N일)가 사실상 전부라 매 수집 = 전량 교체. 단, 데이터 손실 방지:
   //    Nasdaq fetch 실패 시 실패한 날짜/카테고리만 기존 분을 보존하고, 성공한 날짜는 현재 원천으로 교체한다.
   //    DART 실패 시 기존 국내실적 보존. 한국은행은 결정적 큐레이션이라 항상 갱신.

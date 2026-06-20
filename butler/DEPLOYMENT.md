@@ -101,6 +101,13 @@ Nasdaq 기업 중 `fmp_estimates_at`이 오래된 순서로 연간 추정치를 
 연간 추정치 기반 `YoY`/`EPS성장E`만 채운다. 목표가는 `FMP_TARGET_CALLS_PER_DAY`를 별도로 주면
 per-symbol `price-target-consensus`로 천천히 채울 수 있다.
 
+Seeking Alpha NASDAQ 추정치는 공개 `symbol_data` JSON 경로다. 현재 확인한 엔드포인트는 별도 인증 없이
+`symbol_data?slugs=...`로 ticker id를 얻고, `symbol_data/estimates`에서 분기/연간 EPS·매출
+실제치/컨센서스 평균을 배치로 가져온다. 일일 Job 기본값은 `SEEKING_ALPHA_NASDAQ_LIMIT=500`,
+`SEEKING_ALPHA_BATCH_SIZE=5`, `SEEKING_ALPHA_CALL_DELAY_MS=60000`, `SEEKING_ALPHA_USE_CURL=1`이며,
+`seekingalpha_estimates_at`이 오래된 NASDAQ 기업부터 천천히 회전 보강한다. PerimeterX/captcha로
+차단되면 즉시 멈추며, Cloud Run에서 공개 호출이 차단될 때는 허용된 데이터 소스나 세션이 필요하다.
+
 Yahoo NASDAQ 추정치는 비공식 웹 JSON 경로다. 실행 시 DB 캐시 세션,
 `YAHOO_COOKIE`/`YAHOO_CRUMB` env, 새 쿠키+crumb 발급 순서로 `quoteSummary`를 호출한다. 기본값은
 `YAHOO_NASDAQ_LIMIT=30`, `YAHOO_CALL_DELAY_MS=2500`, `YAHOO_JITTER_MS=750`,
@@ -164,7 +171,7 @@ gcloud sql connect fnbutler-pg \
 |---|---|
 | 웹이 DB 연결 실패 | Cloud Run `PGHOST=/cloudsql/<connection>`, Cloud SQL 연결 설정, `PGPASSWORD` secret |
 | Job이 실행되지만 데이터 변화 없음 | `ingest_runs`, 최신 `report_id`, 업스트림 rate limit |
-| 텔레그램 알림 없음 | `BUTLER_TELEGRAM_BOT_TOKEN`, Firestore userStore, 유저 `alertsEnabled` |
+| 텔레그램 알림 없음 | `BUTLER_TELEGRAM_BOT_TOKEN`, Postgres `users.alerts_enabled`, `users.telegram_chat_id` |
 | 캘린더 국내 실적 없음 | `DART_API_KEY` secret 누락 가능 |
 | Nasdaq 성장률 없음 | `FMP_API_KEY` secret 누락, 아직 회전 갱신 순서 미도달, 또는 FMP 무료 플랜에서 해당 symbol 추정치 미제공 |
 | NASDAQ Yahoo 성장률 없음 | Yahoo crumb/cookie 차단, 해당 종목 커버리지 없음, 또는 `YAHOO_NASDAQ_LIMIT=0` 설정 |

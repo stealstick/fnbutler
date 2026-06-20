@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS companies (
     active             INTEGER NOT NULL DEFAULT 1,
     fmp_estimates_at   TEXT,
     fmp_targets_at     TEXT,
+    seekingalpha_estimates_at TEXT,
     yahoo_estimates_at TEXT,
     yahoo_targets_at   TEXT,
     detail_ingested_at TEXT,
@@ -49,6 +50,7 @@ ALTER TABLE companies ADD COLUMN IF NOT EXISTS country TEXT;
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS active INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS fmp_estimates_at TEXT;
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS fmp_targets_at TEXT;
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS seekingalpha_estimates_at TEXT;
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS yahoo_estimates_at TEXT;
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS yahoo_targets_at TEXT;
 ALTER TABLE companies ALTER COLUMN price TYPE DOUBLE PRECISION USING price::double precision;
@@ -59,6 +61,7 @@ CREATE INDEX IF NOT EXISTS idx_companies_mcap ON companies(market_cap DESC);
 CREATE INDEX IF NOT EXISTS idx_companies_market ON companies(market, market_cap DESC);
 CREATE INDEX IF NOT EXISTS idx_companies_active ON companies(active, market_cap DESC);
 CREATE INDEX IF NOT EXISTS idx_companies_fmp_estimates ON companies(fmp_estimates_at, market_cap DESC);
+CREATE INDEX IF NOT EXISTS idx_companies_seekingalpha_estimates ON companies(seekingalpha_estimates_at, market_cap DESC);
 CREATE INDEX IF NOT EXISTS idx_companies_yahoo_estimates ON companies(yahoo_estimates_at, market_cap DESC);
 CREATE INDEX IF NOT EXISTS idx_companies_cover ON companies(has_consensus, market_cap DESC);
 

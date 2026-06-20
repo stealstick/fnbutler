@@ -39,7 +39,7 @@ steps:
           --port 8080 \
           --service-account "${_RUN_SA}@$PROJECT_ID.iam.gserviceaccount.com" \
           --set-cloudsql-instances "$PROJECT_ID:${_REGION}:${_SQL_INSTANCE}" \
-          --set-env-vars "PGHOST=/cloudsql/$PROJECT_ID:${_REGION}:${_SQL_INSTANCE},PGDATABASE=${_DB_NAME},PGUSER=${_DB_USER},BUTLER_USERSTORE=firestore,BUTLER_BASE_URL=${_BASE_URL},BUTLER_RATE_PER_MIN=80" \
+          --set-env-vars "PGHOST=/cloudsql/$PROJECT_ID:${_REGION}:${_SQL_INSTANCE},PGDATABASE=${_DB_NAME},PGUSER=${_DB_USER},BUTLER_BASE_URL=${_BASE_URL},BUTLER_RATE_PER_MIN=80" \
           --set-secrets "PGPASSWORD=${_DB_PASSWORD_SECRET}:latest"
 
 images:
