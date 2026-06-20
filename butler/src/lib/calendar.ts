@@ -151,6 +151,35 @@ function parseTime(v: unknown): string | null {
   return `${String(h).padStart(2, "0")}:${m[2]}`;
 }
 
+function eventStartMs(ev: Pick<CalEvent, "event_date" | "event_time" | "tz">): number {
+  if (ev.event_time && ev.tz === "GMT") {
+    return Date.parse(`${ev.event_date}T${ev.event_time}:00Z`);
+  }
+  if (ev.event_time && ev.tz === "Asia/Seoul") {
+    const [y, m, d] = ev.event_date.split("-").map(Number);
+    const [h, mi] = ev.event_time.split(":").map(Number);
+    return Date.UTC(y, m - 1, d, h - 9, mi);
+  }
+  const [y, m, d] = ev.event_date.split("-").map(Number);
+  return Date.UTC(y, m - 1, d, -9, 0);
+}
+
+function hasStarted(ev: Pick<CalEvent, "event_date" | "event_time" | "tz">, now = new Date()): boolean {
+  const start = eventStartMs(ev);
+  return Number.isFinite(start) && start <= now.getTime();
+}
+
+function kstDisplay(ev: Pick<CalEvent, "event_date" | "event_time" | "tz">): { date: string; time: string | null } {
+  if (ev.event_time && ev.tz === "GMT") {
+    const k = new Date(Date.parse(`${ev.event_date}T${ev.event_time}:00Z`) + 9 * 3600_000);
+    return {
+      date: `${k.getUTCFullYear()}-${String(k.getUTCMonth() + 1).padStart(2, "0")}-${String(k.getUTCDate()).padStart(2, "0")}`,
+      time: `${String(k.getUTCHours()).padStart(2, "0")}:${String(k.getUTCMinutes()).padStart(2, "0")}`,
+    };
+  }
+  return { date: ev.event_date, time: ev.event_time };
+}
+
 /** '$109,987,887,734' → 109987887734 */
 function parseMcap(v: unknown): number | null {
   const n = Number(String(v ?? "").replace(/[^0-9.]/g, ""));
@@ -319,18 +348,24 @@ export async function ingestCalendar(db: Queryable, opts: IngestOpts = {}): Prom
       const { sub, importance } = classifyMacro(name);
       // 유의미한 지표는 모두 저장(화면/계정에서 필터). 세부 점도표(개별 projection dots)만 제외.
       if (sub === "central_bank" && importance === 1) continue;
+      const eventTime = parseTime(r.gmt);
+      const eventBase = {
+        event_date: d,
+        event_time: eventTime,
+        tz: "GMT",
+      };
       events.push({
         id: makeId(["macro", slug, d, name]),
         category: "macro",
         subcategory: sub,
         country: slug,
         event_date: d,
-        event_time: parseTime(r.gmt),
+        event_time: eventTime,
         tz: "GMT",
         title: name,
         symbol: null,
         importance,
-        actual: txt(r.actual),
+        actual: hasStarted(eventBase) ? txt(r.actual) : null,
         consensus: txt(r.consensus),
         previous: txt(r.previous),
         market_cap: null,
@@ -593,9 +628,12 @@ export function buildIcs(
     const descParts: string[] = [];
     if (ev.consensus) descParts.push(`예상 ${ev.consensus}`);
     if (ev.previous) descParts.push(`이전 ${ev.previous}`);
-    if (ev.actual) descParts.push(`실제 ${ev.actual}`);
+    if (ev.actual && hasStarted(ev)) descParts.push(`실제 ${ev.actual}`);
     if (ev.note) descParts.push(ev.note);
-    if (ev.event_time && ev.tz) descParts.push(`발표 ${ev.event_time} ${ev.tz === "Asia/Seoul" ? "KST" : ev.tz}`);
+    if (ev.event_time && ev.tz) {
+      const kst = kstDisplay(ev);
+      descParts.push(`발표 ${kst.date} ${kst.time} KST`);
+    }
     if (ev.url) descParts.push(ev.url);
 
     lines.push("BEGIN:VEVENT");

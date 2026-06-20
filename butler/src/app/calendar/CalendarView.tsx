@@ -64,22 +64,44 @@ function dispRank(e: Ev) {
 }
 const pad = (n: number) => String(n).padStart(2, "0");
 const isoOf = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const isoKst = (d: Date) => {
+  const k = new Date(d.getTime() + 9 * 3600_000);
+  return `${k.getUTCFullYear()}-${pad(k.getUTCMonth() + 1)}-${pad(k.getUTCDate())}`;
+};
 
-/** GMT 시각 → KST(+9). 날짜가 넘어가면 nextDay=true. */
+/** GMT 시각 → KST(+9). */
 function gmtToKst(dateStr: string, timeStr: string) {
   const utc = new Date(`${dateStr}T${timeStr}:00Z`);
   const kst = new Date(utc.getTime() + 9 * 3600_000);
   return {
+    date: `${kst.getUTCFullYear()}-${pad(kst.getUTCMonth() + 1)}-${pad(kst.getUTCDate())}`,
     time: `${pad(kst.getUTCHours())}:${pad(kst.getUTCMinutes())}`,
-    nextDay: kst.getUTCDate() !== utc.getUTCDate(),
   };
+}
+function eventDisplayDate(e: Ev): string {
+  if (e.event_time && e.tz === "GMT") return gmtToKst(e.event_date, e.event_time).date;
+  return e.event_date;
+}
+function eventStartMs(e: Ev): number {
+  if (e.event_time && e.tz === "GMT") return Date.parse(`${e.event_date}T${e.event_time}:00Z`);
+  if (e.event_time && e.tz === "Asia/Seoul") {
+    const [y, m, d] = e.event_date.split("-").map(Number);
+    const [h, mi] = e.event_time.split(":").map(Number);
+    return Date.UTC(y, m - 1, d, h - 9, mi);
+  }
+  const [y, m, d] = e.event_date.split("-").map(Number);
+  return Date.UTC(y, m - 1, d, -9, 0);
+}
+function eventStarted(e: Ev, now: Date) {
+  const t = eventStartMs(e);
+  return Number.isFinite(t) && t <= now.getTime();
 }
 function timedDisplay(e: Ev): { time: string; suffix: string } | null {
   if (!e.event_time) return null;
   if (e.tz === "Asia/Seoul") return { time: e.event_time, suffix: "KST" };
   if (e.tz === "GMT") {
     const kst = gmtToKst(e.event_date, e.event_time);
-    return { time: kst.time, suffix: `KST${kst.nextDay ? "+1" : ""}` };
+    return { time: kst.time, suffix: "KST" };
   }
   return { time: e.event_time, suffix: e.tz ?? "" };
 }
@@ -134,7 +156,7 @@ function gcalEventUrl(e: Ev) {
   const det = [
     e.consensus ? `예상 ${e.consensus}` : "",
     e.previous ? `이전 ${e.previous}` : "",
-    e.actual ? `실제 ${e.actual}` : "",
+    e.actual && eventStarted(e, new Date()) ? `실제 ${e.actual}` : "",
     e.note || "",
   ]
     .filter(Boolean)
@@ -146,7 +168,8 @@ function gcalEventUrl(e: Ev) {
 
 /* ── 컴포넌트 ───────────────────────────────────────────────────────────── */
 export default function CalendarView({ events, stats }: { events: Ev[]; stats: Stats }) {
-  const today = useState(() => isoOf(new Date()))[0];
+  const [now, setNow] = useState(() => new Date());
+  const today = isoKst(now);
   const [view, setView] = useState<"month" | "list">("month");
   const [anchor, setAnchor] = useState(() => {
     const d = new Date();
@@ -165,6 +188,11 @@ export default function CalendarView({ events, stats }: { events: Ev[]; stats: S
   const [hydrated, setHydrated] = useState(false);
 
   const minImp = coreOnly ? 2 : 1;
+
+  useEffect(() => {
+    const t = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(t);
+  }, []);
 
   /* 초기: origin + 계정 저장 필터 / localStorage 복원 */
   useEffect(() => {
@@ -233,9 +261,10 @@ function loadLocal() {
   const byDate = useMemo(() => {
     const m = new Map<string, Ev[]>();
     for (const e of filtered) {
-      const a = m.get(e.event_date);
+      const date = eventDisplayDate(e);
+      const a = m.get(date);
       if (a) a.push(e);
-      else m.set(e.event_date, [e]);
+      else m.set(date, [e]);
     }
     // 날짜별 표시 우선순위: 통화정책 > 그 외 거시(중요도순) > 실적(시총순).
     // 실적이 많은 날에도 FOMC·BOJ·금통위 같은 핵심 거시가 먼저 보이게 한다.
@@ -508,7 +537,7 @@ function loadLocal() {
             ) : (
               <div className="cal-evlist">
                 {selectedEvents.map((e) => (
-                  <EventRow key={e.id} e={e} gcal={gcalEventUrl(e)} />
+                  <EventRow key={e.id} e={e} gcal={gcalEventUrl(e)} now={now} />
                 ))}
               </div>
             )}
@@ -527,7 +556,7 @@ function loadLocal() {
                 </h3>
                 <div className="cal-evlist">
                   {g.items.map((e) => (
-                    <EventRow key={e.id} e={e} gcal={gcalEventUrl(e)} />
+                    <EventRow key={e.id} e={e} gcal={gcalEventUrl(e)} now={now} />
                   ))}
                 </div>
               </div>
@@ -552,10 +581,11 @@ function loadLocal() {
 }
 
 /* ── 보조 컴포넌트 ──────────────────────────────────────────────────────── */
-function EventRow({ e, gcal }: { e: Ev; gcal: string }) {
+function EventRow({ e, gcal, now }: { e: Ev; gcal: string; now: Date }) {
   const meta = KIND_META[kindOf(e)];
   const mcap = mcapLabel(e);
   const time = timedDisplay(e);
+  const showActual = e.actual && eventStarted(e, now);
   return (
     <div className="cal-ev">
       <span className="cal-ev-bar" style={{ background: meta.color }} />
@@ -596,7 +626,7 @@ function EventRow({ e, gcal }: { e: Ev; gcal: string }) {
               이전 <b>{e.previous}</b>
             </span>
           )}
-          {e.actual && (
+          {showActual && (
             <span className="up">
               실제 <b>{e.actual}</b>
             </span>
