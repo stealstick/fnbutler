@@ -51,6 +51,7 @@ export function SortTh({
   onSort,
   align,
   defaultDir = "desc",
+  className = "",
 }: {
   label: string;
   k: string;
@@ -59,10 +60,11 @@ export function SortTh({
   onSort: (k: string, d?: Dir) => void;
   align?: "l";
   defaultDir?: Dir;
+  className?: string;
 }) {
   return (
     <th
-      className={(align === "l" ? "l " : "") + "sortable" + (sortKey === k ? " active" : "")}
+      className={`${align === "l" ? "l " : ""}sortable${sortKey === k ? " active" : ""}${className ? ` ${className}` : ""}`}
       onClick={() => onSort(k, defaultDir)}
       title={`${label} 기준 정렬`}
     >

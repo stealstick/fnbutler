@@ -32,8 +32,17 @@ export default function SectorCompaniesTable({
     [growthByCompany, metric],
   );
   const { sorted, sortKey, dir, onSort } = useTableSort(companies, getVal, "target_return_rate");
-  const th = (label: string, k: string, align?: "l", defaultDir?: "asc" | "desc") => (
-    <SortTh label={label} k={k} sortKey={sortKey} dir={dir} onSort={onSort} align={align} defaultDir={defaultDir} />
+  const th = (label: string, k: string, align?: "l", defaultDir?: "asc" | "desc", className?: string) => (
+    <SortTh
+      label={label}
+      k={k}
+      sortKey={sortKey}
+      dir={dir}
+      onSort={onSort}
+      align={align}
+      defaultDir={defaultDir}
+      className={className}
+    />
   );
   const growthCell = (c: CompanyRow, key: keyof GrowthBundle) => {
     const t = growthByCompany[c.corp_code]?.[metric]?.[key];
@@ -57,7 +66,7 @@ export default function SectorCompaniesTable({
         <table className="grid companies-table">
           <thead>
             <tr>
-              {th("종목", "name", "l", "asc")}
+              {th("종목", "name", "l", "asc", "sticky-col sticky-name sticky-name-start")}
               {th("EPS성장E", "epsGrowth")}
               {th("QoQ 직전→현재", "qoqPrevCur")}
               {th("QoQ 현재→다음E", "qoqCurNext")}
@@ -77,7 +86,7 @@ export default function SectorCompaniesTable({
           <tbody>
             {sorted.map((c) => (
               <tr key={c.corp_code}>
-                <td className="l">
+                <td className="l sticky-col sticky-name sticky-name-start">
                   <Link href={`/companies/${c.corp_code}`}>
                     <strong>{c.name}</strong>{" "}
                     <span className="muted mono" style={{ fontSize: 12 }}>{c.stock_code}</span>

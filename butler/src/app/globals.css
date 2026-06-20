@@ -131,6 +131,48 @@ table.grid tbody tr:hover { background: color-mix(in srgb, var(--accent-soft) 62
 table.grid td .y { display: block; font-size: 11px; color: var(--muted); }
 .scrollx { max-width: 100%; overflow-x: auto; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
 .companies-table { min-width: 1680px; }
+table.grid .sticky-col {
+  position: sticky;
+  background: var(--panel);
+  z-index: 4;
+  box-shadow: 1px 0 0 var(--border);
+}
+table.grid th.sticky-col {
+  background: var(--panel-2);
+  z-index: 6;
+}
+table.grid .sticky-compare {
+  left: 0;
+  width: 54px;
+  min-width: 54px;
+  max-width: 54px;
+  text-align: center;
+}
+table.grid .sticky-name {
+  left: 54px;
+  width: 270px;
+  min-width: 270px;
+  max-width: 270px;
+}
+table.grid .sticky-name-start {
+  left: 0;
+}
+table.grid .sticky-name a {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+table.grid tbody tr:hover .sticky-col {
+  background: color-mix(in srgb, var(--accent-soft) 62%, white 38%);
+}
+table.grid tbody tr.selected .sticky-col {
+  background: color-mix(in srgb, var(--broker) 14%, var(--panel) 86%);
+}
+table.grid tbody tr.selected:hover .sticky-col {
+  background: color-mix(in srgb, var(--broker) 20%, var(--panel) 80%);
+}
 .growth-toolbar { margin-top: 10px; margin-bottom: 10px; }
 .growth-hint { margin-left: auto; font-size: 11px; }
 table.grid th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }

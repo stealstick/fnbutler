@@ -129,9 +129,21 @@ export default function CompaniesPage() {
       setDir(defaultDir);
     }
   }
-  const Th = ({ label, k, align, dd = "desc" }: { label: string; k: string; align?: "l"; dd?: Dir }) => (
+  const Th = ({
+    label,
+    k,
+    align,
+    dd = "desc",
+    className = "",
+  }: {
+    label: string;
+    k: string;
+    align?: "l";
+    dd?: Dir;
+    className?: string;
+  }) => (
     <th
-      className={(align === "l" ? "l " : "") + "sortable" + (sort === k ? " active" : "")}
+      className={`${align === "l" ? "l " : ""}sortable${sort === k ? " active" : ""}${className ? ` ${className}` : ""}`}
       onClick={() => clickSort(k, dd)}
       title={`${label} 기준 정렬`}
     >
@@ -275,8 +287,8 @@ export default function CompaniesPage() {
         <table className="grid companies-table">
           <thead>
             <tr>
-              <th title="비교 선택" style={{ width: 34, textAlign: "center" }}>비교</th>
-              <Th label="종목" k="name" align="l" dd="asc" />
+              <th className="sticky-col sticky-compare" title="비교 선택">비교</th>
+              <Th label="종목" k="name" align="l" dd="asc" className="sticky-col sticky-name" />
               <Th label="EPS성장E" k="epsGrowth" />
               <Th label="QoQ 직전→현재" k="qoqPrevCur" />
               <Th label="QoQ 현재→다음E" k="qoqCurNext" />
@@ -297,7 +309,7 @@ export default function CompaniesPage() {
           <tbody>
             {results.map((c) => (
               <tr key={c.corp_code} className={selCodes.has(c.corp_code) ? "selected" : undefined}>
-                <td style={{ textAlign: "center" }}>
+                <td className="sticky-col sticky-compare">
                   <input
                     type="checkbox"
                     className="cmp-check"
@@ -307,7 +319,7 @@ export default function CompaniesPage() {
                     aria-label={`${c.name} 비교 선택`}
                   />
                 </td>
-                <td className="l">
+                <td className="l sticky-col sticky-name">
                   <Link href={`/companies/${c.corp_code}`}>
                     <strong>{c.name}</strong>{" "}
                     <span className="muted mono" style={{ fontSize: 12 }}>{c.stock_code}</span>
