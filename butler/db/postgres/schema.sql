@@ -307,7 +307,8 @@ FROM companies
 WHERE sector_code IS NOT NULL AND active = 1
 GROUP BY sector_code, sector_name;
 
-CREATE OR REPLACE VIEW v_financials_growth AS
+DROP VIEW IF EXISTS v_financials_growth;
+CREATE VIEW v_financials_growth AS
 WITH ranked AS (
     SELECT
         f.*,
