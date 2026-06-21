@@ -17,6 +17,7 @@ import FinancialsTable from "./FinancialsTable";
 import RefreshButton from "./RefreshButton";
 import WatchStar from "@/components/WatchStar";
 import TargetPricePanel from "./TargetPricePanel";
+import { normalizeCompanyRouteParam } from "@/lib/company-code";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +26,8 @@ export default async function CompanyPage({
 }: {
   params: Promise<{ corpCode: string }>;
 }) {
-  const { corpCode } = await params;
+  const { corpCode: rawCorpCode } = await params;
+  const corpCode = normalizeCompanyRouteParam(rawCorpCode);
   const company = await getCompany(corpCode);
   if (!company) notFound();
 
