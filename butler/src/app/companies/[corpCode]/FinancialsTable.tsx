@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { num, pct, signClass, metricLabel, parseDateLabel } from "@/lib/format";
 import type { GrowthRow } from "@/lib/repo";
 import EstimateProviderToggle, { useEstimateProvider } from "@/components/EstimateProviderToggle";
@@ -27,6 +27,7 @@ export default function FinancialsTable({
   const [qRows, setQRows] = useState(quarterly);
   const [aRows, setARows] = useState(annual);
   const rows = mode === "Q" ? qRows : aRows;
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -51,6 +52,25 @@ export default function FinancialsTable({
   }, [annual, corpCode, estimateProvider, quarterly]);
 
   const table = useMemo(() => buildTable(rows, valuations, mode), [rows, valuations, mode]);
+  const periodSignature = table.periods.map((p) => p.key).join("|");
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    let cancelled = false;
+    const scrollToLatest = () => {
+      if (cancelled) return;
+      el.scrollLeft = Math.max(0, el.scrollWidth - el.clientWidth);
+    };
+    const frame = requestAnimationFrame(scrollToLatest);
+    const timers = [window.setTimeout(scrollToLatest, 80), window.setTimeout(scrollToLatest, 320)];
+    document.fonts?.ready.then(scrollToLatest).catch(() => undefined);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(frame);
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [estimateProvider, periodSignature]);
 
   if (qRows.length === 0 && aRows.length === 0) {
     return (
@@ -67,7 +87,7 @@ export default function FinancialsTable({
   return (
     <div className="panel">
       <h2>
-        실적 추이 <span className="sub">단위: 억원 · 괄호 안은 YoY · 기울임=컨센서스 추정</span>
+        실적 추이 <span className="sub">단위: 억원 · 분기=QoQ · 연도=YoY · 기울임=컨센서스 추정</span>
         <span style={{ marginLeft: "auto", display: "inline-flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           <EstimateProviderToggle provider={estimateProvider} onChange={setEstimateProvider} />
           <span className="toggle">
@@ -80,7 +100,7 @@ export default function FinancialsTable({
           </span>
         </span>
       </h2>
-      <div className="table-scroll financial-table">
+      <div ref={scrollRef} className="table-scroll financial-table">
         <table className="grid">
           <thead>
             <tr>
@@ -100,11 +120,15 @@ export default function FinancialsTable({
                 {table.periods.map((p) => {
                   const cell = table.cells[m]?.[p.key];
                   if (!cell) return <td key={p.key} className="muted">-</td>;
+                  const change = mode === "Q" ? cell.qoq : cell.yoy;
+                  const changeLabel = mode === "Q" ? "QoQ" : "YoY";
                   return (
                     <td key={p.key} className={"mono" + (cell.isEstimate ? " est" : "")}>
                       {num(Math.round(cell.value / 1e8))}
-                      {cell.yoy != null && (
-                        <span className={"y " + signClass(cell.yoy)}>{pct(cell.yoy)}</span>
+                      {change != null && (
+                        <span className={"y " + signClass(change)} title={`${changeLabel} ${pct(change)}`}>
+                          {pct(change)}
+                        </span>
                       )}
                     </td>
                   );
@@ -128,7 +152,8 @@ export default function FinancialsTable({
         </table>
       </div>
       <p className="note">
-        기간은 중간 결산기를 건너뛰지 않고 표시합니다. 원천 데이터에 해당 분기/연도 값이 없으면 “-”로 남습니다.
+        기간은 중간 결산기를 건너뛰지 않고 표시합니다. 분기별 퍼센트는 직전 분기 대비, 연도별 퍼센트는 전년 대비입니다.
+        원천 데이터에 해당 분기/연도 값이 없으면 “-”로 남습니다.
       </p>
     </div>
   );
@@ -141,7 +166,10 @@ function buildTable(rows: GrowthRow[], valuations: Val[], mode: "Q" | "A") {
     mode === "Q" ? `${String(y).slice(2)}.${q}Q` : `${y}`;
 
   const periodMap = new Map<string, { key: string; label: string; y: number; q: number; isEstimate: boolean }>();
-  const cells: Record<string, Record<string, { value: number; yoy: number | null; isEstimate: boolean }>> = {};
+  const cells: Record<
+    string,
+    Record<string, { value: number; qoq: number | null; yoy: number | null; isEstimate: boolean }>
+  > = {};
 
   for (const r of rows) {
     const key = periodKey(r.fiscal_year, r.quarter);
@@ -161,6 +189,7 @@ function buildTable(rows: GrowthRow[], valuations: Val[], mode: "Q" | "A") {
     if (!existing || (existing.isEstimate && r.is_estimate === 0)) {
       cells[r.metric][key] = {
         value: r.value,
+        qoq: r.qoq_pct,
         yoy: r.yoy_pct,
         isEstimate: r.is_estimate === 1,
       };
