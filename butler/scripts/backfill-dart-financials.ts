@@ -190,7 +190,7 @@ async function upsertFinancial(
     `INSERT INTO financials
        (corp_code, metric, raw_label, fiscal_year, quarter, period_type, value, is_estimate, date_label, source)
      VALUES ($1, $2, $3, $4, $5, $6, $7, 0, $8, 'dart')
-     ON CONFLICT(corp_code, metric, fiscal_year, quarter, period_type, is_estimate)
+     ON CONFLICT(corp_code, metric, fiscal_year, quarter, period_type, is_estimate, source)
      DO UPDATE SET value=excluded.value,
                    date_label=excluded.date_label,
                    raw_label=excluded.raw_label,

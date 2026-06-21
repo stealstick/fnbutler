@@ -17,6 +17,7 @@
     "backfill:sectors": "tsx scripts/backfill-sectors.ts",
     "backfill:changes": "tsx scripts/backfill-changes.ts",
     "backfill:dart-financials": "tsx scripts/backfill-dart-financials.ts --latest",
+    "backfill:fnguide-estimates": "tsx scripts/backfill-fnguide-estimates.ts",
     "backfill:wisereport-estimates": "tsx scripts/backfill-wisereport-estimates.ts",
     "backfill:fmp-nasdaq-estimates": "tsx scripts/backfill-fmp-nasdaq-estimates.ts",
     "backfill:seekingalpha-nasdaq-estimates": "tsx scripts/backfill-seekingalpha-nasdaq-estimates.ts",

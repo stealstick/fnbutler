@@ -1,30 +1,58 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { num, pct, signClass, metricLabel, parseDateLabel } from "@/lib/format";
 import type { GrowthRow } from "@/lib/repo";
+import EstimateProviderToggle, { useEstimateProvider } from "@/components/EstimateProviderToggle";
 
 type Val = { metric: string; date_label: string; value: number };
 
 const METRIC_ORDER = ["REVENUE", "OPERATING_PROFIT", "NET_INCOME"];
 
 export default function FinancialsTable({
+  corpCode,
   quarterly,
   annual,
   valuations,
   isFinancial,
 }: {
+  corpCode: string;
   quarterly: GrowthRow[];
   annual: GrowthRow[];
   valuations: Val[];
   isFinancial: boolean;
 }) {
   const [mode, setMode] = useState<"Q" | "A">("Q");
-  const rows = mode === "Q" ? quarterly : annual;
+  const [estimateProvider, setEstimateProvider] = useEstimateProvider();
+  const [qRows, setQRows] = useState(quarterly);
+  const [aRows, setARows] = useState(annual);
+  const rows = mode === "Q" ? qRows : aRows;
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const fetchRows = (period: "Q" | "A") => {
+      const sp = new URLSearchParams({ period, provider: estimateProvider });
+      return fetch(`/api/companies/${corpCode}/financials?${sp.toString()}`, { signal: controller.signal })
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`financials ${r.status}`))))
+        .then((d) => d.rows ?? []);
+    };
+    Promise.all([fetchRows("Q"), fetchRows("A")])
+      .then(([q, a]) => {
+        setQRows(q);
+        setARows(a);
+      })
+      .catch((e) => {
+        if (e.name !== "AbortError") {
+          setQRows(quarterly);
+          setARows(annual);
+        }
+      });
+    return () => controller.abort();
+  }, [annual, corpCode, estimateProvider, quarterly]);
 
   const table = useMemo(() => buildTable(rows, valuations, mode), [rows, valuations, mode]);
 
-  if (quarterly.length === 0 && annual.length === 0) {
+  if (qRows.length === 0 && aRows.length === 0) {
     return (
       <div className="panel">
         <h2>실적 추이</h2>
@@ -40,7 +68,8 @@ export default function FinancialsTable({
     <div className="panel">
       <h2>
         실적 추이 <span className="sub">단위: 억원 · 괄호 안은 YoY · 기울임=컨센서스 추정</span>
-        <span style={{ marginLeft: "auto" }}>
+        <span style={{ marginLeft: "auto", display: "inline-flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <EstimateProviderToggle provider={estimateProvider} onChange={setEstimateProvider} />
           <span className="toggle">
             <button className={mode === "Q" ? "on" : ""} onClick={() => setMode("Q")}>
               분기별

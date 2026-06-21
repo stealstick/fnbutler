@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { won, num, pct, price as stockPrice, signClass } from "@/lib/format";
-import type { GrowthBundle } from "@/lib/compare-growth";
+import type { GrowthBundle, GrowthByMetric } from "@/lib/compare-growth";
+import EstimateProviderToggle, { useEstimateProvider } from "@/components/EstimateProviderToggle";
 
 export type RowData = {
   corp_code: string;
@@ -126,8 +127,30 @@ export default function CompareGrid({ data }: { data: RowData[] }) {
   const [metric, setMetric] = useState<Metric>("REVENUE");
   const [sortKey, setSortKey] = useState("market_cap");
   const [dir, setDir] = useState<Dir>("desc");
+  const [estimateProvider, setEstimateProvider] = useEstimateProvider();
+  const [growthByCode, setGrowthByCode] = useState<Record<string, GrowthByMetric>>(() =>
+    Object.fromEntries(data.map((r) => [r.corp_code, r.growth]).filter((x): x is [string, GrowthByMetric] => !!x[1])),
+  );
 
   const codes = data.map((r) => r.corp_code);
+  const codeList = codes.join(",");
+
+  useEffect(() => {
+    if (!codeList) {
+      setGrowthByCode({});
+      return;
+    }
+    const controller = new AbortController();
+    const sp = new URLSearchParams({ codes: codeList, provider: estimateProvider });
+    fetch(`/api/companies/growth?${sp.toString()}`, { signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`growth ${r.status}`))))
+      .then((d) => setGrowthByCode(d.results ?? {}))
+      .catch((e) => {
+        if (e.name !== "AbortError") setGrowthByCode({});
+      });
+    return () => controller.abort();
+  }, [codeList, estimateProvider]);
+
   const rest = (code: string) => codes.filter((x) => x !== code).join(",");
   const onRemove = (code: string) => {
     const r = rest(code);
@@ -141,9 +164,9 @@ export default function CompareGrid({ data }: { data: RowData[] }) {
       label: g.label,
       tip: g.tip,
       defDir: "desc",
-      val: (r, m) => r.growth?.[m]?.[g.key]?.p ?? null,
+      val: (r, m) => growthByCode[r.corp_code]?.[m]?.[g.key]?.p ?? null,
       cell: (r, m) => {
-        const t = r.growth?.[m]?.[g.key];
+        const t = growthByCode[r.corp_code]?.[m]?.[g.key];
         return gnum(t?.p ?? null, t?.t);
       },
     })),
@@ -182,6 +205,7 @@ export default function CompareGrid({ data }: { data: RowData[] }) {
             </button>
           ))}
         </span>
+        <EstimateProviderToggle provider={estimateProvider} onChange={setEstimateProvider} />
         <span className="muted" style={{ fontSize: 11, marginLeft: "auto" }}>
           헤더 클릭 = 해당 열 정렬 · 셀 = 증감률(%)
         </span>

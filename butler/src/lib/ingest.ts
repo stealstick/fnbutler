@@ -381,7 +381,7 @@ export async function upsertFinancials(
         `INSERT INTO financials
            (corp_code, metric, raw_label, fiscal_year, quarter, period_type, value, is_estimate, date_label, source)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'butler')
-         ON CONFLICT(corp_code, metric, fiscal_year, quarter, period_type, is_estimate)
+         ON CONFLICT(corp_code, metric, fiscal_year, quarter, period_type, is_estimate, source)
          DO UPDATE SET value=excluded.value, date_label=excluded.date_label, raw_label=excluded.raw_label`,
         [corpCode, metric, label, year, quarter, period, val, isEst, dateLabel],
         client,

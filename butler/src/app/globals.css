@@ -175,6 +175,7 @@ table.grid tbody tr.selected:hover .sticky-col {
 }
 .growth-toolbar { margin-top: 10px; margin-bottom: 10px; }
 .growth-hint { margin-left: auto; font-size: 11px; }
+.estimate-provider { display: inline-flex; align-items: center; gap: 8px; }
 table.grid th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
 table.grid th.sortable:hover { color: var(--text); }
 table.grid th.sortable.active { color: var(--accent); }

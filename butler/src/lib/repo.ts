@@ -1,4 +1,9 @@
 import { all, one, value } from "./db";
+import {
+  DEFAULT_ESTIMATE_PROVIDER,
+  estimateProviderOrder,
+  type EstimateProvider,
+} from "./estimate-provider";
 import { userStore } from "./userstore";
 
 /* 기업/컨센서스/재무 조회 — API 라우트와 서버 컴포넌트 공용 데이터 접근 계층. */
@@ -66,6 +71,7 @@ export interface BrokerTargetHistory extends BrokerTarget {
 }
 
 export interface GrowthRow {
+  corp_code: string;
   metric: string;
   raw_label: string | null;
   fiscal_year: number;
@@ -74,6 +80,7 @@ export interface GrowthRow {
   is_estimate: number;
   value: number;
   date_label: string | null;
+  source: string;
   qoq_pct: number | null;
   yoy_pct: number | null;
 }
@@ -120,24 +127,53 @@ export interface CompareGrowthRow {
   quarter: number;
   value: number;
   is_estimate: number;
+  source: string;
   qoq_pct: number | null;
   yoy_pct: number | null;
 }
 
-export async function getCompareGrowth(codes: string[]): Promise<CompareGrowthRow[]> {
-  if (codes.length === 0) return [];
-  return all<CompareGrowthRow>(
-    `WITH picked AS (
-       SELECT corp_code, metric, period_type, fiscal_year, quarter, value, is_estimate,
-              ROW_NUMBER() OVER (
-                PARTITION BY corp_code, metric, period_type, fiscal_year, quarter
-                ORDER BY is_estimate ASC
-              ) AS rn
-       FROM financials
-       WHERE corp_code IN (${placeholders(codes)}) AND value IS NOT NULL
+const ACTUAL_SOURCE_RANK_SQL = `CASE f.source
+  WHEN 'dart' THEN 0
+  WHEN 'butler' THEN 1
+  WHEN 'fnguide' THEN 2
+  WHEN 'wisereport' THEN 3
+  ELSE 9
+END`;
+
+function rankedFinancialsCte(codeWhereSql: string, providerParam: string) {
+  return `WITH provider_order AS (
+       SELECT source, ord
+       FROM unnest(${providerParam}::text[]) WITH ORDINALITY AS p(source, ord)
      ),
-     u AS (SELECT * FROM picked WHERE rn = 1)
-     SELECT u.corp_code, u.metric, u.period_type, u.fiscal_year, u.quarter, u.value, u.is_estimate,
+     ranked AS (
+       SELECT f.corp_code, f.metric, f.raw_label, f.period_type, f.fiscal_year, f.quarter,
+              f.value, f.is_estimate, f.date_label, f.source,
+              ROW_NUMBER() OVER (
+                PARTITION BY f.corp_code, f.metric, f.period_type, f.fiscal_year, f.quarter, f.is_estimate
+                ORDER BY CASE
+                           WHEN f.is_estimate = 0 THEN ${ACTUAL_SOURCE_RANK_SQL}
+                           ELSE COALESCE(po.ord, 99)
+                         END,
+                         f.source
+              ) AS rn
+       FROM financials f
+       LEFT JOIN provider_order po ON po.source = f.source
+       WHERE ${codeWhereSql}
+         AND f.value IS NOT NULL
+         AND (f.is_estimate = 0 OR po.source IS NOT NULL)
+     ),
+     u AS (SELECT * FROM ranked WHERE rn = 1)`;
+}
+
+export async function getCompareGrowth(
+  codes: string[],
+  estimateProvider: EstimateProvider = DEFAULT_ESTIMATE_PROVIDER,
+): Promise<CompareGrowthRow[]> {
+  if (codes.length === 0) return [];
+  const providerParam = `$${codes.length + 1}`;
+  return all<CompareGrowthRow>(
+    `${rankedFinancialsCte(`f.corp_code IN (${placeholders(codes)})`, providerParam)}
+     SELECT u.corp_code, u.metric, u.period_type, u.fiscal_year, u.quarter, u.value, u.is_estimate, u.source,
             CASE WHEN u.period_type = 'Q' AND pq.value <> 0
                  THEN ROUND(((u.value - pq.value) / ABS(pq.value) * 100.0)::numeric, 1)::double precision
             END AS qoq_pct,
@@ -158,10 +194,10 @@ export async function getCompareGrowth(codes: string[]): Promise<CompareGrowthRo
        ON py.corp_code = u.corp_code
       AND py.metric = u.metric
       AND py.period_type = u.period_type
-      AND py.fiscal_year = u.fiscal_year - 1
-      AND (u.period_type = 'A' OR py.quarter = u.quarter)
+     AND py.fiscal_year = u.fiscal_year - 1
+     AND (u.period_type = 'A' OR py.quarter = u.quarter)
      ORDER BY u.corp_code, u.metric, u.period_type, u.fiscal_year, u.quarter`,
-    codes,
+    [...codes, estimateProviderOrder(estimateProvider)],
   );
 }
 
@@ -201,7 +237,8 @@ const COMPANY_WITH_FORWARD_PER_SELECT = `
   CASE WHEN c.price IS NOT NULL AND eps_y2.value > 0 THEN ROUND((c.price / eps_y2.value)::numeric, 1)::double precision END AS forward_per_y2
 `;
 
-const COMPANY_FORWARD_PER_JOINS = `
+function companyForwardPerJoins(providerParam: string) {
+  return `
   LEFT JOIN LATERAL (
     SELECT value
     FROM financials f
@@ -211,7 +248,8 @@ const COMPANY_FORWARD_PER_JOINS = `
       AND f.is_estimate = 1
       AND f.fiscal_year = EXTRACT(YEAR FROM CURRENT_DATE)::int
       AND f.value IS NOT NULL
-    ORDER BY f.source DESC NULLS LAST
+      AND f.source = ANY(${providerParam}::text[])
+    ORDER BY COALESCE(array_position(${providerParam}::text[], f.source), 99), f.source
     LIMIT 1
   ) eps_y0 ON TRUE
   LEFT JOIN LATERAL (
@@ -223,7 +261,8 @@ const COMPANY_FORWARD_PER_JOINS = `
       AND f.is_estimate = 1
       AND f.fiscal_year = EXTRACT(YEAR FROM CURRENT_DATE)::int + 1
       AND f.value IS NOT NULL
-    ORDER BY f.source DESC NULLS LAST
+      AND f.source = ANY(${providerParam}::text[])
+    ORDER BY COALESCE(array_position(${providerParam}::text[], f.source), 99), f.source
     LIMIT 1
   ) eps_y1 ON TRUE
   LEFT JOIN LATERAL (
@@ -235,10 +274,12 @@ const COMPANY_FORWARD_PER_JOINS = `
       AND f.is_estimate = 1
       AND f.fiscal_year = EXTRACT(YEAR FROM CURRENT_DATE)::int + 2
       AND f.value IS NOT NULL
-    ORDER BY f.source DESC NULLS LAST
+      AND f.source = ANY(${providerParam}::text[])
+    ORDER BY COALESCE(array_position(${providerParam}::text[], f.source), 99), f.source
     LIMIT 1
   ) eps_y2 ON TRUE
 `;
+}
 
 export interface ListOpts {
   q?: string;
@@ -250,6 +291,7 @@ export interface ListOpts {
   dir?: "asc" | "desc";
   limit?: number;
   offset?: number;
+  estimateProvider?: EstimateProvider;
 }
 
 export async function listCompanies(opts: ListOpts = {}): Promise<{ total: number; rows: CompanyRow[] }> {
@@ -272,12 +314,14 @@ export async function listCompanies(opts: ListOpts = {}): Promise<{ total: numbe
   const dir = opts.dir === "asc" ? "ASC" : "DESC";
   const limit = Math.min(opts.limit ?? 50, 500);
   const offset = opts.offset ?? 0;
+  const providerOrder = estimateProviderOrder(opts.estimateProvider);
 
   const total = Number(await value("SELECT COUNT(*)::int AS c FROM companies " + w, params));
+  const providerOrderParam = push(providerOrder);
   const rows = await all<CompanyRow>(
     `SELECT ${COMPANY_WITH_FORWARD_PER_SELECT}
      FROM companies c
-     ${COMPANY_FORWARD_PER_JOINS}
+     ${companyForwardPerJoins(providerOrderParam)}
      ${w}
      ORDER BY ${col} ${dir} NULLS LAST LIMIT ${push(limit)} OFFSET ${push(offset)}`,
     params,
@@ -350,14 +394,40 @@ export async function getBrokerTargetHistory(corpCode: string): Promise<BrokerTa
   );
 }
 
-export async function getFinancials(corpCode: string, periodType: "Q" | "A"): Promise<GrowthRow[]> {
+export async function getFinancials(
+  corpCode: string,
+  periodType: "Q" | "A",
+  estimateProvider: EstimateProvider = DEFAULT_ESTIMATE_PROVIDER,
+): Promise<GrowthRow[]> {
+  const providerOrder = estimateProviderOrder(estimateProvider);
   return all<GrowthRow>(
-    `SELECT metric, raw_label, fiscal_year, quarter, period_type, is_estimate,
-            value, date_label, qoq_pct, yoy_pct
-     FROM v_financials_growth
-     WHERE corp_code = $1 AND period_type = $2
-     ORDER BY metric, fiscal_year, quarter`,
-    [corpCode, periodType],
+    `${rankedFinancialsCte("f.corp_code = $1 AND f.period_type = $2", "$3")}
+     SELECT u.corp_code, u.metric, u.raw_label, u.fiscal_year, u.quarter, u.period_type, u.is_estimate,
+            u.value, u.date_label, u.source,
+            CASE WHEN u.period_type = 'Q' AND pq.value <> 0
+                 THEN ROUND(((u.value - pq.value) / ABS(pq.value) * 100.0)::numeric, 1)::double precision
+            END AS qoq_pct,
+            CASE WHEN py.value <> 0
+                 THEN ROUND(((u.value - py.value) / ABS(py.value) * 100.0)::numeric, 1)::double precision
+            END AS yoy_pct
+     FROM u
+     LEFT JOIN u pq
+       ON u.period_type = 'Q'
+      AND pq.corp_code = u.corp_code
+      AND pq.metric = u.metric
+      AND pq.period_type = 'Q'
+      AND (
+        (u.quarter > 1 AND pq.fiscal_year = u.fiscal_year AND pq.quarter = u.quarter - 1)
+        OR (u.quarter = 1 AND pq.fiscal_year = u.fiscal_year - 1 AND pq.quarter = 4)
+      )
+     LEFT JOIN u py
+       ON py.corp_code = u.corp_code
+      AND py.metric = u.metric
+      AND py.period_type = u.period_type
+      AND py.fiscal_year = u.fiscal_year - 1
+      AND (u.period_type = 'A' OR py.quarter = u.quarter)
+     ORDER BY u.metric, u.fiscal_year, u.quarter`,
+    [corpCode, periodType, providerOrder],
   );
 }
 
@@ -466,15 +536,19 @@ export async function getSectorAgg(code: string): Promise<SectorAgg | undefined>
   return one<SectorAgg>("SELECT * FROM v_sector_agg WHERE sector_code = $1", [code]);
 }
 
-export async function getSectorCompanies(code: string, sort = "market_cap"): Promise<CompanyRow[]> {
+export async function getSectorCompanies(
+  code: string,
+  sort = "market_cap",
+  estimateProvider: EstimateProvider = DEFAULT_ESTIMATE_PROVIDER,
+): Promise<CompanyRow[]> {
   const order = sort === "target_return_rate" ? "target_return_rate DESC" : "market_cap DESC";
   return all<CompanyRow>(
     `SELECT ${COMPANY_WITH_FORWARD_PER_SELECT}
      FROM companies c
-     ${COMPANY_FORWARD_PER_JOINS}
+     ${companyForwardPerJoins("$2")}
      WHERE active = 1 AND sector_code = $1
      ORDER BY ${order} NULLS LAST`,
-    [code],
+    [code, estimateProviderOrder(estimateProvider)],
   );
 }
 

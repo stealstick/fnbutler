@@ -173,6 +173,7 @@ gcloud sql connect fnbutler-pg \
 | Job이 실행되지만 데이터 변화 없음 | `ingest_runs`, 최신 `report_id`, 업스트림 rate limit |
 | 텔레그램 알림 없음 | `BUTLER_TELEGRAM_BOT_TOKEN`, Postgres `users.alerts_enabled`, `users.telegram_chat_id` |
 | 캘린더 국내 실적 없음 | `DART_API_KEY` secret 누락 가능 |
+| 국내 추정치 provider별 차이 | FnGuide/WiseReport는 `financials.source`별로 별도 저장된다. 웹의 추정치 기준 토글은 localStorage에 저장되고, 선택 provider 값이 없으면 다른 provider가 fallback으로 표시된다. |
 | Nasdaq 성장률 없음 | `FMP_API_KEY` secret 누락, 아직 회전 갱신 순서 미도달, 또는 FMP 무료 플랜에서 해당 symbol 추정치 미제공 |
 | NASDAQ Yahoo 성장률 없음 | Yahoo crumb/cookie 차단, 해당 종목 커버리지 없음, 또는 `YAHOO_NASDAQ_LIMIT=0` 설정 |
 | Cloud SQL 비용 증가 | HA/backup/autostorage가 켜졌는지 확인 |

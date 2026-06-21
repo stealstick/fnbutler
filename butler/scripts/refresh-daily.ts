@@ -6,13 +6,14 @@
  *   tsx scripts/refresh-daily.ts --calendar-only
  *   tsx scripts/refresh-daily.ts --no-nasdaq
  *   tsx scripts/refresh-daily.ts --no-dart-financials
+ *   tsx scripts/refresh-daily.ts --no-fnguide-estimates
  *   tsx scripts/refresh-daily.ts --no-wisereport-estimates
  *
  * 특징
  *  - 증분: 피드는 최신순이라 이미 가진 report_id 를 만나면 중단 → 최근 신규분만 받음.
  *  - 멱등: 시세/목표가는 값이 바뀐 경우에만 UPDATE. 같은 데이터면 updated_at 도 그대로.
  *  - DART_API_KEY가 있으면 현재연도/전년도 정기보고서 재무 누락분을 함께 보강한다.
- *  - WiseReport/FnGuide 공개 재무요약에서 국내 컨센서스 추정치를 함께 보강한다.
+ *  - FnGuide와 WiseReport 공개 컨센서스에서 국내 추정치를 provider별로 보강한다.
  *  - Nasdaq screener 공개 JSON에서 NASDAQ 시총 상위 500개 기업을 함께 보강한다.
  *  - FMP_API_KEY가 있으면 무료 플랜 한도 안에서 NASDAQ 연간 추정치를 회전 보강한다.
  *  - Seeking Alpha 공개 JSON이 열리면 NASDAQ 분기/연간 EPS·매출 실제치/추정치를 회전 보강한다.
@@ -28,6 +29,7 @@ import { backfillFmpNasdaqEstimates } from "../src/lib/fmp";
 import { backfillSeekingAlphaNasdaqEstimates } from "../src/lib/seekingalpha";
 import { backfillYahooNasdaqEstimates } from "../src/lib/yahoo";
 import { backfillDartFinancials } from "./backfill-dart-financials";
+import { backfillFnGuideEstimates } from "./backfill-fnguide-estimates";
 import { backfillWiseReportEstimates } from "./backfill-wisereport-estimates";
 
 const has = (f: string) => process.argv.includes(`--${f}`);
@@ -181,6 +183,16 @@ async function main() {
     }
   }
 
+  let fnGuideEstimatesMsg = "skip";
+  if (!has("no-fnguide-estimates")) {
+    const estimateLimit = Number(argOf("fnguide-estimate-limit") || process.env.FNGUIDE_ESTIMATE_LIMIT || "0");
+    const summary = await backfillFnGuideEstimates(db, {
+      limit: estimateLimit,
+      log: (message) => process.stdout.write(`   fnguide-estimates ${message}`),
+    });
+    fnGuideEstimatesMsg = `targeted=${summary.targeted},writes=${summary.writes},fail=${summary.fail}`;
+  }
+
   let wiseEstimatesMsg = "skip";
   if (!has("no-wisereport-estimates")) {
     const estimateLimit = Number(argOf("wisereport-estimate-limit") || process.env.WISEREPORT_ESTIMATE_LIMIT || "0");
@@ -233,13 +245,13 @@ async function main() {
     [
       runStart,
       nowIso(),
-      `targets=${targets.length} newReports=${newReports} quoteUpdated=${quoteUpdated} unchanged=${unchanged} alerts=${sent} errors=${errors} nasdaq=${nasdaqMsg} calendar=${calendarMsg} fmpNasdaq=${fmpNasdaqMsg} seekingAlphaNasdaq=${seekingAlphaNasdaqMsg} yahooNasdaq=${yahooNasdaqMsg} dartFinancials=${dartFinancialsMsg} wiseEstimates=${wiseEstimatesMsg}`,
+      `targets=${targets.length} newReports=${newReports} quoteUpdated=${quoteUpdated} unchanged=${unchanged} alerts=${sent} errors=${errors} nasdaq=${nasdaqMsg} calendar=${calendarMsg} fmpNasdaq=${fmpNasdaqMsg} seekingAlphaNasdaq=${seekingAlphaNasdaqMsg} yahooNasdaq=${yahooNasdaqMsg} dartFinancials=${dartFinancialsMsg} fnGuideEstimates=${fnGuideEstimatesMsg} wiseEstimates=${wiseEstimatesMsg}`,
     ],
     db,
   );
 
   process.stdout.write(
-    `갱신 완료 — 신규리포트 ${newReports} · 시세변경 ${quoteUpdated} · 무변경 ${unchanged} · 알림 ${sent} · 오류 ${errors} · Nasdaq ${nasdaqMsg} · FMP해외추정 ${fmpNasdaqMsg} · SA나스닥 ${seekingAlphaNasdaqMsg} · Yahoo나스닥 ${yahooNasdaqMsg} · DART재무 ${dartFinancialsMsg} · 추정치 ${wiseEstimatesMsg}\n`,
+    `갱신 완료 — 신규리포트 ${newReports} · 시세변경 ${quoteUpdated} · 무변경 ${unchanged} · 알림 ${sent} · 오류 ${errors} · Nasdaq ${nasdaqMsg} · FMP해외추정 ${fmpNasdaqMsg} · SA나스닥 ${seekingAlphaNasdaqMsg} · Yahoo나스닥 ${yahooNasdaqMsg} · DART재무 ${dartFinancialsMsg} · FnGuide추정 ${fnGuideEstimatesMsg} · WiseReport추정 ${wiseEstimatesMsg}\n`,
   );
 }
 

@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { won, num, pct, price as stockPrice, signClass } from "@/lib/format";
 import { useTableSort, SortTh } from "@/components/sortable";
 import { epsGrowth, type GrowthBundle, type GrowthByMetric, type GrowthMetric } from "@/lib/compare-growth";
 import type { CompanyRow } from "@/lib/repo";
+import EstimateProviderToggle, { useEstimateProvider } from "@/components/EstimateProviderToggle";
 
 const GROWTH_METRICS: Array<{ key: GrowthMetric; label: string }> = [
   { key: "REVENUE", label: "매출액" },
@@ -15,23 +16,58 @@ const GROWTH_METRICS: Array<{ key: GrowthMetric; label: string }> = [
 const GROWTH_SORT_KEYS = new Set(["epsGrowth", "qoqPrevCur", "qoqCurNext", "yoyPrevThis", "yoyThisNext", "yoyNextNext2"]);
 
 export default function SectorCompaniesTable({
+  sectorCode,
   companies,
   growthByCompany,
 }: {
+  sectorCode: string;
   companies: CompanyRow[];
   growthByCompany: Record<string, GrowthByMetric>;
 }) {
   const [metric, setMetric] = useState<GrowthMetric>("REVENUE");
+  const [estimateProvider, setEstimateProvider] = useEstimateProvider();
+  const [rows, setRows] = useState(companies);
+  const [growth, setGrowth] = useState(growthByCompany);
+  const codeList = rows.map((c) => c.corp_code).join(",");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const sp = new URLSearchParams({ sort: "target_return_rate", provider: estimateProvider });
+    fetch(`/api/sectors/${sectorCode}?${sp.toString()}`, { signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`sector ${r.status}`))))
+      .then((d) => setRows(d.companies ?? companies))
+      .catch((e) => {
+        if (e.name !== "AbortError") setRows(companies);
+      });
+    return () => controller.abort();
+  }, [companies, estimateProvider, sectorCode]);
+
+  useEffect(() => {
+    if (!codeList) {
+      setGrowth({});
+      return;
+    }
+    const controller = new AbortController();
+    const sp = new URLSearchParams({ codes: codeList, provider: estimateProvider });
+    fetch(`/api/companies/growth?${sp.toString()}`, { signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`growth ${r.status}`))))
+      .then((d) => setGrowth(d.results ?? {}))
+      .catch((e) => {
+        if (e.name !== "AbortError") setGrowth({});
+      });
+    return () => controller.abort();
+  }, [codeList, estimateProvider]);
+
   const getVal = useCallback(
     (c: CompanyRow, k: string) => {
       if (k === "name") return c.name;
       if (k === "epsGrowth") return epsGrowth(c);
-      if (GROWTH_SORT_KEYS.has(k)) return growthByCompany[c.corp_code]?.[metric]?.[k as keyof GrowthBundle]?.p ?? null;
+      if (GROWTH_SORT_KEYS.has(k)) return growth[c.corp_code]?.[metric]?.[k as keyof GrowthBundle]?.p ?? null;
       return (c as unknown as Record<string, number | null>)[k] ?? null;
     },
-    [growthByCompany, metric],
+    [growth, metric],
   );
-  const { sorted, sortKey, dir, onSort } = useTableSort(companies, getVal, "target_return_rate");
+  const { sorted, sortKey, dir, onSort } = useTableSort(rows, getVal, "target_return_rate");
   const th = (label: string, k: string, align?: "l", defaultDir?: "asc" | "desc", className?: string) => (
     <SortTh
       label={label}
@@ -45,7 +81,7 @@ export default function SectorCompaniesTable({
     />
   );
   const growthCell = (c: CompanyRow, key: keyof GrowthBundle) => {
-    const t = growthByCompany[c.corp_code]?.[metric]?.[key];
+    const t = growth[c.corp_code]?.[metric]?.[key];
     return <GrowthPct p={t?.p ?? null} title={t?.t} />;
   };
 
@@ -61,6 +97,7 @@ export default function SectorCompaniesTable({
           ))}
         </span>
         <span className="muted growth-hint">전체기업 표와 같은 기준으로 표시</span>
+        <EstimateProviderToggle provider={estimateProvider} onChange={setEstimateProvider} />
       </div>
       <div className="scrollx">
         <table className="grid companies-table">

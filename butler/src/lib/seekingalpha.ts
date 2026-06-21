@@ -287,7 +287,7 @@ async function insertFinancial(
     `INSERT INTO financials
        (corp_code, metric, raw_label, fiscal_year, quarter, period_type, value, is_estimate, date_label, source)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-     ON CONFLICT(corp_code, metric, fiscal_year, quarter, period_type, is_estimate)
+     ON CONFLICT(corp_code, metric, fiscal_year, quarter, period_type, is_estimate, source)
      ${conflict}`,
     [
       c.corp_code,

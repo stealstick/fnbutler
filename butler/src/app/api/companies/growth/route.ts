@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { buildGrowthByCompany } from "@/lib/compare-growth";
 import { getCompareGrowth } from "@/lib/repo";
+import { normalizeEstimateProvider } from "@/lib/estimate-provider";
 
 const MAX_CODES = 80;
 
@@ -24,9 +25,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ count: 0, results: {} });
   }
 
-  const rows = await getCompareGrowth(codes);
+  const provider = normalizeEstimateProvider(req.nextUrl.searchParams.get("provider"));
+  const rows = await getCompareGrowth(codes, provider);
   return NextResponse.json({
     count: codes.length,
+    provider,
     results: buildGrowthByCompany(rows),
   });
 }

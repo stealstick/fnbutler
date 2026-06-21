@@ -1,10 +1,11 @@
 import { won } from "./format";
+import { ESTIMATE_PROVIDER_LABEL, type EstimateProvider } from "./estimate-provider";
 import type { CompanyRow, CompareGrowthRow } from "./repo";
 
 export const GROWTH_METRICS = ["REVENUE", "OPERATING_PROFIT", "NET_INCOME"] as const;
 export type GrowthMetric = (typeof GROWTH_METRICS)[number];
 
-export type GrowthBox = { value: number; chg: number | null; isEst: boolean; period: string } | null;
+export type GrowthBox = { value: number; chg: number | null; isEst: boolean; period: string; source: string } | null;
 export type GrowthTrans = { p: number | null; t: string };
 export type GrowthBundle = {
   qoqPrevCur: GrowthTrans;
@@ -27,6 +28,7 @@ function box(r: CompareGrowthRow, chg: number | null): GrowthBox {
     chg,
     isEst: r.is_estimate === 1,
     period: r.period_type === "Q" ? qLabel(r) : `${r.fiscal_year}`,
+    source: r.source,
   };
 }
 
@@ -67,8 +69,12 @@ function buildMetricCells(rows: CompareGrowthRow[]): CompanyMetricCells {
 
 function trans(from: GrowthBox, to: GrowthBox, chgBox: GrowthBox, la: string, lb: string): GrowthTrans {
   const parts: string[] = [];
-  if (from) parts.push(`${la} ${from.period}${from.isEst ? "E" : ""} ${won(from.value)}`);
-  if (to) parts.push(`${lb} ${to.period}${to.isEst ? "E" : ""} ${won(to.value)}`);
+  const sourceLabel = (b: NonNullable<GrowthBox>) =>
+    b.isEst
+      ? ` ${ESTIMATE_PROVIDER_LABEL[b.source as EstimateProvider] ?? b.source}`
+      : "";
+  if (from) parts.push(`${la} ${from.period}${from.isEst ? "E" : ""}${sourceLabel(from)} ${won(from.value)}`);
+  if (to) parts.push(`${lb} ${to.period}${to.isEst ? "E" : ""}${sourceLabel(to)} ${won(to.value)}`);
   return { p: chgBox?.chg ?? null, t: parts.join("  ->  ") };
 }
 

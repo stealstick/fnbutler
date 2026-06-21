@@ -56,6 +56,7 @@ npm run refresh:calendar
 - 시세/목표가는 값이 바뀐 경우에만 UPDATE 하므로 같은 데이터를 여러 번 돌려도 안전하다.
 - 운영 환경에서는 Cloud Scheduler/GitHub Actions가 Cloud Run Job `fnbutler-refresh` 를 매일 18:30 KST에 실행한다.
 - 일일 갱신은 Nasdaq screener의 시총 상위 500개 기업도 `companies`에 보강한다. 가져오지 못하는 PER/PBR/목표가/재무 성장률은 화면에서 `-`로 표시한다.
+- 국내 컨센서스 추정치는 FnGuide와 WiseReport를 `financials.source`별로 각각 저장한다. 웹에서는 FnGuide를 기본으로 보되, 브라우저 localStorage의 추정치 기준 선택에 따라 WiseReport 우선으로 바꿀 수 있고 선택 provider에 값이 없으면 다른 provider로 보완한다.
 - `FMP_API_KEY`가 있으면 FMP 무료 플랜 한도에 맞춰 Nasdaq 연간 컨센서스 추정치를 회전 보강한다. 기본 `FMP_DAILY_CALL_BUDGET=240`, `FMP_CALL_DELAY_MS=2500` 이라 500개 기업은 약 2일에 한 바퀴 돈다. 무료 플랜에서 확인된 `period=annual`만 사용하므로 `YoY`/`EPS성장E`는 채워지고, 분기 추정 기반 `QoQ 현재→다음E`는 유료 분기 endpoint 권한이 없으면 `-`로 남는다.
 - Seeking Alpha 공개 JSON이 열리면 Nasdaq 기업의 최근/다음 분기 및 연간 EPS·매출 실제치/추정치를 보강한다. 별도 인증은 기본적으로 필요 없고, `SEEKING_ALPHA_NASDAQ_LIMIT=500`, `SEEKING_ALPHA_BATCH_SIZE=5`, `SEEKING_ALPHA_CALL_DELAY_MS=60000`으로 천천히 갱신한다. 운영 Job은 `SEEKING_ALPHA_USE_CURL=1`로 curl 경로를 사용한다. PerimeterX/captcha로 차단되면 즉시 멈추며, 허용된 데이터 소스나 세션이 필요하다.
 - Yahoo Finance 웹 JSON이 열리면 NASDAQ 기업의 목표가와 `0q/+1q/0y/+1y` EPS·매출 추정치를 보강한다. 기본은 기존 FMP 추정치를 덮어쓰지 않고 빈칸만 채운다. Yahoo 세션은 DB에 캐시하고, 실패 시 기존 데이터는 보존한 채 다음 실행 때 재시도한다.
@@ -98,6 +99,8 @@ src/lib/ingest.ts           async upsert + 변경 감지
 | `BUTLER_TELEGRAM_WEBHOOK_SECRET` | 텔레그램 웹훅 secret token |
 | `BUTLER_RATE_PER_MIN` | 업스트림 분당 요청 상한(기본 80) |
 | `DART_API_KEY` | 국내 실적발표 캘린더 수집용 |
+| `FNGUIDE_ESTIMATE_LIMIT` | FnGuide 국내 컨센서스 일일 보강 대상 수(기본 0=전체) |
+| `WISEREPORT_ESTIMATE_LIMIT` | WiseReport 국내 컨센서스 일일 보강 대상 수(기본 0=전체) |
 | `FMP_API_KEY` | Nasdaq 연간 컨센서스 추정치 수집용 |
 | `FMP_DAILY_CALL_BUDGET` | FMP 하루 호출 예산(기본 240, 무료 250 calls/day 여유분 보존) |
 | `FMP_CALL_DELAY_MS` | FMP 호출 간격(기본 2500ms, 무료 플랜 rate limit 보호) |

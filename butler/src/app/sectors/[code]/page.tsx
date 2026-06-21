@@ -53,7 +53,7 @@ export default async function SectorDetail({
         <h2>
           구성 기업 <span className="sub">헤더(시가총액·PER·상승여력 등)를 클릭하면 그 기준으로 정렬</span>
         </h2>
-        <SectorCompaniesTable companies={companies} growthByCompany={growthByCompany} />
+        <SectorCompaniesTable sectorCode={code} companies={companies} growthByCompany={growthByCompany} />
       </div>
     </>
   );

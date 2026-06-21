@@ -159,7 +159,7 @@ async function upsertEstimateRows(
         `INSERT INTO financials
            (corp_code, metric, raw_label, fiscal_year, quarter, period_type, value, is_estimate, date_label, source)
          VALUES ($1, $2, $3, $4, 0, 'A', $5, 1, $6, $7)
-         ON CONFLICT(corp_code, metric, fiscal_year, quarter, period_type, is_estimate)
+         ON CONFLICT(corp_code, metric, fiscal_year, quarter, period_type, is_estimate, source)
          DO UPDATE SET value = excluded.value, raw_label = excluded.raw_label,
                        date_label = excluded.date_label, source = excluded.source`,
         [corpCode, v.metric, v.rawLabel, year, storedValue, row.date ?? String(year), ESTIMATE_SOURCE],

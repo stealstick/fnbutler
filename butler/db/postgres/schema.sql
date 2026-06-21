@@ -120,8 +120,31 @@ CREATE TABLE IF NOT EXISTS financials (
     is_estimate INTEGER NOT NULL DEFAULT 0,
     date_label  TEXT,
     source      TEXT NOT NULL DEFAULT 'butler',
-    PRIMARY KEY (corp_code, metric, fiscal_year, quarter, period_type, is_estimate)
+    PRIMARY KEY (corp_code, metric, fiscal_year, quarter, period_type, is_estimate, source)
 );
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conrelid = 'financials'::regclass
+          AND conname = 'financials_pkey'
+          AND pg_get_constraintdef(oid) NOT LIKE '%source%'
+    ) THEN
+        ALTER TABLE financials DROP CONSTRAINT financials_pkey;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conrelid = 'financials'::regclass
+          AND conname = 'financials_pkey'
+    ) THEN
+        ALTER TABLE financials
+            ADD CONSTRAINT financials_pkey
+            PRIMARY KEY (corp_code, metric, fiscal_year, quarter, period_type, is_estimate, source);
+    END IF;
+END $$;
 CREATE INDEX IF NOT EXISTS idx_fin_corp_metric ON financials(corp_code, metric, fiscal_year, quarter);
 
 CREATE TABLE IF NOT EXISTS valuations (
@@ -285,15 +308,35 @@ WHERE sector_code IS NOT NULL AND active = 1
 GROUP BY sector_code, sector_name;
 
 CREATE OR REPLACE VIEW v_financials_growth AS
-WITH ordered AS (
+WITH ranked AS (
+    SELECT
+        f.*,
+        ROW_NUMBER() OVER (
+            PARTITION BY corp_code, metric, period_type, fiscal_year, quarter, is_estimate,
+                         CASE WHEN is_estimate = 1 THEN source ELSE '' END
+            ORDER BY CASE source
+                         WHEN 'dart' THEN 0
+                         WHEN 'butler' THEN 1
+                         WHEN 'fnguide' THEN 2
+                         WHEN 'wisereport' THEN 3
+                         ELSE 9
+                     END,
+                     source
+        ) AS rn
+    FROM financials f
+),
+base AS (
+    SELECT * FROM ranked WHERE rn = 1
+),
+ordered AS (
     SELECT
         corp_code, metric, raw_label, fiscal_year, quarter, period_type,
-        is_estimate, value, date_label,
+        is_estimate, value, date_label, source,
         LAG(value, 1) OVER w AS prev_q,
         LAG(value, CASE WHEN period_type='Q' THEN 4 ELSE 1 END) OVER w AS prev_y
-    FROM financials
+    FROM base
     WINDOW w AS (
-        PARTITION BY corp_code, metric, period_type, is_estimate
+        PARTITION BY corp_code, metric, period_type, is_estimate, source
         ORDER BY fiscal_year, quarter
     )
 )

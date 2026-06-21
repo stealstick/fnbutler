@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { won, num, pct, price as stockPrice, signClass } from "@/lib/format";
 import type { GrowthBundle, GrowthByMetric, GrowthMetric } from "@/lib/compare-growth";
 import type { CompanyRow, SectorAgg } from "@/lib/repo";
+import EstimateProviderToggle, { useEstimateProvider } from "@/components/EstimateProviderToggle";
 
 const MAX_COMPARE = 10;
 const GROWTH_METRICS: Array<{ key: GrowthMetric; label: string }> = [
@@ -53,6 +54,7 @@ export default function CompaniesPage() {
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(false);
   const [metric, setMetric] = useState<GrowthMetric>("REVENUE");
+  const [estimateProvider, setEstimateProvider] = useEstimateProvider();
   const [growthByCode, setGrowthByCode] = useState<Record<string, GrowthByMetric>>({});
   // 비교 선택 — 페이지/필터가 바뀌어도 유지(코드+이름을 들고 다님)
   const [sel, setSel] = useState<{ code: string; name: string }[]>([]);
@@ -88,6 +90,7 @@ export default function CompaniesPage() {
       dir: apiDir,
       limit: String(limit),
       offset: String(page * limit),
+      provider: estimateProvider,
     });
     if (sector) sp.set("sector", sector);
     if (industry) sp.set("industry", industry);
@@ -95,7 +98,7 @@ export default function CompaniesPage() {
     const r = await fetch(`/api/companies?${sp}`);
     setData(await r.json());
     setLoading(false);
-  }, [q, market, sector, industry, apiSort, apiDir, onlyConsensus, page]);
+  }, [q, market, sector, industry, apiSort, apiDir, onlyConsensus, page, estimateProvider]);
 
   useEffect(() => {
     const t = setTimeout(load, 200);
@@ -112,7 +115,8 @@ export default function CompaniesPage() {
 
     const controller = new AbortController();
     setGrowthByCode({});
-    fetch(`/api/companies/growth?codes=${encodeURIComponent(pageCodes)}`, { signal: controller.signal })
+    const sp = new URLSearchParams({ codes: pageCodes, provider: estimateProvider });
+    fetch(`/api/companies/growth?${sp.toString()}`, { signal: controller.signal })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`growth ${r.status}`))))
       .then((d) => setGrowthByCode(d.results ?? {}))
       .catch((e) => {
@@ -120,7 +124,7 @@ export default function CompaniesPage() {
       });
 
     return () => controller.abort();
-  }, [pageCodes]);
+  }, [pageCodes, estimateProvider]);
 
   function clickSort(key: string, defaultDir: Dir = "desc") {
     if (sort === key) setDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -284,6 +288,7 @@ export default function CompaniesPage() {
         <span className="muted growth-hint">
           종목 옆에서 QoQ·YoY 성장률을 바로 확인
         </span>
+        <EstimateProviderToggle provider={estimateProvider} onChange={setEstimateProvider} />
       </div>
 
       <div className="scrollx">
@@ -363,7 +368,8 @@ export default function CompaniesPage() {
       </div>
       <p className="note">
         성장률 컬럼은 선택한 지표 기준입니다. QoQ는 분기 대비, YoY는 연간 대비입니다. PER 추정치는 현재가 ÷ 연간 EPS
-        컨센서스로 계산하며, 추정 EPS가 없는 연도는 - 로 표시합니다.
+        컨센서스로 계산하며, 추정 EPS가 없는 연도는 - 로 표시합니다. 추정치 기준은 브라우저에 저장되고, 선택한
+        제공자에 값이 없으면 다른 제공자로 자동 보완합니다.
       </p>
 
       {pages > 1 && (

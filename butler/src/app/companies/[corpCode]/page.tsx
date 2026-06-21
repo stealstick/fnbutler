@@ -95,6 +95,7 @@ export default async function CompanyPage({
 
       {/* ---------- 실적 추이 (분기/연간 + QoQ/YoY) ---------- */}
       <FinancialsTable
+        corpCode={corpCode}
         quarterly={quarterly}
         annual={annual}
         valuations={valuations}
