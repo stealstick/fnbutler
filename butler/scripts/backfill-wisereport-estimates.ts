@@ -223,7 +223,12 @@ export async function backfillWiseReportEstimates(
   options: WiseReportEstimateOptions = {},
 ): Promise<WiseReportEstimateSummary> {
   const log = options.log ?? ((message: string) => process.stdout.write(message));
-  const where = ["c.has_consensus = 1", "c.stock_code IS NOT NULL", "c.stock_code <> ''"];
+  const where = [
+    "c.has_consensus = 1",
+    "c.stock_code IS NOT NULL",
+    "c.stock_code ~ '^[0-9]{6}$'",
+    "c.source <> 'nasdaq'",
+  ];
   const params: Array<string | number> = [];
   if (options.corp) {
     params.push(options.corp);
