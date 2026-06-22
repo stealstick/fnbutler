@@ -83,6 +83,34 @@ jobs:
           docker push "$APP_IMG"
           docker push "$JOB_IMG"
 
+      - name: Run database migrations
+        run: |
+          CONNECTION="${PROJECT}:${REGION}:${SQL_INSTANCE}"
+          MIGRATE_JOB="${SERVICE}-migrate"
+          SECRET_VARS="PGPASSWORD=${DB_PASSWORD_SECRET}:latest"
+          ENV_VARS="PGHOST=/cloudsql/${CONNECTION},PGDATABASE=${DB_NAME},PGUSER=${DB_USER}"
+
+          if gcloud run jobs describe "$MIGRATE_JOB" --region "$REGION" --project "$PROJECT" >/dev/null 2>&1; then
+            JOB_CMD=(gcloud run jobs update "$MIGRATE_JOB")
+          else
+            JOB_CMD=(gcloud run jobs create "$MIGRATE_JOB")
+          fi
+
+          "${JOB_CMD[@]}" \
+            --image "$JOB_IMG" --project "$PROJECT" --region "$REGION" \
+            --command npx --args tsx,scripts/init-db.ts \
+            --memory 512Mi --cpu 1 --tasks 1 --parallelism 1 \
+            --max-retries 0 --task-timeout 600 \
+            --service-account "${RUN_SA}@${PROJECT}.iam.gserviceaccount.com" \
+            --set-cloudsql-instances "$CONNECTION" \
+            --set-env-vars "$ENV_VARS" \
+            --set-secrets "$SECRET_VARS"
+
+          gcloud run jobs execute "$MIGRATE_JOB" \
+            --project "$PROJECT" \
+            --region "$REGION" \
+            --wait
+
       - name: Deploy service
         run: |
           CONNECTION="${PROJECT}:${REGION}:${SQL_INSTANCE}"
