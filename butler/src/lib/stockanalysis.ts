@@ -4,7 +4,7 @@ import { logChange } from "./ingest";
 import { fetchUsdKrwRate } from "./nasdaq";
 
 const STOCK_ANALYSIS_BASE = "https://stockanalysis.com/stocks";
-const DEFAULT_LIMIT = 12;
+const DEFAULT_LIMIT = 20;
 const DEFAULT_CALL_DELAY_MS = 7000;
 const DEFAULT_JITTER_MS = 3000;
 const ESTIMATE_SOURCE = "stockanalysis:forecast";
@@ -384,12 +384,25 @@ async function candidates(
      FROM companies
      WHERE ${where.join(" AND ")}
      ORDER BY
+       CASE WHEN stockanalysis_estimates_at IS NULL THEN 0 ELSE 1 END,
        CASE WHEN per IS NULL OR pbr IS NULL OR fper IS NULL OR bps IS NULL THEN 0 ELSE 1 END,
-       CASE WHEN per IS NULL OR pbr IS NULL OR fper IS NULL OR bps IS NULL THEN market_cap END DESC NULLS LAST,
+       CASE WHEN stockanalysis_estimates_at IS NULL AND (per IS NULL OR pbr IS NULL OR fper IS NULL OR bps IS NULL)
+            THEN market_cap END DESC NULLS LAST,
        stockanalysis_estimates_at ASC NULLS FIRST,
        market_cap DESC NULLS LAST
      LIMIT $${params.length}`,
     params,
+    db,
+  );
+}
+
+async function markStockAnalysisAttempt(db: Queryable, corpCode: string, observedAt: string): Promise<void> {
+  await query(
+    `UPDATE companies
+     SET stockanalysis_estimates_at = COALESCE(stockanalysis_estimates_at, $2),
+         updated_at = $2
+     WHERE corp_code = $1`,
+    [corpCode, observedAt],
     db,
   );
 }
@@ -743,8 +756,21 @@ export async function backfillStockAnalysisNasdaqEstimates(
           `targets=${r.targetWrites} reports=${r.reportWrites}\n`,
       );
     } catch (e) {
+      const message = (e as Error).message;
+      if (/blocked|captcha|too many requests|HTTP 429/i.test(message)) {
+        log(`  stockanalysis [${i + 1}/${targets.length}] ${c.stock_code} BLOCKED ${message}\n`);
+        throw e;
+      }
+      try {
+        await markStockAnalysisAttempt(db, c.corp_code, nowIso());
+      } catch (markError) {
+        log(
+          `  stockanalysis [${i + 1}/${targets.length}] ${c.stock_code} attempt mark failed ` +
+            `${(markError as Error).message}\n`,
+        );
+      }
       fail++;
-      log(`  stockanalysis [${i + 1}/${targets.length}] ${c.stock_code} ERROR ${(e as Error).message}\n`);
+      log(`  stockanalysis [${i + 1}/${targets.length}] ${c.stock_code} ERROR ${message}\n`);
     } finally {
       const delay = callDelayMs + (jitterMs > 0 ? Math.floor(Math.random() * jitterMs) : 0);
       if (delay > 0) await sleep(delay);
