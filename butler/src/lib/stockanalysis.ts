@@ -46,6 +46,15 @@ type ParsedBrokerTarget = {
   previousTarget: number | null;
 };
 
+type ParsedStats = {
+  per: number | null;
+  pbr: number | null;
+  fper: number | null;
+  bps: number | null;
+  dps: number | null;
+  dividendYield: number | null;
+};
+
 type ParsedForecast = {
   currentPrice: number | null;
   targetAvg: number | null;
@@ -54,6 +63,7 @@ type ParsedForecast = {
   targetMedian: number | null;
   targetCount: number | null;
   ratingCount: number | null;
+  stats: ParsedStats;
   financialRows: ParsedFinancialRow[];
   brokerTargets: ParsedBrokerTarget[];
 };
@@ -77,6 +87,7 @@ export interface StockAnalysisNasdaqBackfillSummary {
   writes: number;
   actualWrites: number;
   estimateWrites: number;
+  valuationWrites: number;
   targetWrites: number;
   reportWrites: number;
   usdKrw: number;
@@ -90,6 +101,10 @@ function parseNumber(raw: unknown): number | null {
   if (!s || s === "null" || s === "void 0" || s === "undefined" || s === '"[PRO]"' || s === "[PRO]") return null;
   const n = Number(s.replace(/^"|"$/g, "").replace(/[$,%\s,]/g, ""));
   return Number.isFinite(n) ? n : null;
+}
+
+function emptyStats(): ParsedStats {
+  return { per: null, pbr: null, fper: null, bps: null, dps: null, dividendYield: null };
 }
 
 function parseString(raw: unknown): string | null {
@@ -293,6 +308,23 @@ function parseBrokerTargets(html: string): ParsedBrokerTarget[] {
   return rows;
 }
 
+function statisticValue(html: string, id: string): number | null {
+  const m = new RegExp(`\\{id:"${id}"[^}]*\\}`).exec(html);
+  if (!m) return null;
+  return fieldNumber(m[0], "hover") ?? fieldNumber(m[0], "value");
+}
+
+export function parseStockAnalysisStatistics(html: string): ParsedStats {
+  return {
+    per: statisticValue(html, "pe"),
+    pbr: statisticValue(html, "pb"),
+    fper: statisticValue(html, "peForward"),
+    bps: statisticValue(html, "bvps"),
+    dps: statisticValue(html, "dps"),
+    dividendYield: statisticValue(html, "dividendYield"),
+  };
+}
+
 export function parseStockAnalysisForecast(html: string): ParsedForecast {
   const table = findObjectByKey(html, "table");
   const annual = table ? findObjectByKey(table, "annual") : null;
@@ -301,6 +333,7 @@ export function parseStockAnalysisForecast(html: string): ParsedForecast {
   return {
     currentPrice: quote ? fieldNumber(quote, "p") : null,
     ...parseTargets(html),
+    stats: emptyStats(),
     financialRows: [...buildFinancialRows(annual, "A"), ...buildFinancialRows(quarterly, "Q")],
     brokerTargets: parseBrokerTargets(html),
   };
@@ -314,6 +347,20 @@ async function fetchForecastHtml(symbol: string): Promise<string> {
   if (!res.ok) throw new Error(`StockAnalysis ${symbol} HTTP ${res.status}: ${text.slice(0, 120).replace(/\s+/g, " ")}`);
   if (/captcha|enable js|blocked|too many requests/i.test(text.slice(0, 1000))) {
     throw new Error(`StockAnalysis ${symbol} blocked`);
+  }
+  return text;
+}
+
+async function fetchStatisticsHtml(symbol: string): Promise<string> {
+  const res = await fetch(`${STOCK_ANALYSIS_BASE}/${encodeURIComponent(symbol.toLowerCase())}/statistics/`, {
+    headers: STOCK_ANALYSIS_HEADERS,
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(`StockAnalysis statistics ${symbol} HTTP ${res.status}: ${text.slice(0, 120).replace(/\s+/g, " ")}`);
+  }
+  if (/captcha|enable js|blocked|too many requests/i.test(text.slice(0, 1000))) {
+    throw new Error(`StockAnalysis statistics ${symbol} blocked`);
   }
   return text;
 }
@@ -336,7 +383,10 @@ async function candidates(
     `SELECT corp_code, stock_code, price, target_price_avg
      FROM companies
      WHERE ${where.join(" AND ")}
-     ORDER BY stockanalysis_estimates_at ASC NULLS FIRST, market_cap DESC NULLS LAST
+     ORDER BY
+       CASE WHEN per IS NULL OR pbr IS NULL OR fper IS NULL OR bps IS NULL THEN 0 ELSE 1 END,
+       stockanalysis_estimates_at ASC NULLS FIRST,
+       market_cap DESC NULLS LAST
      LIMIT $${params.length}`,
     params,
     db,
@@ -494,10 +544,18 @@ async function upsertParsedForecast(
   parsed: ParsedForecast,
   usdKrw: number,
   options: Required<Pick<StockAnalysisNasdaqBackfillOptions, "overwriteEstimates" | "overwriteTargets" | "writeBrokerTargets">>,
-): Promise<{ writes: number; actualWrites: number; estimateWrites: number; targetWrites: number; reportWrites: number }> {
+): Promise<{
+  writes: number;
+  actualWrites: number;
+  estimateWrites: number;
+  valuationWrites: number;
+  targetWrites: number;
+  reportWrites: number;
+}> {
   const now = nowIso();
   let actualWrites = 0;
   let estimateWrites = 0;
+  let valuationWrites = 0;
   let targetWrites = 0;
   let reportWrites = 0;
 
@@ -528,7 +586,7 @@ async function upsertParsedForecast(
       ? ((parsed.targetAvg - currentPrice) / Math.abs(currentPrice)) * 100
       : null;
 
-  await query(
+  const companyRes = await query(
     `UPDATE companies SET
        eps = CASE WHEN $1::double precision IS NULL THEN eps ELSE COALESCE(eps, $1::double precision) END,
        feps = CASE WHEN $2::double precision IS NULL THEN feps ELSE COALESCE(feps, $2::double precision) END,
@@ -536,10 +594,16 @@ async function upsertParsedForecast(
        cover_securities = GREATEST(COALESCE(cover_securities, 0), COALESCE($3::integer, 0)),
        target_price_avg = CASE WHEN $4::boolean THEN $5::double precision ELSE target_price_avg END,
        target_return_rate = CASE WHEN $4::boolean THEN $6::double precision ELSE target_return_rate END,
-       stockanalysis_estimates_at = $7,
-       stockanalysis_targets_at = CASE WHEN $8::boolean THEN $7 ELSE stockanalysis_targets_at END,
-       updated_at = $7
-     WHERE corp_code = $9`,
+       per = CASE WHEN $7::double precision IS NULL THEN per ELSE $7::double precision END,
+       pbr = CASE WHEN $8::double precision IS NULL THEN pbr ELSE $8::double precision END,
+       fper = CASE WHEN $9::double precision IS NULL THEN fper ELSE $9::double precision END,
+       bps = CASE WHEN $10::double precision IS NULL THEN bps ELSE $10::double precision END,
+       dps = CASE WHEN $11::double precision IS NULL THEN dps ELSE $11::double precision END,
+       dividend_yield = CASE WHEN $12::double precision IS NULL THEN dividend_yield ELSE $12::double precision END,
+       stockanalysis_estimates_at = $13,
+       stockanalysis_targets_at = CASE WHEN $14::boolean THEN $13 ELSE stockanalysis_targets_at END,
+       updated_at = $13
+     WHERE corp_code = $15`,
     [
       currentAnnual?.values.EPS ?? null,
       nextAnnual?.values.EPS ?? null,
@@ -547,12 +611,20 @@ async function upsertParsedForecast(
       shouldUpdateTarget,
       parsed.targetAvg,
       targetReturn,
+      parsed.stats.per,
+      parsed.stats.pbr,
+      parsed.stats.fper,
+      parsed.stats.bps,
+      parsed.stats.dps,
+      parsed.stats.dividendYield,
       now,
       parsed.targetAvg != null,
       c.corp_code,
     ],
     db,
   );
+  const hasStats = Object.values(parsed.stats).some((v) => v != null);
+  valuationWrites += hasStats ? (companyRes.rowCount ?? 0) : 0;
 
   if (shouldUpdateTarget) {
     const month = now.slice(0, 7);
@@ -593,9 +665,10 @@ async function upsertParsedForecast(
   }
 
   return {
-    writes: actualWrites + estimateWrites + targetWrites + reportWrites,
+    writes: actualWrites + estimateWrites + valuationWrites + targetWrites + reportWrites,
     actualWrites,
     estimateWrites,
+    valuationWrites,
     targetWrites,
     reportWrites,
   };
@@ -620,7 +693,18 @@ export async function backfillStockAnalysisNasdaqEstimates(
   const log = options.log ?? (() => {});
   const [targets, usdKrw] = await Promise.all([candidates(db, limit, options), fetchUsdKrwRate()]);
   if (targets.length === 0) {
-    return { targeted: 0, ok: 0, fail: 0, writes: 0, actualWrites: 0, estimateWrites: 0, targetWrites: 0, reportWrites: 0, usdKrw };
+    return {
+      targeted: 0,
+      ok: 0,
+      fail: 0,
+      writes: 0,
+      actualWrites: 0,
+      estimateWrites: 0,
+      valuationWrites: 0,
+      targetWrites: 0,
+      reportWrites: 0,
+      usdKrw,
+    };
   }
 
   let ok = 0;
@@ -628,14 +712,20 @@ export async function backfillStockAnalysisNasdaqEstimates(
   let writes = 0;
   let actualWrites = 0;
   let estimateWrites = 0;
+  let valuationWrites = 0;
   let targetWrites = 0;
   let reportWrites = 0;
 
   for (let i = 0; i < targets.length; i++) {
     const c = targets[i];
     try {
-      const html = await fetchForecastHtml(c.stock_code);
-      const parsed = parseStockAnalysisForecast(html);
+      const forecastHtml = await fetchForecastHtml(c.stock_code);
+      const parsed = parseStockAnalysisForecast(forecastHtml);
+      try {
+        parsed.stats = parseStockAnalysisStatistics(await fetchStatisticsHtml(c.stock_code));
+      } catch (e) {
+        log(`  stockanalysis [${i + 1}/${targets.length}] ${c.stock_code} statistics unavailable ${(e as Error).message}\n`);
+      }
       const r = await tx((client) =>
         upsertParsedForecast(client, c, parsed, usdKrw, { overwriteEstimates, overwriteTargets, writeBrokerTargets }),
       );
@@ -643,11 +733,13 @@ export async function backfillStockAnalysisNasdaqEstimates(
       writes += r.writes;
       actualWrites += r.actualWrites;
       estimateWrites += r.estimateWrites;
+      valuationWrites += r.valuationWrites;
       targetWrites += r.targetWrites;
       reportWrites += r.reportWrites;
       log(
         `  stockanalysis [${i + 1}/${targets.length}] ${c.stock_code} ok writes=${r.writes} ` +
-          `actual=${r.actualWrites} estimates=${r.estimateWrites} targets=${r.targetWrites} reports=${r.reportWrites}\n`,
+          `actual=${r.actualWrites} estimates=${r.estimateWrites} valuations=${r.valuationWrites} ` +
+          `targets=${r.targetWrites} reports=${r.reportWrites}\n`,
       );
     } catch (e) {
       fail++;
@@ -658,5 +750,5 @@ export async function backfillStockAnalysisNasdaqEstimates(
     }
   }
 
-  return { targeted: targets.length, ok, fail, writes, actualWrites, estimateWrites, targetWrites, reportWrites, usdKrw };
+  return { targeted: targets.length, ok, fail, writes, actualWrites, estimateWrites, valuationWrites, targetWrites, reportWrites, usdKrw };
 }

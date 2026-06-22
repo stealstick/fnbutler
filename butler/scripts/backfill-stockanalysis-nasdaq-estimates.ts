@@ -37,13 +37,13 @@ async function main() {
       started,
       nowIso(),
       summary.fail === 0 ? 1 : 0,
-      `targeted=${summary.targeted} ok=${summary.ok} fail=${summary.fail} writes=${summary.writes} actualWrites=${summary.actualWrites} estimateWrites=${summary.estimateWrites} targetWrites=${summary.targetWrites} reportWrites=${summary.reportWrites} usdKrw=${summary.usdKrw}`,
+      `targeted=${summary.targeted} ok=${summary.ok} fail=${summary.fail} writes=${summary.writes} actualWrites=${summary.actualWrites} estimateWrites=${summary.estimateWrites} valuationWrites=${summary.valuationWrites} targetWrites=${summary.targetWrites} reportWrites=${summary.reportWrites} usdKrw=${summary.usdKrw}`,
     ],
     db,
   );
 
   process.stdout.write(
-    `StockAnalysis NASDAQ 백필 완료 — ok=${summary.ok}/${summary.targeted}, fail=${summary.fail}, writes=${summary.writes}, actual=${summary.actualWrites}, estimates=${summary.estimateWrites}, targets=${summary.targetWrites}, reports=${summary.reportWrites}, usdKrw=${summary.usdKrw}\n`,
+    `StockAnalysis NASDAQ 백필 완료 — ok=${summary.ok}/${summary.targeted}, fail=${summary.fail}, writes=${summary.writes}, actual=${summary.actualWrites}, estimates=${summary.estimateWrites}, valuations=${summary.valuationWrites}, targets=${summary.targetWrites}, reports=${summary.reportWrites}, usdKrw=${summary.usdKrw}\n`,
   );
 }
 
