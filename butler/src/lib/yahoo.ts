@@ -1,4 +1,5 @@
 import { all, nowIso, query, tx, type Queryable } from "./db";
+import { normalizeEstimateValue, ratioToPercent, upsertEstimateConsensus } from "./estimate-consensus";
 import { fetchUsdKrwRate } from "./nasdaq";
 
 const YAHOO_HEADERS = {
@@ -26,10 +27,18 @@ type YahooTrend = {
   endDate?: string;
   earningsEstimate?: {
     avg?: YahooValue;
+    low?: YahooValue;
+    high?: YahooValue;
+    yearAgoEps?: YahooValue;
+    growth?: YahooValue;
     numberOfAnalysts?: YahooValue;
   };
   revenueEstimate?: {
     avg?: YahooValue;
+    low?: YahooValue;
+    high?: YahooValue;
+    yearAgoRevenue?: YahooValue;
+    growth?: YahooValue;
     numberOfAnalysts?: YahooValue;
   };
 };
@@ -310,6 +319,42 @@ async function insertFinancial(
   return res.rowCount ?? 0;
 }
 
+async function insertYahooConsensus(
+  db: Queryable,
+  c: NasdaqCandidate,
+  metric: "REVENUE" | "EPS",
+  estimate: YahooTrend["revenueEstimate"] | YahooTrend["earningsEstimate"] | undefined,
+  fiscalYear: number,
+  quarter: number,
+  periodType: "Q" | "A",
+  endDate: string | undefined,
+  usdKrw: number,
+  updatedAt: string,
+): Promise<number> {
+  if (!estimate) return 0;
+  const yearAgo =
+    metric === "REVENUE"
+      ? raw((estimate as YahooTrend["revenueEstimate"])?.yearAgoRevenue)
+      : raw((estimate as YahooTrend["earningsEstimate"])?.yearAgoEps);
+  return upsertEstimateConsensus(db, {
+    corpCode: c.corp_code,
+    metric,
+    fiscalYear,
+    quarter,
+    periodType,
+    avgValue: normalizeEstimateValue(metric, raw(estimate.avg), usdKrw),
+    lowValue: normalizeEstimateValue(metric, raw(estimate.low), usdKrw),
+    highValue: normalizeEstimateValue(metric, raw(estimate.high), usdKrw),
+    yearAgoValue: normalizeEstimateValue(metric, yearAgo, usdKrw),
+    growthPct: ratioToPercent(raw(estimate.growth)),
+    analystCount: raw(estimate.numberOfAnalysts),
+    dateLabel: endDate,
+    endDate: endDate ?? null,
+    source: ESTIMATE_SOURCE,
+    updatedAt,
+  });
+}
+
 async function upsertYahooRows(
   db: Queryable,
   c: NasdaqCandidate,
@@ -335,6 +380,8 @@ async function upsertYahooRows(
       if (!q) continue;
       estimateWrites += await insertFinancial(db, c, "REVENUE", revenue, q.year, q.quarter, "Q", t.endDate, usdKrw, options.overwriteEstimates);
       estimateWrites += await insertFinancial(db, c, "EPS", eps, q.year, q.quarter, "Q", t.endDate, usdKrw, options.overwriteEstimates);
+      estimateWrites += await insertYahooConsensus(db, c, "REVENUE", t.revenueEstimate, q.year, q.quarter, "Q", t.endDate, usdKrw, now);
+      estimateWrites += await insertYahooConsensus(db, c, "EPS", t.earningsEstimate, q.year, q.quarter, "Q", t.endDate, usdKrw, now);
     }
     if (t.period === "0y" || t.period === "+1y") {
       const year = yearFromDate(t.endDate);
@@ -342,6 +389,8 @@ async function upsertYahooRows(
       annualEps.push({ period: t.period, year, eps, analysts: analysts > 0 ? Math.round(analysts) : null });
       estimateWrites += await insertFinancial(db, c, "REVENUE", revenue, year, 0, "A", t.endDate, usdKrw, options.overwriteEstimates);
       estimateWrites += await insertFinancial(db, c, "EPS", eps, year, 0, "A", t.endDate, usdKrw, options.overwriteEstimates);
+      estimateWrites += await insertYahooConsensus(db, c, "REVENUE", t.revenueEstimate, year, 0, "A", t.endDate, usdKrw, now);
+      estimateWrites += await insertYahooConsensus(db, c, "EPS", t.earningsEstimate, year, 0, "A", t.endDate, usdKrw, now);
     }
   }
 

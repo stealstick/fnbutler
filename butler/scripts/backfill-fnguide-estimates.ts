@@ -9,7 +9,8 @@
  *   tsx scripts/backfill-fnguide-estimates.ts --stock 005930
  *   tsx scripts/backfill-fnguide-estimates.ts --limit 50
  */
-import { all, closeDb, getDb, migrate, query, type Queryable } from "../src/lib/db";
+import { all, closeDb, getDb, migrate, nowIso, query, type Queryable } from "../src/lib/db";
+import { upsertEstimateConsensus } from "../src/lib/estimate-consensus";
 import { sleep } from "../src/lib/butler";
 
 type Metric = "REVENUE" | "OPERATING_PROFIT" | "NET_INCOME" | "EPS";
@@ -29,6 +30,7 @@ interface FnGuideEstimateRow {
   periodType: PeriodType;
   value: number;
   dateLabel: string;
+  growthPct?: number | null;
 }
 
 export interface FnGuideEstimateOptions {
@@ -149,10 +151,14 @@ function parseRows(json: FnGuideJson, periodType: PeriodType): FnGuideEstimateRo
     .filter((c): c is { key: DataKey; period: ParsedPeriod } => !!c.period && c.period.isEstimate);
 
   const out: FnGuideEstimateRow[] = [];
-  for (const row of rows.slice(1)) {
+  const body = rows.slice(1);
+  for (let i = 0; i < body.length; i++) {
+    const row = body[i];
     const name = cleanAccountName(row.ACCOUNT_NM);
     const metric = METRICS.find((m) => m.names.includes(name));
     if (!metric) continue;
+    const nextRow = body[i + 1];
+    const growthRow = cleanAccountName(nextRow?.ACCOUNT_NM) === "전년동기대비" ? nextRow : null;
 
     for (const col of cols) {
       const value = parseNumber(row[col.key]);
@@ -165,6 +171,7 @@ function parseRows(json: FnGuideJson, periodType: PeriodType): FnGuideEstimateRo
         periodType,
         value: metric.unit === "amount" ? Math.round(value * UNIT) : value,
         dateLabel: col.period.dateLabel,
+        growthPct: parseNumber(growthRow?.[col.key]),
       });
     }
   }
@@ -200,6 +207,18 @@ async function upsertEstimate(db: Queryable, corpCode: string, row: FnGuideEstim
     [corpCode, row.metric, row.label, row.fiscalYear, row.quarter, row.periodType, row.value, row.dateLabel],
     db,
   );
+  await upsertEstimateConsensus(db, {
+    corpCode,
+    metric: row.metric,
+    fiscalYear: row.fiscalYear,
+    quarter: row.quarter,
+    periodType: row.periodType,
+    avgValue: row.value,
+    growthPct: row.growthPct,
+    dateLabel: row.dateLabel,
+    source: "fnguide",
+    updatedAt: nowIso(),
+  });
 }
 
 export async function backfillFnGuideEstimates(

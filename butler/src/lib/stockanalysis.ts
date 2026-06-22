@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { all, nowIso, one, query, tx, type Queryable } from "./db";
+import { normalizeEstimateValue, upsertEstimateConsensus } from "./estimate-consensus";
 import { logChange } from "./ingest";
 import { fetchUsdKrwRate } from "./nasdaq";
 
@@ -578,6 +579,20 @@ async function upsertParsedForecast(
       const n = await insertFinancialRow(db, c, row, metric, row.values[metric], usdKrw, options.overwriteEstimates);
       if (row.isEstimate) estimateWrites += n;
       else actualWrites += n;
+      if (row.isEstimate) {
+        estimateWrites += await upsertEstimateConsensus(db, {
+          corpCode: c.corp_code,
+          metric,
+          fiscalYear: row.fiscalYear,
+          quarter: row.quarter,
+          periodType: row.periodType,
+          avgValue: normalizeEstimateValue(metric, row.values[metric], usdKrw),
+          analystCount: row.analysts,
+          dateLabel: row.dateLabel,
+          source: ESTIMATE_SOURCE,
+          updatedAt: now,
+        });
+      }
     }
   }
 

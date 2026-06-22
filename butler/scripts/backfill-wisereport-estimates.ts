@@ -9,7 +9,8 @@
  *   tsx scripts/backfill-wisereport-estimates.ts --stock 005930
  *   tsx scripts/backfill-wisereport-estimates.ts --limit 50
  */
-import { all, closeDb, getDb, migrate, query, type Queryable } from "../src/lib/db";
+import { all, closeDb, getDb, migrate, nowIso, query, type Queryable } from "../src/lib/db";
+import { upsertEstimateConsensus } from "../src/lib/estimate-consensus";
 import { sleep } from "../src/lib/butler";
 
 type Metric = "REVENUE" | "OPERATING_PROFIT" | "NET_INCOME";
@@ -216,6 +217,17 @@ async function upsertEstimate(db: Queryable, corpCode: string, row: WiseEstimate
     [corpCode, row.metric, row.label, row.fiscalYear, row.quarter, row.periodType, row.value, row.dateLabel],
     db,
   );
+  await upsertEstimateConsensus(db, {
+    corpCode,
+    metric: row.metric,
+    fiscalYear: row.fiscalYear,
+    quarter: row.quarter,
+    periodType: row.periodType,
+    avgValue: row.value,
+    dateLabel: row.dateLabel,
+    source: "wisereport",
+    updatedAt: nowIso(),
+  });
 }
 
 export async function backfillWiseReportEstimates(

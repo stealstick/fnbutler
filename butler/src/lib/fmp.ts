@@ -1,4 +1,5 @@
 import { all, nowIso, query, tx, type Queryable } from "./db";
+import { normalizeEstimateValue, upsertEstimateConsensus, type EstimateMetric } from "./estimate-consensus";
 import { fetchUsdKrwRate } from "./nasdaq";
 
 const FMP_BASE = "https://financialmodelingprep.com/stable";
@@ -18,9 +19,17 @@ type FmpAnnualEstimate = {
   symbol?: string;
   date?: string;
   revenueAvg?: number | string | null;
+  revenueLow?: number | string | null;
+  revenueHigh?: number | string | null;
   ebitAvg?: number | string | null;
+  ebitLow?: number | string | null;
+  ebitHigh?: number | string | null;
   netIncomeAvg?: number | string | null;
+  netIncomeLow?: number | string | null;
+  netIncomeHigh?: number | string | null;
   epsAvg?: number | string | null;
+  epsLow?: number | string | null;
+  epsHigh?: number | string | null;
   numAnalystsRevenue?: number | string | null;
   numAnalystsEps?: number | string | null;
 };
@@ -72,6 +81,21 @@ function fiscalYear(row: FmpAnnualEstimate): number | null {
 function analystCount(row: FmpAnnualEstimate): number | null {
   const n = Math.max(toNum(row.numAnalystsRevenue) ?? 0, toNum(row.numAnalystsEps) ?? 0);
   return n > 0 ? Math.round(n) : null;
+}
+
+function rowNum(row: FmpAnnualEstimate, ...keys: string[]): number | null {
+  const rawRow = row as Record<string, unknown>;
+  for (const key of keys) {
+    const n = toNum(rawRow[key]);
+    if (n != null) return n;
+  }
+  return null;
+}
+
+function analystCountForMetric(row: FmpAnnualEstimate, metric: EstimateMetric): number | null {
+  if (metric === "REVENUE") return toNum(row.numAnalystsRevenue) ?? analystCount(row);
+  if (metric === "EPS") return toNum(row.numAnalystsEps) ?? analystCount(row);
+  return analystCount(row);
 }
 
 async function fetchFmpJson<T>(
@@ -146,26 +170,72 @@ async function upsertEstimateRows(
     .sort((a, b) => a.year - b.year);
 
   for (const { row, year } of sorted) {
-    const values: Array<{ metric: string; rawLabel: string; value: number | null }> = [
-      { metric: "REVENUE", rawLabel: "FMP Revenue Avg", value: toNum(row.revenueAvg) },
-      { metric: "OPERATING_PROFIT", rawLabel: "FMP EBIT Avg", value: toNum(row.ebitAvg) },
-      { metric: "NET_INCOME", rawLabel: "FMP Net Income Avg", value: toNum(row.netIncomeAvg) },
-      { metric: "EPS", rawLabel: "FMP EPS Avg", value: toNum(row.epsAvg) },
+    const values: Array<{
+      metric: EstimateMetric;
+      rawLabel: string;
+      avg: number | null;
+      low: number | null;
+      high: number | null;
+    }> = [
+      {
+        metric: "REVENUE",
+        rawLabel: "FMP Revenue Avg",
+        avg: rowNum(row, "revenueAvg", "estimatedRevenueAvg"),
+        low: rowNum(row, "revenueLow", "estimatedRevenueLow"),
+        high: rowNum(row, "revenueHigh", "estimatedRevenueHigh"),
+      },
+      {
+        metric: "OPERATING_PROFIT",
+        rawLabel: "FMP EBIT Avg",
+        avg: rowNum(row, "ebitAvg", "estimatedEbitAvg"),
+        low: rowNum(row, "ebitLow", "estimatedEbitLow"),
+        high: rowNum(row, "ebitHigh", "estimatedEbitHigh"),
+      },
+      {
+        metric: "NET_INCOME",
+        rawLabel: "FMP Net Income Avg",
+        avg: rowNum(row, "netIncomeAvg", "estimatedNetIncomeAvg"),
+        low: rowNum(row, "netIncomeLow", "estimatedNetIncomeLow"),
+        high: rowNum(row, "netIncomeHigh", "estimatedNetIncomeHigh"),
+      },
+      {
+        metric: "EPS",
+        rawLabel: "FMP EPS Avg",
+        avg: rowNum(row, "epsAvg", "estimatedEpsAvg"),
+        low: rowNum(row, "epsLow", "estimatedEpsLow"),
+        high: rowNum(row, "epsHigh", "estimatedEpsHigh"),
+      },
     ];
     for (const v of values) {
-      if (v.value == null) continue;
-      const storedValue = v.metric === "EPS" ? v.value : Math.round(v.value * usdKrw);
-      await query(
-        `INSERT INTO financials
-           (corp_code, metric, raw_label, fiscal_year, quarter, period_type, value, is_estimate, date_label, source)
-         VALUES ($1, $2, $3, $4, 0, 'A', $5, 1, $6, $7)
-         ON CONFLICT(corp_code, metric, fiscal_year, quarter, period_type, is_estimate, source)
-         DO UPDATE SET value = excluded.value, raw_label = excluded.raw_label,
-                       date_label = excluded.date_label, source = excluded.source`,
-        [corpCode, v.metric, v.rawLabel, year, storedValue, row.date ?? String(year), ESTIMATE_SOURCE],
-        db,
-      );
-      writes++;
+      if (v.avg != null) {
+        const storedValue = normalizeEstimateValue(v.metric, v.avg, usdKrw);
+        await query(
+          `INSERT INTO financials
+             (corp_code, metric, raw_label, fiscal_year, quarter, period_type, value, is_estimate, date_label, source)
+           VALUES ($1, $2, $3, $4, 0, 'A', $5, 1, $6, $7)
+           ON CONFLICT(corp_code, metric, fiscal_year, quarter, period_type, is_estimate, source)
+           DO UPDATE SET value = excluded.value, raw_label = excluded.raw_label,
+                         date_label = excluded.date_label, source = excluded.source`,
+          [corpCode, v.metric, v.rawLabel, year, storedValue, row.date ?? String(year), ESTIMATE_SOURCE],
+          db,
+        );
+        writes++;
+      }
+      writes += await upsertEstimateConsensus(db, {
+        corpCode,
+        metric: v.metric,
+        fiscalYear: year,
+        quarter: 0,
+        periodType: "A",
+        avgValue: normalizeEstimateValue(v.metric, v.avg, usdKrw),
+        lowValue: normalizeEstimateValue(v.metric, v.low, usdKrw),
+        highValue: normalizeEstimateValue(v.metric, v.high, usdKrw),
+        analystCount: analystCountForMetric(row, v.metric),
+        dateLabel: row.date ?? String(year),
+        endDate: row.date ?? null,
+        source: ESTIMATE_SOURCE,
+        updatedAt: now,
+      });
     }
   }
 

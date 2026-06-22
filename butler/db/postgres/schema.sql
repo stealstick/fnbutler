@@ -155,6 +155,36 @@ BEGIN
 END $$;
 CREATE INDEX IF NOT EXISTS idx_fin_corp_metric ON financials(corp_code, metric, fiscal_year, quarter);
 
+CREATE TABLE IF NOT EXISTS estimate_consensus (
+    corp_code      TEXT NOT NULL REFERENCES companies(corp_code),
+    metric         TEXT NOT NULL,
+    fiscal_year    INTEGER NOT NULL,
+    quarter        INTEGER NOT NULL,
+    period_type    TEXT NOT NULL CHECK (period_type IN ('Q','A')),
+    avg_value      DOUBLE PRECISION,
+    low_value      DOUBLE PRECISION,
+    high_value     DOUBLE PRECISION,
+    year_ago_value DOUBLE PRECISION,
+    growth_pct     DOUBLE PRECISION,
+    analyst_count  INTEGER,
+    date_label     TEXT,
+    end_date       TEXT,
+    source         TEXT NOT NULL DEFAULT 'butler',
+    updated_at     TEXT NOT NULL,
+    PRIMARY KEY (corp_code, metric, fiscal_year, quarter, period_type, source)
+);
+ALTER TABLE estimate_consensus ADD COLUMN IF NOT EXISTS avg_value DOUBLE PRECISION;
+ALTER TABLE estimate_consensus ADD COLUMN IF NOT EXISTS low_value DOUBLE PRECISION;
+ALTER TABLE estimate_consensus ADD COLUMN IF NOT EXISTS high_value DOUBLE PRECISION;
+ALTER TABLE estimate_consensus ADD COLUMN IF NOT EXISTS year_ago_value DOUBLE PRECISION;
+ALTER TABLE estimate_consensus ADD COLUMN IF NOT EXISTS growth_pct DOUBLE PRECISION;
+ALTER TABLE estimate_consensus ADD COLUMN IF NOT EXISTS analyst_count INTEGER;
+ALTER TABLE estimate_consensus ADD COLUMN IF NOT EXISTS date_label TEXT;
+ALTER TABLE estimate_consensus ADD COLUMN IF NOT EXISTS end_date TEXT;
+ALTER TABLE estimate_consensus ADD COLUMN IF NOT EXISTS updated_at TEXT NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS idx_estimate_consensus_corp ON estimate_consensus(corp_code, metric, period_type, fiscal_year, quarter);
+CREATE INDEX IF NOT EXISTS idx_estimate_consensus_source ON estimate_consensus(source, updated_at DESC);
+
 CREATE TABLE IF NOT EXISTS valuations (
     corp_code   TEXT NOT NULL REFERENCES companies(corp_code),
     metric      TEXT NOT NULL,
