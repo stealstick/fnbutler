@@ -385,10 +385,11 @@ async function candidates(
      FROM companies
      WHERE ${where.join(" AND ")}
      ORDER BY
-       CASE WHEN stockanalysis_estimates_at IS NULL THEN 0 ELSE 1 END,
-       CASE WHEN per IS NULL OR pbr IS NULL OR fper IS NULL OR bps IS NULL THEN 0 ELSE 1 END,
-       CASE WHEN stockanalysis_estimates_at IS NULL AND (per IS NULL OR pbr IS NULL OR fper IS NULL OR bps IS NULL)
+       CASE WHEN per IS NULL OR pbr IS NULL OR fper IS NULL OR bps IS NULL OR eps IS NULL OR dps IS NULL OR dividend_yield IS NULL
+            THEN 0 ELSE 1 END,
+       CASE WHEN per IS NULL OR pbr IS NULL OR fper IS NULL OR bps IS NULL OR eps IS NULL OR dps IS NULL OR dividend_yield IS NULL
             THEN market_cap END DESC NULLS LAST,
+       CASE WHEN stockanalysis_estimates_at IS NULL THEN 0 ELSE 1 END,
        stockanalysis_estimates_at ASC NULLS FIRST,
        market_cap DESC NULLS LAST
      LIMIT $${params.length}`,

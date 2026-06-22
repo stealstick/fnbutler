@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   DEFAULT_ESTIMATE_PROVIDER,
+  DOMESTIC_ESTIMATE_PROVIDERS,
   ESTIMATE_PROVIDER_LABEL,
-  ESTIMATE_PROVIDERS,
   normalizeEstimateProvider,
   type EstimateProvider,
 } from "@/lib/estimate-provider";
@@ -37,15 +37,17 @@ export function useEstimateProvider(): [EstimateProvider, (provider: EstimatePro
 export default function EstimateProviderToggle({
   provider,
   onChange,
+  providers = DOMESTIC_ESTIMATE_PROVIDERS,
 }: {
   provider: EstimateProvider;
   onChange: (provider: EstimateProvider) => void;
+  providers?: readonly EstimateProvider[];
 }) {
   return (
     <span className="estimate-provider">
       <span className="muted" style={{ fontSize: 12 }}>추정치 기준</span>
       <span className="toggle">
-        {ESTIMATE_PROVIDERS.map((p) => (
+        {providers.map((p) => (
           <button key={p} className={provider === p ? "on" : ""} onClick={() => onChange(p)}>
             {ESTIMATE_PROVIDER_LABEL[p]}
           </button>

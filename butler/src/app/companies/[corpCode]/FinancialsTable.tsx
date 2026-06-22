@@ -4,6 +4,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { num, pct, signClass, metricLabel, parseDateLabel } from "@/lib/format";
 import type { GrowthRow } from "@/lib/repo";
 import EstimateProviderToggle, { useEstimateProvider } from "@/components/EstimateProviderToggle";
+import {
+  DEFAULT_ESTIMATE_PROVIDER,
+  DEFAULT_GLOBAL_ESTIMATE_PROVIDER,
+  DOMESTIC_ESTIMATE_PROVIDERS,
+  GLOBAL_ESTIMATE_PROVIDERS,
+  type EstimateProvider,
+} from "@/lib/estimate-provider";
 
 type Val = { metric: string; date_label: string; value: number };
 
@@ -15,15 +22,23 @@ export default function FinancialsTable({
   annual,
   valuations,
   isFinancial,
+  isNasdaq,
 }: {
   corpCode: string;
   quarterly: GrowthRow[];
   annual: GrowthRow[];
   valuations: Val[];
   isFinancial: boolean;
+  isNasdaq: boolean;
 }) {
   const [mode, setMode] = useState<"Q" | "A">("Q");
   const [estimateProvider, setEstimateProvider] = useEstimateProvider();
+  const providers: readonly EstimateProvider[] = isNasdaq ? GLOBAL_ESTIMATE_PROVIDERS : DOMESTIC_ESTIMATE_PROVIDERS;
+  const activeEstimateProvider = providers.includes(estimateProvider)
+    ? estimateProvider
+    : isNasdaq
+      ? DEFAULT_GLOBAL_ESTIMATE_PROVIDER
+      : DEFAULT_ESTIMATE_PROVIDER;
   const [qRows, setQRows] = useState(quarterly);
   const [aRows, setARows] = useState(annual);
   const rows = mode === "Q" ? qRows : aRows;
@@ -32,7 +47,7 @@ export default function FinancialsTable({
   useEffect(() => {
     const controller = new AbortController();
     const fetchRows = (period: "Q" | "A") => {
-      const sp = new URLSearchParams({ period, provider: estimateProvider });
+      const sp = new URLSearchParams({ period, provider: activeEstimateProvider });
       return fetch(`/api/companies/${corpCode}/financials?${sp.toString()}`, { signal: controller.signal })
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`financials ${r.status}`))))
         .then((d) => d.rows ?? []);
@@ -49,7 +64,7 @@ export default function FinancialsTable({
         }
       });
     return () => controller.abort();
-  }, [annual, corpCode, estimateProvider, quarterly]);
+  }, [activeEstimateProvider, annual, corpCode, quarterly]);
 
   const table = useMemo(() => buildTable(rows, valuations, mode), [rows, valuations, mode]);
   const periodSignature = table.periods.map((p) => p.key).join("|");
@@ -70,7 +85,7 @@ export default function FinancialsTable({
       cancelAnimationFrame(frame);
       timers.forEach((timer) => window.clearTimeout(timer));
     };
-  }, [estimateProvider, periodSignature]);
+  }, [activeEstimateProvider, periodSignature]);
 
   if (qRows.length === 0 && aRows.length === 0) {
     return (
@@ -89,7 +104,7 @@ export default function FinancialsTable({
       <h2>
         실적 추이 <span className="sub">단위: 억원 · 분기=QoQ · 연도=YoY · 기울임=컨센서스 추정</span>
         <span style={{ marginLeft: "auto", display: "inline-flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          <EstimateProviderToggle provider={estimateProvider} onChange={setEstimateProvider} />
+          <EstimateProviderToggle provider={activeEstimateProvider} onChange={setEstimateProvider} providers={providers} />
           <span className="toggle">
             <button className={mode === "Q" ? "on" : ""} onClick={() => setMode("Q")}>
               분기별

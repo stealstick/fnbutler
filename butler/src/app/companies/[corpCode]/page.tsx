@@ -43,6 +43,19 @@ export default async function CompanyPage({
     getValuationSeries(corpCode),
     getChanges(corpCode, 40),
   ]);
+  const currentYear = new Date().getFullYear();
+  const latestActualEps = [...annual]
+    .filter((r) => r.metric === "EPS" && r.is_estimate === 0 && r.value != null)
+    .sort((a, b) => b.fiscal_year - a.fiscal_year)[0]?.value;
+  const currentEstimateEps = [...annual]
+    .filter((r) => r.metric === "EPS" && r.is_estimate === 1 && r.value != null && r.fiscal_year >= currentYear)
+    .sort((a, b) => a.fiscal_year - b.fiscal_year)[0]?.value;
+  const displayEps = company.eps ?? latestActualEps ?? null;
+  const displayPer =
+    company.per ?? (company.price != null && latestActualEps != null && latestActualEps > 0 ? company.price / latestActualEps : null);
+  const displayFper =
+    company.fper ??
+    (company.price != null && currentEstimateEps != null && currentEstimateEps > 0 ? company.price / currentEstimateEps : null);
 
   return (
     <>
@@ -76,10 +89,10 @@ export default async function CompanyPage({
 
         <div className="kv">
           <Cell k="시가총액" v={won(company.market_cap)} />
-          <Cell k="PER" v={company.per != null ? num(company.per, 2) : "-"} />
+          <Cell k="PER" v={displayPer != null ? num(displayPer, 2) : "-"} />
           <Cell k="PBR" v={company.pbr != null ? num(company.pbr, 2) : "-"} />
-          <Cell k="선행 PER" v={company.fper != null ? num(company.fper, 2) : "-"} />
-          <Cell k="EPS" v={num(company.eps)} />
+          <Cell k="선행 PER" v={displayFper != null ? num(displayFper, 2) : "-"} />
+          <Cell k="EPS" v={num(displayEps)} />
           <Cell k="BPS" v={num(company.bps)} />
           <Cell k="DPS" v={num(company.dps)} />
           <Cell k="배당수익률" v={company.dividend_yield != null ? `${num(company.dividend_yield, 2)}%` : "-"} />
@@ -102,6 +115,7 @@ export default async function CompanyPage({
         annual={annual}
         valuations={valuations}
         isFinancial={!!company.is_financial}
+        isNasdaq={company.source === "nasdaq"}
       />
 
       <TargetPricePanel
