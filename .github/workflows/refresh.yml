@@ -9,11 +9,15 @@ on:
         description: "refresh mode"
         type: choice
         default: full
-        options: [full, calendar-only, dart-financials, dart-2024-financials, dart-2025-financials, wisereport-estimates, nasdaq-companies, fmp-nasdaq-estimates, seekingalpha-nasdaq-estimates, yahoo-nasdaq-estimates, stockanalysis-nasdaq-estimates]
+        options: [full, calendar-only, dart-financials, dart-2024-financials, dart-2025-financials, fnguide-estimates, wisereport-estimates, nasdaq-companies, fmp-nasdaq-estimates, seekingalpha-nasdaq-estimates, yahoo-nasdaq-estimates, stockanalysis-nasdaq-estimates]
       wait:
         description: "wait for job completion"
         type: boolean
         default: true
+      fnguide_estimate_limit:
+        description: "optional FnGuide estimate company limit"
+        type: string
+        required: false
       stockanalysis_limit:
         description: "optional StockAnalysis symbol limit for manual runs"
         type: string
@@ -57,6 +61,7 @@ jobs:
           SCHEDULE: ${{ github.event.schedule || '' }}
           MODE: ${{ github.event.inputs.mode || 'full' }}
           WAIT: ${{ github.event.inputs.wait || 'true' }}
+          FNGUIDE_ESTIMATE_LIMIT: ${{ github.event.inputs.fnguide_estimate_limit || '' }}
           STOCKANALYSIS_LIMIT: ${{ github.event.inputs.stockanalysis_limit || '' }}
           STOCKANALYSIS_CALL_DELAY_MS: ${{ github.event.inputs.stockanalysis_call_delay_ms || '' }}
           STOCKANALYSIS_JITTER_MS: ${{ github.event.inputs.stockanalysis_jitter_ms || '' }}
@@ -92,6 +97,13 @@ jobs:
           fi
           if [ "$MODE" = "dart-2025-financials" ]; then
             EXTRA_ARGS=(--args tsx,scripts/backfill-dart-financials.ts,--year,2025)
+          fi
+          if [ "$MODE" = "fnguide-estimates" ]; then
+            FNGUIDE_ARGS="tsx,scripts/backfill-fnguide-estimates.ts"
+            if [ -n "$FNGUIDE_ESTIMATE_LIMIT" ]; then
+              FNGUIDE_ARGS="${FNGUIDE_ARGS},--limit,${FNGUIDE_ESTIMATE_LIMIT}"
+            fi
+            EXTRA_ARGS=(--args "$FNGUIDE_ARGS")
           fi
           if [ "$MODE" = "wisereport-estimates" ]; then
             EXTRA_ARGS=(--args tsx,scripts/backfill-wisereport-estimates.ts)
