@@ -7,7 +7,12 @@ export const ESTIMATE_PROVIDER_LABEL: Record<EstimateProvider, string> = {
   fnguide: "FnGuide",
   wisereport: "WiseReport",
 };
-const GLOBAL_ESTIMATE_FALLBACKS = ["yahoo", "fmp", "seekingalpha"] as const;
+const GLOBAL_ESTIMATE_FALLBACKS = [
+  "yahoo:earningsTrend",
+  "stockanalysis:forecast",
+  "seekingalpha:symbol_data_estimates",
+  "fmp:analyst-estimates",
+] as const;
 
 export function normalizeEstimateProvider(raw: string | null | undefined): EstimateProvider {
   return ESTIMATE_PROVIDERS.includes(raw as EstimateProvider)

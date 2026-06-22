@@ -22,6 +22,7 @@
     "backfill:fmp-nasdaq-estimates": "tsx scripts/backfill-fmp-nasdaq-estimates.ts",
     "backfill:seekingalpha-nasdaq-estimates": "tsx scripts/backfill-seekingalpha-nasdaq-estimates.ts",
     "backfill:yahoo-nasdaq-estimates": "tsx scripts/backfill-yahoo-nasdaq-estimates.ts",
+    "backfill:stockanalysis-nasdaq-estimates": "tsx scripts/backfill-stockanalysis-nasdaq-estimates.ts",
     "backfill:summaries": "tsx scripts/backfill-summaries.ts",
     "import:har": "tsx scripts/import-har.ts",
     "poll": "tsx scripts/poll-daily.ts",

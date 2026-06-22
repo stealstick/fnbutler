@@ -10,6 +10,7 @@
 #   PROJECT REGION SERVICE INSTANCE DB_NAME DB_USER DB_PASSWORD BASE_URL
 #   GITHUB_DEPLOYER_SA TG_TOKEN_SECRET TG_WEBHOOK_SECRET DART_API_KEY_SECRET FMP_API_KEY_SECRET
 #   SEEKING_ALPHA_NASDAQ_LIMIT SEEKING_ALPHA_BATCH_SIZE SEEKING_ALPHA_CALL_DELAY_MS SEEKING_ALPHA_USE_CURL SEEKING_ALPHA_COOKIE_SECRET
+#   STOCKANALYSIS_JOB STOCKANALYSIS_SCHEDULER_JOB STOCKANALYSIS_NASDAQ_LIMIT STOCKANALYSIS_CALL_DELAY_MS STOCKANALYSIS_JITTER_MS
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -18,8 +19,10 @@ REGION="${REGION:-asia-northeast3}"
 SERVICE="${SERVICE:-fnbutler}"
 JOB="${JOB:-fnbutler-refresh}"
 CALENDAR_JOB="${CALENDAR_JOB:-fnbutler-calendar-refresh}"
+STOCKANALYSIS_JOB="${STOCKANALYSIS_JOB:-fnbutler-stockanalysis-backfill}"
 SCHEDULER_JOB="${SCHEDULER_JOB:-fnbutler-refresh-weekdays}"
 CALENDAR_SCHEDULER_JOB="${CALENDAR_SCHEDULER_JOB:-fnbutler-calendar-weekly}"
+STOCKANALYSIS_SCHEDULER_JOB="${STOCKANALYSIS_SCHEDULER_JOB:-fnbutler-stockanalysis-backfill-6h}"
 INSTANCE="${INSTANCE:-fnbutler-pg}"
 DB_NAME="${DB_NAME:-butler}"
 DB_USER="${DB_USER:-butler}"
@@ -29,6 +32,10 @@ SEEKING_ALPHA_NASDAQ_LIMIT="${SEEKING_ALPHA_NASDAQ_LIMIT:-500}"
 SEEKING_ALPHA_BATCH_SIZE="${SEEKING_ALPHA_BATCH_SIZE:-5}"
 SEEKING_ALPHA_CALL_DELAY_MS="${SEEKING_ALPHA_CALL_DELAY_MS:-60000}"
 SEEKING_ALPHA_USE_CURL="${SEEKING_ALPHA_USE_CURL:-1}"
+STOCKANALYSIS_NASDAQ_LIMIT="${STOCKANALYSIS_NASDAQ_LIMIT:-12}"
+STOCKANALYSIS_CALL_DELAY_MS="${STOCKANALYSIS_CALL_DELAY_MS:-7000}"
+STOCKANALYSIS_JITTER_MS="${STOCKANALYSIS_JITTER_MS:-3000}"
+STOCKANALYSIS_BROKER_TARGETS="${STOCKANALYSIS_BROKER_TARGETS:-1}"
 BUCKET="${BUCKET:-protein-test-469413-fnbutler}"
 REPO="${REPO:-cloud-run-source-deploy}"
 SA_NAME="${SA_NAME:-fnbutler-runner}"
@@ -119,7 +126,7 @@ docker build --platform linux/amd64 --target worker -t "$JOB_IMG" "$ROOT"
 docker push "$APP_IMG"
 docker push "$JOB_IMG"
 
-ENV_VARS="PGHOST=/cloudsql/${CONNECTION},PGDATABASE=${DB_NAME},PGUSER=${DB_USER},BUTLER_BASE_URL=${BASE_URL},BUTLER_RATE_PER_MIN=80,SEEKING_ALPHA_NASDAQ_LIMIT=${SEEKING_ALPHA_NASDAQ_LIMIT},SEEKING_ALPHA_BATCH_SIZE=${SEEKING_ALPHA_BATCH_SIZE},SEEKING_ALPHA_CALL_DELAY_MS=${SEEKING_ALPHA_CALL_DELAY_MS},SEEKING_ALPHA_USE_CURL=${SEEKING_ALPHA_USE_CURL}"
+ENV_VARS="PGHOST=/cloudsql/${CONNECTION},PGDATABASE=${DB_NAME},PGUSER=${DB_USER},BUTLER_BASE_URL=${BASE_URL},BUTLER_RATE_PER_MIN=80,SEEKING_ALPHA_NASDAQ_LIMIT=${SEEKING_ALPHA_NASDAQ_LIMIT},SEEKING_ALPHA_BATCH_SIZE=${SEEKING_ALPHA_BATCH_SIZE},SEEKING_ALPHA_CALL_DELAY_MS=${SEEKING_ALPHA_CALL_DELAY_MS},SEEKING_ALPHA_USE_CURL=${SEEKING_ALPHA_USE_CURL},STOCKANALYSIS_NASDAQ_LIMIT=${STOCKANALYSIS_NASDAQ_LIMIT},STOCKANALYSIS_CALL_DELAY_MS=${STOCKANALYSIS_CALL_DELAY_MS},STOCKANALYSIS_JITTER_MS=${STOCKANALYSIS_JITTER_MS},STOCKANALYSIS_BROKER_TARGETS=${STOCKANALYSIS_BROKER_TARGETS}"
 SECRET_VARS="PGPASSWORD=${DB_PASSWORD_SECRET}:latest"
 if [[ -n "${TG_TOKEN_SECRET:-}" ]]; then SECRET_VARS="${SECRET_VARS},BUTLER_TELEGRAM_BOT_TOKEN=${TG_TOKEN_SECRET}:latest"; fi
 if [[ -n "${TG_WEBHOOK_SECRET:-}" ]]; then SECRET_VARS="${SECRET_VARS},BUTLER_TELEGRAM_WEBHOOK_SECRET=${TG_WEBHOOK_SECRET}:latest"; fi
@@ -154,7 +161,7 @@ fi
   --project "$PROJECT" \
   --region "$REGION" \
   --command npx \
-  --args tsx,scripts/refresh-daily.ts \
+  --args tsx,scripts/refresh-daily.ts,--no-stockanalysis-nasdaq-estimates \
   --memory 512Mi \
   --cpu 1 \
   --tasks 1 \
@@ -208,6 +215,48 @@ fi
   --attempt-deadline 60s \
   --max-retry-attempts 1
 
+echo "==> Creating/updating StockAnalysis backfill job"
+if gcloud run jobs describe "$STOCKANALYSIS_JOB" --region "$REGION" --project "$PROJECT" >/dev/null 2>&1; then
+  STOCKANALYSIS_JOB_CMD=(gcloud run jobs update "$STOCKANALYSIS_JOB")
+else
+  STOCKANALYSIS_JOB_CMD=(gcloud run jobs create "$STOCKANALYSIS_JOB")
+fi
+"${STOCKANALYSIS_JOB_CMD[@]}" \
+  --image "$JOB_IMG" \
+  --project "$PROJECT" \
+  --region "$REGION" \
+  --command npx \
+  --args tsx,scripts/backfill-stockanalysis-nasdaq-estimates.ts \
+  --memory 512Mi \
+  --cpu 1 \
+  --tasks 1 \
+  --parallelism 1 \
+  --max-retries 0 \
+  --task-timeout 1800 \
+  --service-account "$SA_EMAIL" \
+  --set-cloudsql-instances "$CONNECTION" \
+  --set-env-vars "$ENV_VARS" \
+  --set-secrets "$SECRET_VARS"
+
+echo "==> Creating/updating StockAnalysis backfill Scheduler job"
+STOCKANALYSIS_SCHEDULER_URI="https://${REGION}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${PROJECT}/jobs/${STOCKANALYSIS_JOB}:run"
+if gcloud scheduler jobs describe "$STOCKANALYSIS_SCHEDULER_JOB" --location "$REGION" --project "$PROJECT" >/dev/null 2>&1; then
+  STOCKANALYSIS_SCHED_CMD=(gcloud scheduler jobs update http "$STOCKANALYSIS_SCHEDULER_JOB")
+else
+  STOCKANALYSIS_SCHED_CMD=(gcloud scheduler jobs create http "$STOCKANALYSIS_SCHEDULER_JOB")
+fi
+"${STOCKANALYSIS_SCHED_CMD[@]}" \
+  --project "$PROJECT" \
+  --location "$REGION" \
+  --schedule "10 2,8,14,20 * * *" \
+  --time-zone "Asia/Seoul" \
+  --uri "$STOCKANALYSIS_SCHEDULER_URI" \
+  --http-method POST \
+  --oauth-service-account-email "$SA_EMAIL" \
+  --oauth-token-scope "https://www.googleapis.com/auth/cloud-platform" \
+  --attempt-deadline 60s \
+  --max-retry-attempts 0
+
 echo "==> Creating/updating weekly calendar Scheduler job"
 CALENDAR_SCHEDULER_URI="https://${REGION}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${PROJECT}/jobs/${CALENDAR_JOB}:run"
 if gcloud scheduler jobs describe "$CALENDAR_SCHEDULER_JOB" --location "$REGION" --project "$PROJECT" >/dev/null 2>&1; then
@@ -233,6 +282,7 @@ Done.
 Service image: $APP_IMG
 Job image:     $JOB_IMG
 Calendar job:  $CALENDAR_JOB
+StockAnalysis: $STOCKANALYSIS_JOB
 Cloud SQL:     $CONNECTION
 
 Initial data import:

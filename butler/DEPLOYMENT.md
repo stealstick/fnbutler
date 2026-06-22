@@ -12,9 +12,11 @@
 | Cloud Run 서비스 | `fnbutler` | Next.js 웹/API |
 | Cloud Run Job | `fnbutler-refresh` | 일일 데이터 갱신 |
 | Cloud Run Job | `fnbutler-calendar-refresh` | 주간 캘린더 전용 갱신 |
+| Cloud Run Job | `fnbutler-stockanalysis-backfill` | NASDAQ 목표가·예상실적 저속 백필 |
 | Cloud Scheduler | `fnbutler-refresh-weekdays` | 매일 18:30 KST Job 실행 |
-| GitHub Actions schedule | `run refresh job` | 매일 18:30 KST 일일 갱신 + 토요일 08:00 KST 캘린더 Job 실행 |
+| GitHub Actions schedule | `run refresh job` | 매일 18:30 KST 일일 갱신 + 토요일 08:00 KST 캘린더 Job + 6시간마다 StockAnalysis 백필 실행 |
 | Cloud Scheduler | `fnbutler-calendar-weekly` | 선택 운영 경로, 권한이 있으면 토요일 08:00 KST 캘린더 Job 실행 |
+| Cloud Scheduler | `fnbutler-stockanalysis-backfill-6h` | 선택 운영 경로, 권한이 있으면 6시간마다 저속 백필 실행 |
 | Cloud SQL | `fnbutler-pg` | Postgres 16, `db-f1-micro` |
 | DB | `butler` / user `butler` | 시세·컨센서스·재무 운영 DB |
 | Secret | `fnbutler-db-password`, `DART_API_KEY`, `FMP_API_KEY` | DB 비밀번호, 국내 실적 캘린더 키, 해외 컨센서스 추정치 키 |
@@ -46,7 +48,7 @@ npm run deploy:postgres
 - DB 비밀번호 Secret 생성
 - 웹/Job Docker 이미지 빌드 및 푸시
 - Cloud Run 서비스 배포
-- Cloud Run Job 생성/업데이트 (`fnbutler-refresh`, `fnbutler-calendar-refresh`)
+- Cloud Run Job 생성/업데이트 (`fnbutler-refresh`, `fnbutler-calendar-refresh`, `fnbutler-stockanalysis-backfill`)
 - GitHub Actions 매일 18:30 KST 일일 갱신 + 토요일 08:00 KST 캘린더 전용 스케줄 실행
 - Cloud Scheduler 권한이 있으면 토요일 08:00 KST 캘린더 전용 스케줄도 생성/업데이트
 
@@ -89,6 +91,12 @@ gcloud run jobs execute fnbutler-calendar-refresh \
   --project protein-test-469413 \
   --region asia-northeast3 \
   --wait
+
+# StockAnalysis NASDAQ 백필만 수동 실행
+gcloud run jobs execute fnbutler-stockanalysis-backfill \
+  --project protein-test-469413 \
+  --region asia-northeast3 \
+  --wait
 ```
 
 GitHub의 `.github/workflows/refresh.yml` 은 같은 Job들을 수동 실행하는 비상 버튼이다.
@@ -120,6 +128,15 @@ Yahoo 실패 시 운영 플랜:
 - 개별 종목 실패: `yahoo_estimates_at`을 갱신하지 않아 다음 일일 Job에서 재시도한다.
 - Cloud Run 장기 차단: 로컬/브라우저에서 발급한 `YAHOO_COOKIE`/`YAHOO_CRUMB`를 Secret Manager로 넣어 bootstrap한다. 그래도 막히면 `--no-yahoo-nasdaq-estimates` 또는 `YAHOO_NASDAQ_LIMIT=0`으로 즉시 비활성화하고, NASDAQ 추정치는 FMP 연간 추정치로 유지한다.
 - 데이터 품질 이슈: 기본값은 덮어쓰지 않으므로 기존 FMP/FnGuide 컨센서스가 우선이다. 검증 후 `YAHOO_OVERWRITE_ESTIMATES=1` 또는 `YAHOO_OVERWRITE_TARGETS=1`만 선택적으로 켠다.
+
+StockAnalysis NASDAQ 백필은 공식 API가 아닌 공개 페이지 기반이므로 별도 Cloud Run Job
+`fnbutler-stockanalysis-backfill`로 분리해서 천천히 회전한다. 운영 기본값은
+`STOCKANALYSIS_NASDAQ_LIMIT=12`, `STOCKANALYSIS_CALL_DELAY_MS=7000`,
+`STOCKANALYSIS_JITTER_MS=3000`, `STOCKANALYSIS_BROKER_TARGETS=1`이며,
+Cloud Scheduler/GitHub Actions가 02:10/08:10/14:10/20:10 KST에 실행한다.
+하루 약 48종목만 요청하므로 NASDAQ 500개는 10일 남짓에 채워지고, 이미 처리한 종목은
+`stockanalysis_estimates_at`이 갱신되어 오래된 순서로 자연스럽게 다음 회차로 밀린다.
+일일 refresh Job은 `--no-stockanalysis-nasdaq-estimates`로 실행해 중복 호출을 피한다.
 
 ## 5. 배포 업데이트
 

@@ -9,7 +9,7 @@ on:
         description: "refresh mode"
         type: choice
         default: full
-        options: [full, calendar-only, dart-financials, dart-2024-financials, dart-2025-financials, wisereport-estimates, nasdaq-companies, fmp-nasdaq-estimates, seekingalpha-nasdaq-estimates, yahoo-nasdaq-estimates]
+        options: [full, calendar-only, dart-financials, dart-2024-financials, dart-2025-financials, wisereport-estimates, nasdaq-companies, fmp-nasdaq-estimates, seekingalpha-nasdaq-estimates, yahoo-nasdaq-estimates, stockanalysis-nasdaq-estimates]
       wait:
         description: "wait for job completion"
         type: boolean
@@ -19,12 +19,15 @@ on:
     - cron: "30 9 * * *"
     # Saturdays 08:00 KST.
     - cron: "0 23 * * 5"
+    # StockAnalysis NASDAQ backfill, every 6 hours at 02:10/08:10/14:10/20:10 KST.
+    - cron: "10 5,11,17,23 * * *"
 
 env:
   PROJECT: protein-test-469413
   REGION: asia-northeast3
   JOB: fnbutler-refresh
   CALENDAR_JOB: fnbutler-calendar-refresh
+  STOCKANALYSIS_JOB: fnbutler-stockanalysis-backfill
 
 jobs:
   refresh:
@@ -52,6 +55,9 @@ jobs:
           EXTRA_ARGS=()
           if { [ "$EVENT_NAME" = "schedule" ] && [ "$SCHEDULE" = "0 23 * * 5" ]; } || [ "$MODE" = "calendar-only" ]; then
             TARGET_JOB="$CALENDAR_JOB"
+          fi
+          if { [ "$EVENT_NAME" = "schedule" ] && [ "$SCHEDULE" = "10 5,11,17,23 * * *" ]; } || [ "$MODE" = "stockanalysis-nasdaq-estimates" ]; then
+            TARGET_JOB="$STOCKANALYSIS_JOB"
           fi
           if [ "$MODE" = "dart-financials" ]; then
             EXTRA_ARGS=(--args tsx,scripts/backfill-dart-financials.ts,--latest)

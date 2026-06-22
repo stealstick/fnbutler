@@ -40,6 +40,8 @@ CREATE TABLE IF NOT EXISTS companies (
     seekingalpha_estimates_at TEXT,
     yahoo_estimates_at TEXT,
     yahoo_targets_at   TEXT,
+    stockanalysis_estimates_at TEXT,
+    stockanalysis_targets_at TEXT,
     detail_ingested_at TEXT,
     source             TEXT NOT NULL DEFAULT 'butler',
     created_at         TEXT NOT NULL,
@@ -53,6 +55,8 @@ ALTER TABLE companies ADD COLUMN IF NOT EXISTS fmp_targets_at TEXT;
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS seekingalpha_estimates_at TEXT;
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS yahoo_estimates_at TEXT;
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS yahoo_targets_at TEXT;
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS stockanalysis_estimates_at TEXT;
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS stockanalysis_targets_at TEXT;
 ALTER TABLE companies ALTER COLUMN price TYPE DOUBLE PRECISION USING price::double precision;
 ALTER TABLE companies ALTER COLUMN target_price_avg TYPE DOUBLE PRECISION USING target_price_avg::double precision;
 CREATE INDEX IF NOT EXISTS idx_companies_stock ON companies(stock_code);
@@ -63,6 +67,7 @@ CREATE INDEX IF NOT EXISTS idx_companies_active ON companies(active, market_cap 
 CREATE INDEX IF NOT EXISTS idx_companies_fmp_estimates ON companies(fmp_estimates_at, market_cap DESC);
 CREATE INDEX IF NOT EXISTS idx_companies_seekingalpha_estimates ON companies(seekingalpha_estimates_at, market_cap DESC);
 CREATE INDEX IF NOT EXISTS idx_companies_yahoo_estimates ON companies(yahoo_estimates_at, market_cap DESC);
+CREATE INDEX IF NOT EXISTS idx_companies_stockanalysis_estimates ON companies(stockanalysis_estimates_at, market_cap DESC);
 CREATE INDEX IF NOT EXISTS idx_companies_cover ON companies(has_consensus, market_cap DESC);
 
 CREATE TABLE IF NOT EXISTS brokers (
@@ -90,6 +95,9 @@ CREATE TABLE IF NOT EXISTS consensus_reports (
 );
 CREATE INDEX IF NOT EXISTS idx_reports_corp_date ON consensus_reports(corp_code, report_date DESC);
 CREATE INDEX IF NOT EXISTS idx_reports_broker ON consensus_reports(broker_id);
+DROP VIEW IF EXISTS v_latest_broker_target;
+ALTER TABLE consensus_reports ALTER COLUMN target_price TYPE DOUBLE PRECISION USING target_price::double precision;
+ALTER TABLE consensus_reports ALTER COLUMN price_close TYPE DOUBLE PRECISION USING price_close::double precision;
 
 CREATE TABLE IF NOT EXISTS target_price_monthly (
     corp_code        TEXT NOT NULL REFERENCES companies(corp_code),
