@@ -1,7 +1,7 @@
 name: run refresh job
 
-# Production refresh is scheduled by Cloud Scheduler or GitHub Actions against the Cloud Run Job.
-# This workflow is also a manual escape hatch for re-running that same job from GitHub.
+# Production refresh is scheduled by Cloud Scheduler against the Cloud Run Job.
+# This workflow is a manual escape hatch for re-running that same job from GitHub.
 on:
   workflow_dispatch:
     inputs:
@@ -30,14 +30,6 @@ on:
         description: "optional StockAnalysis delay jitter"
         type: string
         required: false
-  schedule:
-    # Daily 18:30 KST.
-    - cron: "30 9 * * *"
-    # Saturdays 08:00 KST.
-    - cron: "0 23 * * 5"
-    # StockAnalysis NASDAQ backfill, every 6 hours at 02:10/08:10/14:10/20:10 KST.
-    - cron: "10 5,11,17,23 * * *"
-
 env:
   PROJECT: protein-test-469413
   REGION: asia-northeast3
