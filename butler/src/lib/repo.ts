@@ -371,22 +371,38 @@ export async function getBrokerTargetHistory(corpCode: string): Promise<BrokerTa
          r.price_close,
          r.ai_summary,
          r.report_id,
+         r.previous_target_price AS source_previous_target_price,
          LAG(r.target_price) OVER (
            PARTITION BY r.broker_id
            ORDER BY r.report_date, r.report_id
-         ) AS previous_target_price
+         ) AS lag_previous_target_price
        FROM consensus_reports r
        JOIN brokers b ON b.id = r.broker_id
        WHERE r.corp_code = $1
      )
-     SELECT *,
+     SELECT
+            broker,
+            research_url,
+            analyst,
+            report_date,
+            target_price,
+            target_price_change,
+            rating,
+            rating_change,
+            return_rate,
+            price_close,
+            ai_summary,
+            report_id,
+            COALESCE(source_previous_target_price, lag_previous_target_price) AS previous_target_price,
             CASE
-              WHEN previous_target_price IS NOT NULL AND target_price IS NOT NULL
-              THEN target_price - previous_target_price
+              WHEN COALESCE(source_previous_target_price, lag_previous_target_price) IS NOT NULL AND target_price IS NOT NULL
+              THEN target_price - COALESCE(source_previous_target_price, lag_previous_target_price)
             END AS target_delta,
             CASE
-              WHEN previous_target_price IS NOT NULL AND previous_target_price <> 0 AND target_price IS NOT NULL
-              THEN ((target_price - previous_target_price) * 100.0 / previous_target_price)::double precision
+              WHEN COALESCE(source_previous_target_price, lag_previous_target_price) IS NOT NULL
+               AND COALESCE(source_previous_target_price, lag_previous_target_price) <> 0
+               AND target_price IS NOT NULL
+              THEN ((target_price - COALESCE(source_previous_target_price, lag_previous_target_price)) * 100.0 / COALESCE(source_previous_target_price, lag_previous_target_price))::double precision
             END AS target_delta_pct
      FROM report_rows
      ORDER BY report_date DESC, broker`,

@@ -87,6 +87,7 @@ CREATE TABLE IF NOT EXISTS consensus_reports (
     rating_change       TEXT,
     target_price        BIGINT,
     target_price_change TEXT,
+    previous_target_price DOUBLE PRECISION,
     price_close         BIGINT,
     return_rate         DOUBLE PRECISION,
     ai_summary          TEXT,
@@ -97,6 +98,7 @@ CREATE INDEX IF NOT EXISTS idx_reports_corp_date ON consensus_reports(corp_code,
 CREATE INDEX IF NOT EXISTS idx_reports_broker ON consensus_reports(broker_id);
 DROP VIEW IF EXISTS v_latest_broker_target;
 ALTER TABLE consensus_reports ALTER COLUMN target_price TYPE DOUBLE PRECISION USING target_price::double precision;
+ALTER TABLE consensus_reports ADD COLUMN IF NOT EXISTS previous_target_price DOUBLE PRECISION;
 ALTER TABLE consensus_reports ALTER COLUMN price_close TYPE DOUBLE PRECISION USING price_close::double precision;
 
 CREATE TABLE IF NOT EXISTS target_price_monthly (

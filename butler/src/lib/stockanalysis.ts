@@ -496,12 +496,15 @@ async function insertBrokerTarget(
           ? "하향"
           : "유지"
       : r.action;
-  const inserted = await query(
+  const inserted = await query<{ inserted: boolean }>(
     `INSERT INTO consensus_reports
        (report_id, corp_code, broker_id, title, analyst, report_date, rating, rating_change,
-        target_price, target_price_change, price_close, return_rate, ai_summary, source, ingested_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-     ON CONFLICT(report_id) DO NOTHING`,
+        target_price, target_price_change, previous_target_price, price_close, return_rate, ai_summary, source, ingested_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+     ON CONFLICT(report_id) DO UPDATE SET
+       previous_target_price = COALESCE(excluded.previous_target_price, consensus_reports.previous_target_price),
+       target_price_change = COALESCE(excluded.target_price_change, consensus_reports.target_price_change)
+     RETURNING (xmax = 0) AS inserted`,
     [
       reportId,
       c.corp_code,
@@ -513,6 +516,7 @@ async function insertBrokerTarget(
       r.action,
       r.target,
       targetChange,
+      r.previousTarget,
       currentPrice,
       returnRate,
       null,
@@ -522,8 +526,8 @@ async function insertBrokerTarget(
     db,
   );
 
-  if ((inserted.rowCount ?? 0) === 0) return 0;
-  const oldTp = prev?.target_price ?? null;
+  if (!inserted.rows[0]?.inserted) return 0;
+  const oldTp = r.previousTarget ?? prev?.target_price ?? null;
   if (r.target != null && oldTp != null && r.target !== oldTp) {
     const delta = r.target - oldTp;
     await logChange(db, {
