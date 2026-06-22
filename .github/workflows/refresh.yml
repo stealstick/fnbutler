@@ -22,6 +22,10 @@ on:
         description: "optional StockAnalysis symbol limit for manual runs"
         type: string
         required: false
+      stockanalysis_symbol:
+        description: "optional StockAnalysis single symbol for manual runs"
+        type: string
+        required: false
       stockanalysis_call_delay_ms:
         description: "optional StockAnalysis delay between symbols"
         type: string
@@ -55,6 +59,7 @@ jobs:
           WAIT: ${{ github.event.inputs.wait || 'true' }}
           FNGUIDE_ESTIMATE_LIMIT: ${{ github.event.inputs.fnguide_estimate_limit || '' }}
           STOCKANALYSIS_LIMIT: ${{ github.event.inputs.stockanalysis_limit || '' }}
+          STOCKANALYSIS_SYMBOL: ${{ github.event.inputs.stockanalysis_symbol || '' }}
           STOCKANALYSIS_CALL_DELAY_MS: ${{ github.event.inputs.stockanalysis_call_delay_ms || '' }}
           STOCKANALYSIS_JITTER_MS: ${{ github.event.inputs.stockanalysis_jitter_ms || '' }}
         run: |
@@ -72,6 +77,9 @@ jobs:
             TARGET_JOB="$STOCKANALYSIS_JOB"
             if [ -n "$STOCKANALYSIS_LIMIT" ]; then
               STOCKANALYSIS_ARGS="tsx,scripts/backfill-stockanalysis-nasdaq-estimates.ts,--limit,${STOCKANALYSIS_LIMIT}"
+              if [ -n "$STOCKANALYSIS_SYMBOL" ]; then
+                STOCKANALYSIS_ARGS="${STOCKANALYSIS_ARGS},--symbol,${STOCKANALYSIS_SYMBOL}"
+              fi
               if [ -n "$STOCKANALYSIS_CALL_DELAY_MS" ]; then
                 STOCKANALYSIS_ARGS="${STOCKANALYSIS_ARGS},--call-delay-ms,${STOCKANALYSIS_CALL_DELAY_MS}"
               fi
