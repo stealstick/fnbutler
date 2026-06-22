@@ -14,6 +14,18 @@ on:
         description: "wait for job completion"
         type: boolean
         default: true
+      stockanalysis_limit:
+        description: "optional StockAnalysis symbol limit for manual runs"
+        type: string
+        required: false
+      stockanalysis_call_delay_ms:
+        description: "optional StockAnalysis delay between symbols"
+        type: string
+        required: false
+      stockanalysis_jitter_ms:
+        description: "optional StockAnalysis delay jitter"
+        type: string
+        required: false
   schedule:
     # Daily 18:30 KST.
     - cron: "30 9 * * *"
@@ -45,6 +57,9 @@ jobs:
           SCHEDULE: ${{ github.event.schedule || '' }}
           MODE: ${{ github.event.inputs.mode || 'full' }}
           WAIT: ${{ github.event.inputs.wait || 'true' }}
+          STOCKANALYSIS_LIMIT: ${{ github.event.inputs.stockanalysis_limit || '' }}
+          STOCKANALYSIS_CALL_DELAY_MS: ${{ github.event.inputs.stockanalysis_call_delay_ms || '' }}
+          STOCKANALYSIS_JITTER_MS: ${{ github.event.inputs.stockanalysis_jitter_ms || '' }}
         run: |
           WAIT_FLAG="--wait"
           if [ "$WAIT" != "true" ]; then
@@ -58,6 +73,16 @@ jobs:
           fi
           if { [ "$EVENT_NAME" = "schedule" ] && [ "$SCHEDULE" = "10 5,11,17,23 * * *" ]; } || [ "$MODE" = "stockanalysis-nasdaq-estimates" ]; then
             TARGET_JOB="$STOCKANALYSIS_JOB"
+            if [ -n "$STOCKANALYSIS_LIMIT" ]; then
+              STOCKANALYSIS_ARGS="tsx,scripts/backfill-stockanalysis-nasdaq-estimates.ts,--limit,${STOCKANALYSIS_LIMIT}"
+              if [ -n "$STOCKANALYSIS_CALL_DELAY_MS" ]; then
+                STOCKANALYSIS_ARGS="${STOCKANALYSIS_ARGS},--call-delay-ms,${STOCKANALYSIS_CALL_DELAY_MS}"
+              fi
+              if [ -n "$STOCKANALYSIS_JITTER_MS" ]; then
+                STOCKANALYSIS_ARGS="${STOCKANALYSIS_ARGS},--jitter-ms,${STOCKANALYSIS_JITTER_MS}"
+              fi
+              EXTRA_ARGS=(--args "$STOCKANALYSIS_ARGS")
+            fi
           fi
           if [ "$MODE" = "dart-financials" ]; then
             EXTRA_ARGS=(--args tsx,scripts/backfill-dart-financials.ts,--latest)
