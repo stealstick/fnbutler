@@ -385,6 +385,7 @@ async function candidates(
      WHERE ${where.join(" AND ")}
      ORDER BY
        CASE WHEN per IS NULL OR pbr IS NULL OR fper IS NULL OR bps IS NULL THEN 0 ELSE 1 END,
+       CASE WHEN per IS NULL OR pbr IS NULL OR fper IS NULL OR bps IS NULL THEN market_cap END DESC NULLS LAST,
        stockanalysis_estimates_at ASC NULLS FIRST,
        market_cap DESC NULLS LAST
      LIMIT $${params.length}`,
