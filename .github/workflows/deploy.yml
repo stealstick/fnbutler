@@ -239,7 +239,7 @@ jobs:
           SCHED_STATUS=$?
           set -e
           if [ "$SCHED_STATUS" -ne 0 ]; then
-            echo "::warning::Cloud Scheduler sync skipped. Grant roles/cloudscheduler.admin to the deploy service account to manage ${STOCKANALYSIS_SCHEDULER_JOB}; GitHub Actions still runs the StockAnalysis cron."
+            echo "::warning::Cloud Scheduler sync skipped. Grant roles/cloudscheduler.admin to the deploy service account to manage ${STOCKANALYSIS_SCHEDULER_JOB}; .github/workflows/refresh.yml remains available for manual runs only."
           fi
 
       - name: Update daily refresh scheduler
@@ -266,7 +266,7 @@ jobs:
           SCHED_STATUS=$?
           set -e
           if [ "$SCHED_STATUS" -ne 0 ]; then
-            echo "::warning::Cloud Scheduler sync skipped. Grant roles/cloudscheduler.admin to the deploy service account to manage ${SCHEDULER_JOB}; GitHub Actions still runs the daily refresh cron."
+            echo "::warning::Cloud Scheduler sync skipped. Grant roles/cloudscheduler.admin to the deploy service account to manage ${SCHEDULER_JOB}; .github/workflows/refresh.yml remains available for manual runs only."
           fi
 
       - name: Update weekly calendar job
@@ -331,7 +331,7 @@ jobs:
           SCHED_STATUS=$?
           set -e
           if [ "$SCHED_STATUS" -ne 0 ]; then
-            echo "::warning::Cloud Scheduler sync skipped. Grant roles/cloudscheduler.admin to the deploy service account to manage ${CALENDAR_SCHEDULER_JOB}; GitHub Actions still runs the weekly calendar cron."
+            echo "::warning::Cloud Scheduler sync skipped. Grant roles/cloudscheduler.admin to the deploy service account to manage ${CALENDAR_SCHEDULER_JOB}; .github/workflows/refresh.yml remains available for manual runs only."
           fi
 
       - name: Verify

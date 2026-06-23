@@ -53,8 +53,6 @@ jobs:
 
       - name: Execute Cloud Run refresh job
         env:
-          EVENT_NAME: ${{ github.event_name }}
-          SCHEDULE: ${{ github.event.schedule || '' }}
           MODE: ${{ github.event.inputs.mode || 'full' }}
           WAIT: ${{ github.event.inputs.wait || 'true' }}
           FNGUIDE_ESTIMATE_LIMIT: ${{ github.event.inputs.fnguide_estimate_limit || '' }}
@@ -70,10 +68,10 @@ jobs:
 
           TARGET_JOB="$JOB"
           EXTRA_ARGS=()
-          if { [ "$EVENT_NAME" = "schedule" ] && [ "$SCHEDULE" = "0 23 * * 5" ]; } || [ "$MODE" = "calendar-only" ]; then
+          if [ "$MODE" = "calendar-only" ]; then
             TARGET_JOB="$CALENDAR_JOB"
           fi
-          if { [ "$EVENT_NAME" = "schedule" ] && [ "$SCHEDULE" = "10 5,11,17,23 * * *" ]; } || [ "$MODE" = "stockanalysis-nasdaq-estimates" ]; then
+          if [ "$MODE" = "stockanalysis-nasdaq-estimates" ]; then
             TARGET_JOB="$STOCKANALYSIS_JOB"
             if [ -n "$STOCKANALYSIS_LIMIT" ]; then
               STOCKANALYSIS_ARGS="tsx,scripts/backfill-stockanalysis-nasdaq-estimates.ts,--limit,${STOCKANALYSIS_LIMIT}"

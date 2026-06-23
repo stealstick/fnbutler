@@ -1,7 +1,9 @@
 # keystone Postgres 배포 가이드
 
-운영 구조는 **Cloud Run + Cloud SQL(Postgres) + Cloud Run Job + GitHub Actions schedule** 다.
+운영 구조는 **Cloud Run + Cloud SQL(Postgres) + Cloud Run Job + Cloud Scheduler** 다.
 운영 중 데이터 갱신은 Postgres에 직접 쓴다.
+
+운영 스케줄의 source of truth는 [`docs/SCHEDULES.md`](./docs/SCHEDULES.md)다.
 
 ## 구성
 
@@ -13,10 +15,10 @@
 | Cloud Run Job | `fnbutler-refresh` | 일일 데이터 갱신 |
 | Cloud Run Job | `fnbutler-calendar-refresh` | 주간 캘린더 전용 갱신 |
 | Cloud Run Job | `fnbutler-stockanalysis-backfill` | NASDAQ 목표가·예상실적 저속 백필 |
-| Cloud Scheduler | `fnbutler-refresh-weekdays` | 매일 18:30 KST Job 실행 |
-| GitHub Actions schedule | `run refresh job` | 매일 18:30 KST 일일 갱신 + 토요일 08:00 KST 캘린더 Job + 6시간마다 StockAnalysis 백필 실행 |
-| Cloud Scheduler | `fnbutler-calendar-weekly` | 선택 운영 경로, 권한이 있으면 토요일 08:00 KST 캘린더 Job 실행 |
-| Cloud Scheduler | `fnbutler-stockanalysis-backfill-6h` | 선택 운영 경로, 권한이 있으면 6시간마다 저속 백필 실행 |
+| Cloud Scheduler | `fnbutler-refresh-weekdays` | 매일 18:30 KST `fnbutler-refresh` 실행 |
+| Cloud Scheduler | `fnbutler-calendar-weekly` | 토요일 08:00 KST `fnbutler-calendar-refresh` 실행 |
+| Cloud Scheduler | `fnbutler-stockanalysis-backfill-6h` | 02:10/08:10/14:10/20:10 KST 저속 백필 실행 |
+| GitHub Actions workflow | `run refresh job` | 스케줄 없음. 수동 백필/재실행용 escape hatch |
 | Cloud SQL | `fnbutler-pg` | Postgres 16, `db-f1-micro` |
 | DB | `butler` / user `butler` | 시세·컨센서스·재무 운영 DB |
 | Secret | `fnbutler-db-password`, `DART_API_KEY`, `FMP_API_KEY` | DB 비밀번호, 국내 실적 캘린더 키, 해외 컨센서스 추정치 키 |
@@ -47,10 +49,10 @@ npm run deploy:postgres
 - Cloud SQL Postgres `fnbutler-pg` 생성
 - DB 비밀번호 Secret 생성
 - 웹/Job Docker 이미지 빌드 및 푸시
+- DB 마이그레이션 선실행
 - Cloud Run 서비스 배포
 - Cloud Run Job 생성/업데이트 (`fnbutler-refresh`, `fnbutler-calendar-refresh`, `fnbutler-stockanalysis-backfill`)
-- GitHub Actions 매일 18:30 KST 일일 갱신 + 토요일 08:00 KST 캘린더 전용 스케줄 실행
-- Cloud Scheduler 권한이 있으면 토요일 08:00 KST 캘린더 전용 스케줄도 생성/업데이트
+- Cloud Scheduler 생성/업데이트 (`fnbutler-refresh-weekdays`, `fnbutler-calendar-weekly`, `fnbutler-stockanalysis-backfill-6h`)
 
 선택 secret을 이미 Secret Manager에 만들어 둔 경우 환경변수로 이름을 넘길 수 있다.
 GitHub Actions 배포는 repo secret `DART_API_KEY`, `FMP_API_KEY` 가 있으면 Cloud Run Job env 로 직접 주입하고,
@@ -77,7 +79,7 @@ Cloud SQL import를 실행한다. 최초 이관용이므로 기존 Cloud SQL 데
 
 ## 4. 일일 갱신
 
-운영 갱신은 Cloud Scheduler 또는 GitHub Actions schedule이 Cloud Run Job을 호출한다.
+운영 갱신은 Cloud Scheduler가 Cloud Run Job을 호출한다.
 
 ```bash
 # 수동 실행
@@ -100,7 +102,7 @@ gcloud run jobs execute fnbutler-stockanalysis-backfill \
 ```
 
 GitHub의 `.github/workflows/refresh.yml` 은 같은 Job들을 수동 실행하는 비상 버튼이다.
-DB 파일을 내려받거나 이미지를 다시 굽지 않는다.
+스케줄 트리거는 없으며, DB 파일을 내려받거나 이미지를 다시 굽지 않는다.
 
 FMP 무료 플랜은 250 calls/day 기준이다. 일일 Job은 기본적으로 `FMP_DAILY_CALL_BUDGET=240`만 쓰고
 `FMP_CALL_DELAY_MS=2500`으로 천천히 호출해 분당 rate limit도 피한다.
@@ -133,7 +135,7 @@ StockAnalysis NASDAQ 백필은 공식 API가 아닌 공개 페이지 기반이�
 `fnbutler-stockanalysis-backfill`로 분리해서 천천히 회전한다. 운영 기본값은
 `STOCKANALYSIS_NASDAQ_LIMIT=20`, `STOCKANALYSIS_CALL_DELAY_MS=7000`,
 `STOCKANALYSIS_JITTER_MS=3000`, `STOCKANALYSIS_BROKER_TARGETS=1`이며,
-Cloud Scheduler/GitHub Actions가 02:10/08:10/14:10/20:10 KST에 실행한다.
+Cloud Scheduler가 02:10/08:10/14:10/20:10 KST에 실행한다.
 하루 약 80종목만 요청하므로 NASDAQ 500개는 7일 안에 채워지고, 이미 처리한 종목은
 `stockanalysis_estimates_at`이 갱신되어 오래된 순서로 자연스럽게 다음 회차로 밀린다.
 일일 refresh Job은 `--no-stockanalysis-nasdaq-estimates`로 실행해 중복 호출을 피한다.
@@ -150,8 +152,8 @@ Cloud Scheduler/GitHub Actions가 02:10/08:10/14:10/20:10 KST에 실행한다.
 
 - Cloud SQL: `db-f1-micro`, zonal, HDD 10GB, 자동 스토리지 증가 off, 백업 off, HA off
 - Cloud Run: min instances 0, 서비스 max 2
-- Cloud Run Job: 매일 일일 갱신 1회 + 주간 캘린더 갱신 1회, 512Mi/1CPU
-- Cloud Scheduler: 기본 Job 1개, 선택 캘린더 Job 1개
+- Cloud Run Job: 매일 일일 갱신 1회 + StockAnalysis 저속 백필 4회 + 주간 캘린더 갱신 1회, 512Mi/1CPU
+- Cloud Scheduler: 기본 refresh 1개, StockAnalysis 1개, 캘린더 1개
 
 공식 가격표 기준으로 Cloud SQL `db-f1-micro` 는 시간당 약 `$0.0105` 이며,
 Scheduler는 Job당 월 `$0.10` 수준이다. Cloud Run은 요청/작업 시간 과금이라 이 트래픽에서는

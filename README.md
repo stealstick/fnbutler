@@ -55,6 +55,9 @@ cp .env.example .env   # 편집해서 자격증명/API키 입력
 0 18 * * 1-5 cd /Users/kimjuyong/project/fnguide && .venv/bin/python -m fnpipe feed --days 3 >> data/sync.log 2>&1
 ```
 
+이 crontab은 레거시 로컬 FnGuide PDF 파이프라인 예시다. keystone 운영 스케줄은
+`butler/docs/SCHEDULES.md` 의 Cloud Scheduler 목록을 기준으로 관리한다.
+
 ### 비전 AI 폴백 (`--ai`)
 
 이미지/벡터로 그려진 PDF(다올·미래에셋 등 — 텍스트 추출 ≈ 0)나 좌표 파서가 못 잡는
