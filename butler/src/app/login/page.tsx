@@ -37,7 +37,7 @@ export default function LoginPage() {
         관심 기업을 즐겨찾기하고 목표주가 변경 시 텔레그램 알림을 받으세요.
       </p>
       <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 16 }}>
-        <input className="input" type="email" placeholder="이메일" value={email} required
+        <input className="input" type="text" placeholder="이메일 또는 아이디" value={email} required
           onChange={(e) => setEmail(e.target.value)} />
         <input className="input" type="password" placeholder="비밀번호" value={password} required
           onChange={(e) => setPassword(e.target.value)} />
