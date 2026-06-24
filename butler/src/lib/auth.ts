@@ -23,6 +23,7 @@ export function verifyPassword(pw: string, stored: string): boolean {
 export interface User {
   id: string;
   email: string;
+  is_admin: number;
   telegram_chat_id: string | null;
   alerts_enabled: number;
 }
@@ -30,6 +31,7 @@ export interface User {
 const toUser = (u: StoredUser): User => ({
   id: u.id,
   email: u.email,
+  is_admin: u.isAdmin ? 1 : 0,
   telegram_chat_id: u.telegramChatId,
   alerts_enabled: u.alertsEnabled ? 1 : 0,
 });
@@ -47,6 +49,17 @@ export async function authenticate(email: string, password: string): Promise<Use
   const u = await userStore.getUserByEmail(email);
   if (!u || !verifyPassword(password, u.passwordHash)) return null;
   return toUser(u);
+}
+
+export async function ensureConfiguredAdminUser(): Promise<User | null> {
+  const email = process.env.BUTLER_ADMIN_EMAIL?.trim();
+  const password = process.env.BUTLER_ADMIN_PASSWORD;
+  if (!email || !password) return null;
+  return toUser(await userStore.ensureAdminUser(email, hashPassword(password)));
+}
+
+export function isAdminUser(user: User | null | undefined): boolean {
+  return user?.is_admin === 1;
 }
 
 export function createSession(userId: string): Promise<string> {

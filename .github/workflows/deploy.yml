@@ -49,11 +49,18 @@ jobs:
 
       - name: Check optional runtime secrets
         env:
+          BUTLER_ADMIN_EMAIL_VALUE: ${{ secrets.BUTLER_ADMIN_EMAIL }}
+          BUTLER_ADMIN_PASSWORD_VALUE: ${{ secrets.BUTLER_ADMIN_PASSWORD }}
           DART_API_KEY_VALUE: ${{ secrets.DART_API_KEY }}
           FMP_API_KEY_VALUE: ${{ secrets.FMP_API_KEY }}
           YAHOO_COOKIE_VALUE: ${{ secrets.YAHOO_COOKIE }}
           YAHOO_CRUMB_VALUE: ${{ secrets.YAHOO_CRUMB }}
         run: |
+          if [ -n "$BUTLER_ADMIN_EMAIL_VALUE" ] && [ -n "$BUTLER_ADMIN_PASSWORD_VALUE" ]; then
+            echo "BUTLER_ADMIN_EMAIL/BUTLER_ADMIN_PASSWORD GitHub Actions secrets are configured."
+          else
+            echo "BUTLER_ADMIN_EMAIL/BUTLER_ADMIN_PASSWORD secrets are not configured; /admin will require secrets before an admin can sign in."
+          fi
           if [ -n "$DART_API_KEY_VALUE" ]; then
             echo "DART_API_KEY GitHub Actions secret is configured."
           else
@@ -112,9 +119,23 @@ jobs:
             --wait
 
       - name: Deploy service
+        env:
+          BUTLER_ADMIN_EMAIL_VALUE: ${{ secrets.BUTLER_ADMIN_EMAIL }}
+          BUTLER_ADMIN_PASSWORD_VALUE: ${{ secrets.BUTLER_ADMIN_PASSWORD }}
         run: |
           CONNECTION="${PROJECT}:${REGION}:${SQL_INSTANCE}"
           SECRET_VARS="PGPASSWORD=${DB_PASSWORD_SECRET}:latest"
+          ENV_VARS="PGHOST=/cloudsql/${CONNECTION},PGDATABASE=${DB_NAME},PGUSER=${DB_USER},BUTLER_BASE_URL=${URL},BUTLER_RATE_PER_MIN=80,SEEKING_ALPHA_NASDAQ_LIMIT=${SEEKING_ALPHA_NASDAQ_LIMIT},SEEKING_ALPHA_BATCH_SIZE=${SEEKING_ALPHA_BATCH_SIZE},SEEKING_ALPHA_CALL_DELAY_MS=${SEEKING_ALPHA_CALL_DELAY_MS},SEEKING_ALPHA_USE_CURL=${SEEKING_ALPHA_USE_CURL},STOCKANALYSIS_NASDAQ_LIMIT=${STOCKANALYSIS_NASDAQ_LIMIT},STOCKANALYSIS_CALL_DELAY_MS=${STOCKANALYSIS_CALL_DELAY_MS},STOCKANALYSIS_JITTER_MS=${STOCKANALYSIS_JITTER_MS},STOCKANALYSIS_BROKER_TARGETS=${STOCKANALYSIS_BROKER_TARGETS}"
+          if gcloud secrets describe BUTLER_ADMIN_EMAIL --project "$PROJECT" >/dev/null 2>&1; then
+            SECRET_VARS="${SECRET_VARS},BUTLER_ADMIN_EMAIL=BUTLER_ADMIN_EMAIL:latest"
+          elif [ -n "$BUTLER_ADMIN_EMAIL_VALUE" ]; then
+            ENV_VARS="${ENV_VARS},BUTLER_ADMIN_EMAIL=${BUTLER_ADMIN_EMAIL_VALUE}"
+          fi
+          if gcloud secrets describe BUTLER_ADMIN_PASSWORD --project "$PROJECT" >/dev/null 2>&1; then
+            SECRET_VARS="${SECRET_VARS},BUTLER_ADMIN_PASSWORD=BUTLER_ADMIN_PASSWORD:latest"
+          elif [ -n "$BUTLER_ADMIN_PASSWORD_VALUE" ]; then
+            ENV_VARS="${ENV_VARS},BUTLER_ADMIN_PASSWORD=${BUTLER_ADMIN_PASSWORD_VALUE}"
+          fi
           if gcloud secrets describe BUTLER_TELEGRAM_BOT_TOKEN --project "$PROJECT" >/dev/null 2>&1; then
             SECRET_VARS="${SECRET_VARS},BUTLER_TELEGRAM_BOT_TOKEN=BUTLER_TELEGRAM_BOT_TOKEN:latest"
           fi
@@ -137,7 +158,7 @@ jobs:
             --min-instances 0 --max-instances 2 --port 8080 \
             --service-account "${RUN_SA}@${PROJECT}.iam.gserviceaccount.com" \
             --set-cloudsql-instances "$CONNECTION" \
-            --set-env-vars "PGHOST=/cloudsql/${CONNECTION},PGDATABASE=${DB_NAME},PGUSER=${DB_USER},BUTLER_BASE_URL=${URL},BUTLER_RATE_PER_MIN=80,SEEKING_ALPHA_NASDAQ_LIMIT=${SEEKING_ALPHA_NASDAQ_LIMIT},SEEKING_ALPHA_BATCH_SIZE=${SEEKING_ALPHA_BATCH_SIZE},SEEKING_ALPHA_CALL_DELAY_MS=${SEEKING_ALPHA_CALL_DELAY_MS},SEEKING_ALPHA_USE_CURL=${SEEKING_ALPHA_USE_CURL},STOCKANALYSIS_NASDAQ_LIMIT=${STOCKANALYSIS_NASDAQ_LIMIT},STOCKANALYSIS_CALL_DELAY_MS=${STOCKANALYSIS_CALL_DELAY_MS},STOCKANALYSIS_JITTER_MS=${STOCKANALYSIS_JITTER_MS},STOCKANALYSIS_BROKER_TARGETS=${STOCKANALYSIS_BROKER_TARGETS}" \
+            --set-env-vars "$ENV_VARS" \
             --set-secrets "$SECRET_VARS"
 
       - name: Update refresh job image

@@ -10,6 +10,7 @@ export interface StoredUser {
   id: string;
   email: string;
   passwordHash: string;
+  isAdmin: boolean;
   telegramChatId: string | null;
   alertsEnabled: boolean;
 }
@@ -64,7 +65,7 @@ const norm = (email: string) => email.toLowerCase().trim();
 const postgresBackend = {
   async getUserByEmail(email: string): Promise<StoredUser | null> {
     const r = await one<any>(
-      "SELECT id, email, password_hash, telegram_chat_id, alerts_enabled FROM users WHERE email = $1",
+      "SELECT id, email, password_hash, is_admin, telegram_chat_id, alerts_enabled FROM users WHERE email = $1",
       [norm(email)],
     );
     return r
@@ -72,14 +73,15 @@ const postgresBackend = {
           id: String(r.id),
           email: r.email,
           passwordHash: r.password_hash,
+          isAdmin: Number(r.is_admin) === 1,
           telegramChatId: r.telegram_chat_id,
-          alertsEnabled: r.alerts_enabled === 1,
+          alertsEnabled: Number(r.alerts_enabled) === 1,
         }
       : null;
   },
   async getUserById(id: string): Promise<StoredUser | null> {
     const r = await one<any>(
-      "SELECT id, email, password_hash, telegram_chat_id, alerts_enabled FROM users WHERE id = $1",
+      "SELECT id, email, password_hash, is_admin, telegram_chat_id, alerts_enabled FROM users WHERE id = $1",
       [Number(id)],
     );
     return r
@@ -87,8 +89,9 @@ const postgresBackend = {
           id: String(r.id),
           email: r.email,
           passwordHash: r.password_hash,
+          isAdmin: Number(r.is_admin) === 1,
           telegramChatId: r.telegram_chat_id,
-          alertsEnabled: r.alerts_enabled === 1,
+          alertsEnabled: Number(r.alerts_enabled) === 1,
         }
       : null;
   },
@@ -101,6 +104,29 @@ const postgresBackend = {
       id: String(info?.id),
       email: norm(email),
       passwordHash,
+      isAdmin: false,
+      telegramChatId: null,
+      alertsEnabled: true,
+    };
+  },
+  async ensureAdminUser(email: string, passwordHash: string): Promise<StoredUser> {
+    const normalized = norm(email);
+    const existing = await one<any>("SELECT id FROM users WHERE email = $1", [normalized]);
+    if (existing) {
+      await query("UPDATE users SET password_hash = $2, is_admin = 1 WHERE id = $1", [Number(existing.id), passwordHash]);
+      const user = await this.getUserById(String(existing.id));
+      if (user) return user;
+    }
+
+    const info = await one<{ id: string }>(
+      "INSERT INTO users (email, password_hash, is_admin, created_at) VALUES ($1, $2, 1, $3) RETURNING id",
+      [normalized, passwordHash, nowIso()],
+    );
+    return {
+      id: String(info?.id),
+      email: normalized,
+      passwordHash,
+      isAdmin: true,
       telegramChatId: null,
       alertsEnabled: true,
     };

@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb, migrate } from "@/lib/db";
-import { authenticate, createSession, SESSION_COOKIE, sessionCookieMaxAge } from "@/lib/auth";
+import { authenticate, createSession, ensureConfiguredAdminUser, SESSION_COOKIE, sessionCookieMaxAge } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
   await migrate(getDb());
+  await ensureConfiguredAdminUser();
   const { email, password } = (await req.json().catch(() => ({}))) as {
     email?: string;
     password?: string;

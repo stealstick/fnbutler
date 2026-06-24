@@ -16,6 +16,7 @@ import { won, num, pct, price as stockPrice, signClass } from "@/lib/format";
 import FinancialsTable from "./FinancialsTable";
 import RefreshButton from "./RefreshButton";
 import WatchStar from "@/components/WatchStar";
+import CompanyViewTracker from "@/components/CompanyViewTracker";
 import TargetPricePanel from "./TargetPricePanel";
 import { normalizeCompanyRouteParam } from "@/lib/company-code";
 
@@ -59,6 +60,8 @@ export default async function CompanyPage({
 
   return (
     <>
+      <CompanyViewTracker corpCode={corpCode} />
+
       {/* ---------- 헤더 ---------- */}
       <div className="panel">
         <div className="chead">

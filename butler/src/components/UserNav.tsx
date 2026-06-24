@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 interface Me {
-  user: { email: string } | null;
+  user: { email: string; is_admin?: number } | null;
 }
 
 export default function UserNav() {
@@ -35,6 +35,7 @@ export default function UserNav() {
     );
   return (
     <span style={{ display: "inline-flex", gap: 12, alignItems: "center" }}>
+      {me.user.is_admin === 1 ? <Link href="/admin">관리자</Link> : null}
       <Link href="/watchlist">관심목록</Link>
       <Link href="/settings" className="muted" style={{ fontSize: 12 }}>
         {me.user.email}

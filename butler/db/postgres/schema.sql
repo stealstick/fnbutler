@@ -254,10 +254,13 @@ CREATE TABLE IF NOT EXISTS users (
     id               BIGSERIAL PRIMARY KEY,
     email            TEXT NOT NULL UNIQUE,
     password_hash    TEXT NOT NULL,
+    is_admin         INTEGER NOT NULL DEFAULT 0,
     telegram_chat_id TEXT,
     alerts_enabled   INTEGER NOT NULL DEFAULT 1,
     created_at       TEXT NOT NULL
 );
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin INTEGER NOT NULL DEFAULT 0;
+CREATE INDEX IF NOT EXISTS idx_users_admin ON users(is_admin);
 
 CREATE TABLE IF NOT EXISTS sessions (
     token      TEXT PRIMARY KEY,
@@ -273,6 +276,21 @@ CREATE TABLE IF NOT EXISTS watchlist (
     PRIMARY KEY (user_id, corp_code)
 );
 CREATE INDEX IF NOT EXISTS idx_watchlist_corp ON watchlist(corp_code);
+
+CREATE TABLE IF NOT EXISTS company_view_events (
+    id           BIGSERIAL PRIMARY KEY,
+    browser_uuid TEXT NOT NULL,
+    user_id      BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    corp_code    TEXT NOT NULL REFERENCES companies(corp_code),
+    viewed_at    TEXT NOT NULL,
+    path         TEXT,
+    referrer     TEXT,
+    user_agent   TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_company_views_time ON company_view_events(viewed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_company_views_company ON company_view_events(corp_code, viewed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_company_views_browser ON company_view_events(browser_uuid, viewed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_company_views_user ON company_view_events(user_id, viewed_at DESC);
 
 CREATE TABLE IF NOT EXISTS notifications (
     id            BIGSERIAL PRIMARY KEY,

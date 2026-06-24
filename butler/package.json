@@ -10,6 +10,7 @@
     "lint": "next lint",
     "db:setup:local": "tsx scripts/setup-local-postgres.ts",
     "db:init": "tsx scripts/init-db.ts",
+    "admin:create": "tsx scripts/create-admin.ts",
     "ingest:companies": "tsx scripts/ingest.ts --companies",
     "ingest:seed": "tsx scripts/ingest.ts --companies --detail --limit 40",
     "ingest:detail": "tsx scripts/ingest.ts --detail",
