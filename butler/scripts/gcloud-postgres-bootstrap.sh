@@ -11,6 +11,8 @@
 #   GITHUB_DEPLOYER_SA TG_TOKEN_SECRET TG_WEBHOOK_SECRET DART_API_KEY_SECRET FMP_API_KEY_SECRET
 #   SEEKING_ALPHA_NASDAQ_LIMIT SEEKING_ALPHA_BATCH_SIZE SEEKING_ALPHA_CALL_DELAY_MS SEEKING_ALPHA_USE_CURL SEEKING_ALPHA_COOKIE_SECRET
 #   STOCKANALYSIS_JOB STOCKANALYSIS_SCHEDULER_JOB STOCKANALYSIS_NASDAQ_LIMIT STOCKANALYSIS_CALL_DELAY_MS STOCKANALYSIS_JITTER_MS
+#   NEWS_JOB NEWS_SCHEDULER_JOB COMPANY_NEWS_LIMIT COMPANY_NEWS_DISPLAY COMPANY_NEWS_STALE_HOURS COMPANY_NEWS_CALL_DELAY_MS
+#   NAVER_CLIENT_ID_SECRET NAVER_CLIENT_SECRET_SECRET
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -20,9 +22,11 @@ SERVICE="${SERVICE:-fnbutler}"
 JOB="${JOB:-fnbutler-refresh}"
 CALENDAR_JOB="${CALENDAR_JOB:-fnbutler-calendar-refresh}"
 STOCKANALYSIS_JOB="${STOCKANALYSIS_JOB:-fnbutler-stockanalysis-backfill}"
+NEWS_JOB="${NEWS_JOB:-fnbutler-news-refresh}"
 SCHEDULER_JOB="${SCHEDULER_JOB:-fnbutler-refresh-weekdays}"
 CALENDAR_SCHEDULER_JOB="${CALENDAR_SCHEDULER_JOB:-fnbutler-calendar-weekly}"
 STOCKANALYSIS_SCHEDULER_JOB="${STOCKANALYSIS_SCHEDULER_JOB:-fnbutler-stockanalysis-backfill-6h}"
+NEWS_SCHEDULER_JOB="${NEWS_SCHEDULER_JOB:-fnbutler-news-refresh-2h}"
 INSTANCE="${INSTANCE:-fnbutler-pg}"
 DB_NAME="${DB_NAME:-butler}"
 DB_USER="${DB_USER:-butler}"
@@ -36,6 +40,10 @@ STOCKANALYSIS_NASDAQ_LIMIT="${STOCKANALYSIS_NASDAQ_LIMIT:-20}"
 STOCKANALYSIS_CALL_DELAY_MS="${STOCKANALYSIS_CALL_DELAY_MS:-7000}"
 STOCKANALYSIS_JITTER_MS="${STOCKANALYSIS_JITTER_MS:-3000}"
 STOCKANALYSIS_BROKER_TARGETS="${STOCKANALYSIS_BROKER_TARGETS:-1}"
+COMPANY_NEWS_LIMIT="${COMPANY_NEWS_LIMIT:-80}"
+COMPANY_NEWS_DISPLAY="${COMPANY_NEWS_DISPLAY:-8}"
+COMPANY_NEWS_STALE_HOURS="${COMPANY_NEWS_STALE_HOURS:-2}"
+COMPANY_NEWS_CALL_DELAY_MS="${COMPANY_NEWS_CALL_DELAY_MS:-500}"
 BUCKET="${BUCKET:-protein-test-469413-fnbutler}"
 REPO="${REPO:-cloud-run-source-deploy}"
 SA_NAME="${SA_NAME:-fnbutler-runner}"
@@ -126,13 +134,15 @@ docker build --platform linux/amd64 --target worker -t "$JOB_IMG" "$ROOT"
 docker push "$APP_IMG"
 docker push "$JOB_IMG"
 
-ENV_VARS="PGHOST=/cloudsql/${CONNECTION},PGDATABASE=${DB_NAME},PGUSER=${DB_USER},BUTLER_BASE_URL=${BASE_URL},BUTLER_RATE_PER_MIN=80,SEEKING_ALPHA_NASDAQ_LIMIT=${SEEKING_ALPHA_NASDAQ_LIMIT},SEEKING_ALPHA_BATCH_SIZE=${SEEKING_ALPHA_BATCH_SIZE},SEEKING_ALPHA_CALL_DELAY_MS=${SEEKING_ALPHA_CALL_DELAY_MS},SEEKING_ALPHA_USE_CURL=${SEEKING_ALPHA_USE_CURL},STOCKANALYSIS_NASDAQ_LIMIT=${STOCKANALYSIS_NASDAQ_LIMIT},STOCKANALYSIS_CALL_DELAY_MS=${STOCKANALYSIS_CALL_DELAY_MS},STOCKANALYSIS_JITTER_MS=${STOCKANALYSIS_JITTER_MS},STOCKANALYSIS_BROKER_TARGETS=${STOCKANALYSIS_BROKER_TARGETS}"
+ENV_VARS="PGHOST=/cloudsql/${CONNECTION},PGDATABASE=${DB_NAME},PGUSER=${DB_USER},BUTLER_BASE_URL=${BASE_URL},BUTLER_RATE_PER_MIN=80,SEEKING_ALPHA_NASDAQ_LIMIT=${SEEKING_ALPHA_NASDAQ_LIMIT},SEEKING_ALPHA_BATCH_SIZE=${SEEKING_ALPHA_BATCH_SIZE},SEEKING_ALPHA_CALL_DELAY_MS=${SEEKING_ALPHA_CALL_DELAY_MS},SEEKING_ALPHA_USE_CURL=${SEEKING_ALPHA_USE_CURL},STOCKANALYSIS_NASDAQ_LIMIT=${STOCKANALYSIS_NASDAQ_LIMIT},STOCKANALYSIS_CALL_DELAY_MS=${STOCKANALYSIS_CALL_DELAY_MS},STOCKANALYSIS_JITTER_MS=${STOCKANALYSIS_JITTER_MS},STOCKANALYSIS_BROKER_TARGETS=${STOCKANALYSIS_BROKER_TARGETS},COMPANY_NEWS_LIMIT=${COMPANY_NEWS_LIMIT},COMPANY_NEWS_DISPLAY=${COMPANY_NEWS_DISPLAY},COMPANY_NEWS_STALE_HOURS=${COMPANY_NEWS_STALE_HOURS},COMPANY_NEWS_CALL_DELAY_MS=${COMPANY_NEWS_CALL_DELAY_MS}"
 SECRET_VARS="PGPASSWORD=${DB_PASSWORD_SECRET}:latest"
 if [[ -n "${TG_TOKEN_SECRET:-}" ]]; then SECRET_VARS="${SECRET_VARS},BUTLER_TELEGRAM_BOT_TOKEN=${TG_TOKEN_SECRET}:latest"; fi
 if [[ -n "${TG_WEBHOOK_SECRET:-}" ]]; then SECRET_VARS="${SECRET_VARS},BUTLER_TELEGRAM_WEBHOOK_SECRET=${TG_WEBHOOK_SECRET}:latest"; fi
 if [[ -n "${DART_API_KEY_SECRET:-}" ]]; then SECRET_VARS="${SECRET_VARS},DART_API_KEY=${DART_API_KEY_SECRET}:latest"; fi
 if [[ -n "${FMP_API_KEY_SECRET:-}" ]]; then SECRET_VARS="${SECRET_VARS},FMP_API_KEY=${FMP_API_KEY_SECRET}:latest"; fi
 if [[ -n "${SEEKING_ALPHA_COOKIE_SECRET:-}" ]]; then SECRET_VARS="${SECRET_VARS},SEEKING_ALPHA_COOKIE=${SEEKING_ALPHA_COOKIE_SECRET}:latest"; fi
+if [[ -n "${NAVER_CLIENT_ID_SECRET:-}" ]]; then SECRET_VARS="${SECRET_VARS},NAVER_CLIENT_ID=${NAVER_CLIENT_ID_SECRET}:latest"; fi
+if [[ -n "${NAVER_CLIENT_SECRET_SECRET:-}" ]]; then SECRET_VARS="${SECRET_VARS},NAVER_CLIENT_SECRET=${NAVER_CLIENT_SECRET_SECRET}:latest"; fi
 
 echo "==> Deploying Cloud Run service"
 gcloud run deploy "$SERVICE" \
@@ -257,6 +267,48 @@ fi
   --attempt-deadline 60s \
   --max-retry-attempts 0
 
+echo "==> Creating/updating company news refresh job"
+if gcloud run jobs describe "$NEWS_JOB" --region "$REGION" --project "$PROJECT" >/dev/null 2>&1; then
+  NEWS_JOB_CMD=(gcloud run jobs update "$NEWS_JOB")
+else
+  NEWS_JOB_CMD=(gcloud run jobs create "$NEWS_JOB")
+fi
+"${NEWS_JOB_CMD[@]}" \
+  --image "$JOB_IMG" \
+  --project "$PROJECT" \
+  --region "$REGION" \
+  --command npx \
+  --args tsx,scripts/backfill-company-news.ts \
+  --memory 512Mi \
+  --cpu 1 \
+  --tasks 1 \
+  --parallelism 1 \
+  --max-retries 0 \
+  --task-timeout 1800 \
+  --service-account "$SA_EMAIL" \
+  --set-cloudsql-instances "$CONNECTION" \
+  --set-env-vars "$ENV_VARS" \
+  --set-secrets "$SECRET_VARS"
+
+echo "==> Creating/updating company news Scheduler job"
+NEWS_SCHEDULER_URI="https://${REGION}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${PROJECT}/jobs/${NEWS_JOB}:run"
+if gcloud scheduler jobs describe "$NEWS_SCHEDULER_JOB" --location "$REGION" --project "$PROJECT" >/dev/null 2>&1; then
+  NEWS_SCHED_CMD=(gcloud scheduler jobs update http "$NEWS_SCHEDULER_JOB")
+else
+  NEWS_SCHED_CMD=(gcloud scheduler jobs create http "$NEWS_SCHEDULER_JOB")
+fi
+"${NEWS_SCHED_CMD[@]}" \
+  --project "$PROJECT" \
+  --location "$REGION" \
+  --schedule "15 7-23/2 * * *" \
+  --time-zone "Asia/Seoul" \
+  --uri "$NEWS_SCHEDULER_URI" \
+  --http-method POST \
+  --oauth-service-account-email "$SA_EMAIL" \
+  --oauth-token-scope "https://www.googleapis.com/auth/cloud-platform" \
+  --attempt-deadline 60s \
+  --max-retry-attempts 0
+
 echo "==> Creating/updating weekly calendar Scheduler job"
 CALENDAR_SCHEDULER_URI="https://${REGION}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${PROJECT}/jobs/${CALENDAR_JOB}:run"
 if gcloud scheduler jobs describe "$CALENDAR_SCHEDULER_JOB" --location "$REGION" --project "$PROJECT" >/dev/null 2>&1; then
@@ -283,6 +335,7 @@ Service image: $APP_IMG
 Job image:     $JOB_IMG
 Calendar job:  $CALENDAR_JOB
 StockAnalysis: $STOCKANALYSIS_JOB
+News job:      $NEWS_JOB
 Cloud SQL:     $CONNECTION
 
 Initial data import:

@@ -9,6 +9,7 @@ import {
   getValuationSeries,
   getChanges,
   getTargetMonthly,
+  getCompanyNews,
 } from "@/lib/repo";
 import { getSessionUser, SESSION_COOKIE } from "@/lib/auth";
 import { userStore } from "@/lib/userstore";
@@ -35,7 +36,7 @@ export default async function CompanyPage({
   const user = await getSessionUser((await cookies()).get(SESSION_COOKIE)?.value);
   const watched = user ? await userStore.isWatched(user.id, corpCode) : false;
 
-  const [brokers, brokerHistory, targetMonthly, quarterly, annual, valuations, changes] = await Promise.all([
+  const [brokers, brokerHistory, targetMonthly, quarterly, annual, valuations, changes, news] = await Promise.all([
     getBrokerTargets(corpCode),
     getBrokerTargetHistory(corpCode),
     getTargetMonthly(corpCode),
@@ -43,6 +44,7 @@ export default async function CompanyPage({
     getFinancials(corpCode, "A"),
     getValuationSeries(corpCode),
     getChanges(corpCode, 40),
+    getCompanyNews(corpCode, 8),
   ]);
   const currentYear = new Date().getFullYear();
   const latestActualEps = [...annual]
@@ -133,6 +135,29 @@ export default async function CompanyPage({
         detailIngested={!!company.detail_ingested_at}
       />
 
+      {/* ---------- 최근 뉴스 ---------- */}
+      <div className="panel">
+        <h2>
+          최근 뉴스 <span className="sub">국내는 네이버, NASDAQ은 StockAnalysis 기반 기사</span>
+        </h2>
+        {news.length === 0 ? (
+          <div className="empty">아직 수집된 뉴스가 없습니다.</div>
+        ) : (
+          <div className="news-list">
+            {news.map((n) => (
+              <a key={n.id} className="news-item" href={n.origin_url || n.url} target="_blank" rel="noreferrer">
+                <div className="news-meta">
+                  <span className="pill">{n.source_name || labelProvider(n.provider)}</span>
+                  <span className="mono muted">{formatNewsDate(n.published_at ?? n.ingested_at)}</span>
+                </div>
+                <div className="news-title">{n.title}</div>
+                {n.description ? <div className="news-desc">{n.description}</div> : null}
+              </a>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* ---------- 변경 이력 ---------- */}
       <div className="panel">
         <h2>
@@ -211,4 +236,20 @@ function kindClass(k: string | null) {
   if (k === "up" || k === "yoy") return "up";
   if (k === "down") return "down";
   return "flat";
+}
+
+function labelProvider(provider: string) {
+  return (
+    {
+      naver: "Naver",
+      stockanalysis: "StockAnalysis",
+    } as Record<string, string>
+  )[provider] ?? provider;
+}
+
+function formatNewsDate(value: string | null) {
+  if (!value) return "-";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value.slice(0, 10);
+  return d.toISOString().slice(0, 10);
 }

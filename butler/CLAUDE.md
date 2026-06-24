@@ -8,6 +8,7 @@ keystone 는 `butler.works` 데이터를 자체 정규화 DB로 모아 기업/�
 - 운영 DB는 **Postgres** 다.
 - 런타임은 **Cloud Run + Cloud SQL(Postgres)** 이다.
 - 일일 갱신은 **Cloud Scheduler -> Cloud Run Job -> Postgres 직접 업데이트** 흐름이다.
+- 기업 뉴스는 별도 **Cloud Scheduler -> `fnbutler-news-refresh` Job** 으로 회전 수집한다.
 - 운영 스케줄의 source of truth는 `docs/SCHEDULES.md` 다.
 - 스케줄/cron 변경 시 `.github/workflows/deploy.yml`, `scripts/gcloud-postgres-bootstrap.sh`,
   `docs/SCHEDULES.md`, `DEPLOYMENT.md`, `CLAUDE.md`, 루트 `AGENTS.md` 를 같이 맞춘다.
@@ -33,6 +34,7 @@ keystone 는 `butler.works` 데이터를 자체 정규화 DB로 모아 기업/�
 | 호스팅 | Cloud Run service + Cloud Run Job |
 | 스케줄 | Cloud Scheduler |
 | 알림 | Telegram Bot API |
+| 뉴스 | 국내 NAVER Search API, NASDAQ StockAnalysis 기사 피드 |
 
 ## 주요 명령
 
@@ -42,6 +44,7 @@ npm run db:init
 npm run build
 npm run refresh
 npm run refresh:calendar
+npm run backfill:company-news
 npm run deploy:postgres
 npm run postgres:import:cloud
 ```
@@ -58,6 +61,7 @@ npm run postgres:import:cloud
 - `valuations`: PER/PBR 시계열
 - `change_logs`: 목표가/컨센서스/재무 변경 타임라인
 - `daily_snapshots`: 일별 핵심 지표
+- `company_news`: 기업별 최신 뉴스 캐시
 - `users`, `sessions`, `watchlist`, `notifications`: 로컬 Postgres userStore
 - `calendar_events`, `calendar_prefs`: 로컬 Postgres calendar fallback
 
@@ -71,6 +75,7 @@ npm run postgres:import:cloud
 
 - `ingestNewReports`: 피드 최신순으로 읽다가 이미 가진 `report_id` 를 만나면 중단한다.
 - `refreshCompanyQuote`: 실제 값이 바뀐 경우에만 UPDATE 한다.
+- `backfill-company-news`: 국내 기업은 네이버 뉴스 API, NASDAQ 기업은 StockAnalysis 기사 피드로 최신 뉴스를 회전 저장한다.
 - `backfill:changes`: 원본 리포트일 기준으로 변경 로그를 재생성한다.
 - `import:har`: 로그인 HAR로 공개 API에서 마스킹되는 최신 재무를 보강한다.
 

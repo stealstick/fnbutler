@@ -20,6 +20,8 @@ env:
   CALENDAR_SCHEDULER_JOB: fnbutler-calendar-weekly
   STOCKANALYSIS_JOB: fnbutler-stockanalysis-backfill
   STOCKANALYSIS_SCHEDULER_JOB: fnbutler-stockanalysis-backfill-6h
+  NEWS_JOB: fnbutler-news-refresh
+  NEWS_SCHEDULER_JOB: fnbutler-news-refresh-2h
   SQL_INSTANCE: fnbutler-pg
   DB_NAME: butler
   DB_USER: butler
@@ -34,6 +36,10 @@ env:
   STOCKANALYSIS_CALL_DELAY_MS: "7000"
   STOCKANALYSIS_JITTER_MS: "3000"
   STOCKANALYSIS_BROKER_TARGETS: "1"
+  COMPANY_NEWS_LIMIT: "80"
+  COMPANY_NEWS_DISPLAY: "8"
+  COMPANY_NEWS_STALE_HOURS: "2"
+  COMPANY_NEWS_CALL_DELAY_MS: "500"
 
 jobs:
   deploy:
@@ -55,6 +61,8 @@ jobs:
           FMP_API_KEY_VALUE: ${{ secrets.FMP_API_KEY }}
           YAHOO_COOKIE_VALUE: ${{ secrets.YAHOO_COOKIE }}
           YAHOO_CRUMB_VALUE: ${{ secrets.YAHOO_CRUMB }}
+          NAVER_CLIENT_ID_VALUE: ${{ secrets.NAVER_CLIENT_ID }}
+          NAVER_CLIENT_SECRET_VALUE: ${{ secrets.NAVER_CLIENT_SECRET }}
         run: |
           if [ -n "$BUTLER_ADMIN_EMAIL_VALUE" ] && [ -n "$BUTLER_ADMIN_PASSWORD_VALUE" ]; then
             echo "BUTLER_ADMIN_EMAIL/BUTLER_ADMIN_PASSWORD GitHub Actions secrets are configured."
@@ -75,6 +83,11 @@ jobs:
             echo "YAHOO_COOKIE/YAHOO_CRUMB GitHub Actions secrets are configured."
           else
             echo "YAHOO_COOKIE/YAHOO_CRUMB secrets are not configured; Yahoo will try DB cache and live session minting."
+          fi
+          if [ -n "$NAVER_CLIENT_ID_VALUE" ] && [ -n "$NAVER_CLIENT_SECRET_VALUE" ]; then
+            echo "NAVER_CLIENT_ID/NAVER_CLIENT_SECRET GitHub Actions secrets are configured."
+          else
+            echo "NAVER_CLIENT_ID/NAVER_CLIENT_SECRET secrets are not configured; Korean company news will be skipped unless GCP Secret Manager secrets exist."
           fi
           echo "Seeking Alpha Nasdaq estimates use public JSON by default; optional SEEKING_ALPHA_COOKIE Secret Manager secret is only needed if Cloud Run gets blocked."
 
@@ -261,6 +274,68 @@ jobs:
           set -e
           if [ "$SCHED_STATUS" -ne 0 ]; then
             echo "::warning::Cloud Scheduler sync skipped. Grant roles/cloudscheduler.admin to the deploy service account to manage ${STOCKANALYSIS_SCHEDULER_JOB}; .github/workflows/refresh.yml remains available for manual runs only."
+          fi
+
+      - name: Update company news refresh job
+        env:
+          NAVER_CLIENT_ID_VALUE: ${{ secrets.NAVER_CLIENT_ID }}
+          NAVER_CLIENT_SECRET_VALUE: ${{ secrets.NAVER_CLIENT_SECRET }}
+        run: |
+          CONNECTION="${PROJECT}:${REGION}:${SQL_INSTANCE}"
+          SECRET_VARS="PGPASSWORD=${DB_PASSWORD_SECRET}:latest"
+          ENV_VARS="PGHOST=/cloudsql/${CONNECTION},PGDATABASE=${DB_NAME},PGUSER=${DB_USER},BUTLER_BASE_URL=${URL},COMPANY_NEWS_LIMIT=${COMPANY_NEWS_LIMIT},COMPANY_NEWS_DISPLAY=${COMPANY_NEWS_DISPLAY},COMPANY_NEWS_STALE_HOURS=${COMPANY_NEWS_STALE_HOURS},COMPANY_NEWS_CALL_DELAY_MS=${COMPANY_NEWS_CALL_DELAY_MS}"
+          if gcloud secrets describe NAVER_CLIENT_ID --project "$PROJECT" >/dev/null 2>&1; then
+            SECRET_VARS="${SECRET_VARS},NAVER_CLIENT_ID=NAVER_CLIENT_ID:latest"
+          elif [ -n "$NAVER_CLIENT_ID_VALUE" ]; then
+            ENV_VARS="${ENV_VARS},NAVER_CLIENT_ID=${NAVER_CLIENT_ID_VALUE}"
+          fi
+          if gcloud secrets describe NAVER_CLIENT_SECRET --project "$PROJECT" >/dev/null 2>&1; then
+            SECRET_VARS="${SECRET_VARS},NAVER_CLIENT_SECRET=NAVER_CLIENT_SECRET:latest"
+          elif [ -n "$NAVER_CLIENT_SECRET_VALUE" ]; then
+            ENV_VARS="${ENV_VARS},NAVER_CLIENT_SECRET=${NAVER_CLIENT_SECRET_VALUE}"
+          fi
+
+          if gcloud run jobs describe "$NEWS_JOB" --region "$REGION" --project "$PROJECT" >/dev/null 2>&1; then
+            JOB_CMD=(gcloud run jobs update "$NEWS_JOB")
+          else
+            JOB_CMD=(gcloud run jobs create "$NEWS_JOB")
+          fi
+
+          "${JOB_CMD[@]}" \
+            --image "$JOB_IMG" --project "$PROJECT" --region "$REGION" \
+            --command npx --args tsx,scripts/backfill-company-news.ts \
+            --memory 512Mi --cpu 1 --tasks 1 --parallelism 1 \
+            --max-retries 0 --task-timeout 1800 \
+            --service-account "${RUN_SA}@${PROJECT}.iam.gserviceaccount.com" \
+            --set-cloudsql-instances "$CONNECTION" \
+            --set-env-vars "$ENV_VARS" \
+            --set-secrets "$SECRET_VARS"
+
+      - name: Update company news scheduler
+        run: |
+          SCHEDULER_URI="https://${REGION}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${PROJECT}/jobs/${NEWS_JOB}:run"
+          if gcloud scheduler jobs describe "$NEWS_SCHEDULER_JOB" --location "$REGION" --project "$PROJECT" >/dev/null 2>&1; then
+            SCHED_CMD=(gcloud scheduler jobs update http "$NEWS_SCHEDULER_JOB")
+          else
+            SCHED_CMD=(gcloud scheduler jobs create http "$NEWS_SCHEDULER_JOB")
+          fi
+
+          set +e
+          "${SCHED_CMD[@]}" \
+            --project "$PROJECT" \
+            --location "$REGION" \
+            --schedule "15 7-23/2 * * *" \
+            --time-zone "Asia/Seoul" \
+            --uri "$SCHEDULER_URI" \
+            --http-method POST \
+            --oauth-service-account-email "${RUN_SA}@${PROJECT}.iam.gserviceaccount.com" \
+            --oauth-token-scope "https://www.googleapis.com/auth/cloud-platform" \
+            --attempt-deadline 60s \
+            --max-retry-attempts 0
+          SCHED_STATUS=$?
+          set -e
+          if [ "$SCHED_STATUS" -ne 0 ]; then
+            echo "::warning::Cloud Scheduler sync skipped. Grant roles/cloudscheduler.admin to the deploy service account to manage ${NEWS_SCHEDULER_JOB}; .github/workflows/refresh.yml remains available for manual runs only."
           fi
 
       - name: Update daily refresh scheduler

@@ -42,6 +42,8 @@ CREATE TABLE IF NOT EXISTS companies (
     yahoo_targets_at   TEXT,
     stockanalysis_estimates_at TEXT,
     stockanalysis_targets_at TEXT,
+    news_keyword       TEXT,
+    news_ingested_at   TEXT,
     detail_ingested_at TEXT,
     source             TEXT NOT NULL DEFAULT 'butler',
     created_at         TEXT NOT NULL,
@@ -57,6 +59,8 @@ ALTER TABLE companies ADD COLUMN IF NOT EXISTS yahoo_estimates_at TEXT;
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS yahoo_targets_at TEXT;
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS stockanalysis_estimates_at TEXT;
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS stockanalysis_targets_at TEXT;
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS news_keyword TEXT;
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS news_ingested_at TEXT;
 ALTER TABLE companies ALTER COLUMN price TYPE DOUBLE PRECISION USING price::double precision;
 ALTER TABLE companies ALTER COLUMN target_price_avg TYPE DOUBLE PRECISION USING target_price_avg::double precision;
 CREATE INDEX IF NOT EXISTS idx_companies_stock ON companies(stock_code);
@@ -68,6 +72,7 @@ CREATE INDEX IF NOT EXISTS idx_companies_fmp_estimates ON companies(fmp_estimate
 CREATE INDEX IF NOT EXISTS idx_companies_seekingalpha_estimates ON companies(seekingalpha_estimates_at, market_cap DESC);
 CREATE INDEX IF NOT EXISTS idx_companies_yahoo_estimates ON companies(yahoo_estimates_at, market_cap DESC);
 CREATE INDEX IF NOT EXISTS idx_companies_stockanalysis_estimates ON companies(stockanalysis_estimates_at, market_cap DESC);
+CREATE INDEX IF NOT EXISTS idx_companies_news_ingested ON companies(news_ingested_at, market_cap DESC);
 CREATE INDEX IF NOT EXISTS idx_companies_cover ON companies(has_consensus, market_cap DESC);
 
 CREATE TABLE IF NOT EXISTS brokers (
@@ -216,6 +221,24 @@ CREATE TABLE IF NOT EXISTS change_logs (
 );
 CREATE INDEX IF NOT EXISTS idx_changes_corp ON change_logs(corp_code, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_changes_type ON change_logs(entity_type, occurred_at DESC);
+
+CREATE TABLE IF NOT EXISTS company_news (
+    id           BIGSERIAL PRIMARY KEY,
+    corp_code    TEXT NOT NULL REFERENCES companies(corp_code) ON DELETE CASCADE,
+    provider     TEXT NOT NULL DEFAULT 'naver',
+    query        TEXT NOT NULL,
+    source_name  TEXT,
+    title        TEXT NOT NULL,
+    description  TEXT,
+    url          TEXT NOT NULL,
+    origin_url   TEXT,
+    published_at TEXT,
+    ingested_at  TEXT NOT NULL,
+    UNIQUE (corp_code, url)
+);
+ALTER TABLE company_news ADD COLUMN IF NOT EXISTS source_name TEXT;
+CREATE INDEX IF NOT EXISTS idx_company_news_corp_pub ON company_news(corp_code, published_at DESC NULLS LAST, ingested_at DESC);
+CREATE INDEX IF NOT EXISTS idx_company_news_provider ON company_news(provider, ingested_at DESC);
 
 CREATE TABLE IF NOT EXISTS ingest_runs (
     id          BIGSERIAL PRIMARY KEY,

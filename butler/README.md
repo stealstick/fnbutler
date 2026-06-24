@@ -61,6 +61,7 @@ npm run refresh:calendar
 - Seeking Alpha 공개 JSON이 열리면 Nasdaq 기업의 최근/다음 분기 및 연간 EPS·매출 실제치/추정치를 보강한다. 별도 인증은 기본적으로 필요 없고, `SEEKING_ALPHA_NASDAQ_LIMIT=500`, `SEEKING_ALPHA_BATCH_SIZE=5`, `SEEKING_ALPHA_CALL_DELAY_MS=60000`으로 천천히 갱신한다. 운영 Job은 `SEEKING_ALPHA_USE_CURL=1`로 curl 경로를 사용한다. PerimeterX/captcha로 차단되면 즉시 멈추며, 허용된 데이터 소스나 세션이 필요하다.
 - Yahoo Finance 웹 JSON이 열리면 NASDAQ 기업의 목표가와 `0q/+1q/0y/+1y` EPS·매출 추정치를 보강한다. 기본은 기존 FMP 추정치를 덮어쓰지 않고 빈칸만 채운다. Yahoo 세션은 DB에 캐시하고, 실패 시 기존 데이터는 보존한 채 다음 실행 때 재시도한다.
 - Nasdaq 실적 캘린더는 수집 범위 안에서 시총 상위 500개 해외/미국 상장기업 실적발표 일정을 캘린더에 넣는다.
+- 기업 뉴스는 별도 Job `fnbutler-news-refresh`가 2시간 간격으로 회전 수집한다. 국내 기업은 네이버 뉴스 검색 API, NASDAQ 기업은 StockAnalysis 기사 피드를 사용한다.
 - 국내 100대 기업 DART 잠정실적 공시는 `DART_API_KEY` secret이 있는 `fnbutler-calendar-refresh`
   Job이 매주 토요일 08:00 KST에 캘린더 전용으로 보강한다.
 
@@ -81,6 +82,7 @@ npm run postgres:import:cloud
 ```text
 db/postgres/schema.sql      Postgres 운영 스키마
 scripts/refresh-daily.ts
+scripts/backfill-company-news.ts
 scripts/gcloud-postgres-bootstrap.sh
 scripts/gcloud-postgres-import-local.sh
 src/lib/db.ts               pg Pool + schema migrate
@@ -119,6 +121,11 @@ src/lib/ingest.ts           async upsert + 변경 감지
 | `YAHOO_COOKIE` / `YAHOO_CRUMB` | Cloud Run에서 cookie/crumb 발급이 막힐 때 수동 bootstrap으로 넣는 Yahoo 세션 |
 | `YAHOO_OVERWRITE_ESTIMATES` | `1`이면 기존 추정치도 Yahoo 값으로 덮어쓰기 |
 | `YAHOO_OVERWRITE_TARGETS` | `1`이면 기존 평균 목표주가도 Yahoo 값으로 덮어쓰기 |
+| `NAVER_CLIENT_ID` / `NAVER_CLIENT_SECRET` | 국내 기업 뉴스 검색용 네이버 검색 API 인증값 |
+| `COMPANY_NEWS_LIMIT` | 기업 뉴스 회전 수집 대상 수(기본 80) |
+| `COMPANY_NEWS_DISPLAY` | 기업당 저장 후보 기사 수(기본 8) |
+| `COMPANY_NEWS_STALE_HOURS` | 재수집 간격 기준 시간(기본 2) |
+| `COMPANY_NEWS_CALL_DELAY_MS` | 뉴스 수집 호출 간격(기본 500ms) |
 
 ## 데이터 모델
 
@@ -130,6 +137,7 @@ src/lib/ingest.ts           async upsert + 변경 감지
 - `valuations`: PER/PBR 시계열
 - `change_logs`: 목표가/컨센서스/재무 변경 이력
 - `daily_snapshots`: 일별 핵심 지표 스냅샷
+- `company_news`: 기업별 최신 뉴스 캐시. 국내는 `naver`, NASDAQ은 `stockanalysis` provider로 저장
 - `users`, `sessions`, `watchlist`, `notifications`: Postgres 유저 저장소
 - `calendar_events`, `calendar_prefs`: Postgres 캘린더 저장소
 

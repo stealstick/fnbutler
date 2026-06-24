@@ -102,6 +102,20 @@ export interface ChangeRow {
   corp_name?: string;
 }
 
+export interface CompanyNewsRow {
+  id: number;
+  corp_code: string;
+  provider: string;
+  query: string;
+  source_name: string | null;
+  title: string;
+  description: string | null;
+  url: string;
+  origin_url: string | null;
+  published_at: string | null;
+  ingested_at: string;
+}
+
 const placeholders = (values: unknown[], start = 1) => values.map((_, i) => `$${i + start}`).join(",");
 
 export async function getCompany(corpCode: string): Promise<CompanyRow | undefined> {
@@ -478,6 +492,17 @@ export async function getChanges(corpCode: string, limit = 100): Promise<ChangeR
   return all<ChangeRow>(
     `SELECT * FROM change_logs WHERE corp_code = $1
      ORDER BY COALESCE(occurred_at, observed_at) DESC, id DESC LIMIT $2`,
+    [corpCode, limit],
+  );
+}
+
+export async function getCompanyNews(corpCode: string, limit = 8): Promise<CompanyNewsRow[]> {
+  return all<CompanyNewsRow>(
+    `SELECT *
+     FROM company_news
+     WHERE corp_code = $1
+     ORDER BY published_at DESC NULLS LAST, ingested_at DESC, id DESC
+     LIMIT $2`,
     [corpCode, limit],
   );
 }
