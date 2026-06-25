@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { parseCompareCodes } from "@/lib/compare-codes";
 import { getCompaniesByCodes, getCompareGrowth } from "@/lib/repo";
 import { epsGrowth, buildGrowthByCompany } from "@/lib/compare-growth";
 import CompareControls from "./CompareControls";
@@ -6,27 +7,12 @@ import CompareGrid, { type RowData } from "./CompareGrid";
 
 export const dynamic = "force-dynamic";
 
-const MAX_CODES = 10;
-
-function parseCodes(raw?: string): string[] {
-  if (!raw) return [];
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const c of raw.split(",").map((s) => s.trim()).filter(Boolean)) {
-    if (!seen.has(c)) {
-      seen.add(c);
-      out.push(c);
-    }
-  }
-  return out.slice(0, MAX_CODES);
-}
-
 export default async function ComparePage({
   searchParams,
 }: {
   searchParams: Promise<{ codes?: string }>;
 }) {
-  const codes = parseCodes((await searchParams).codes);
+  const codes = parseCompareCodes((await searchParams).codes);
   const companies = await getCompaniesByCodes(codes);
   const growthRows = await getCompareGrowth(companies.map((c) => c.corp_code));
   const growthByCompany = buildGrowthByCompany(growthRows);

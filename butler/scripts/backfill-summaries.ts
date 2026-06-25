@@ -12,31 +12,43 @@
  * 멱등: ai_summary 가 이미 상세 요약(마크다운 볼드 `**` 포함)이면 상세 호출을 건너뛴다.
  * 업스트림 호출은 butler 클라이언트가 분당 BUTLER_RATE_PER_MIN(기본 80)으로 셀프 throttle.
  */
-import { all as allRows, closeDb, getDb, migrate, nowIso, query } from "../src/lib/db";
+import { all as allRows, closeDb, getDb, migrate, nowIso, query, type Queryable } from "../src/lib/db";
 import { butler } from "../src/lib/butler";
 
 type Row = { report_id: string; ai_summary: string | null };
+export type SummaryBackfillResult = { targeted: number; updated: number; skipped: number; failed: number };
 
-async function main() {
-  const args = process.argv.slice(2);
-  const includeAll = args.includes("--all");
-  const force = args.includes("--force");
-  const limIdx = args.indexOf("--limit");
-  const limit = limIdx >= 0 ? Number(args[limIdx + 1]) : 0;
-
-  const db = getDb();
-  await migrate(db);
+export async function backfillConsensusSummaries(
+  db: Queryable,
+  options: {
+    includeAll?: boolean;
+    force?: boolean;
+    limit?: number;
+    onlyIncomplete?: boolean;
+    log?: (message: string) => void;
+  } = {},
+): Promise<SummaryBackfillResult> {
+  const includeAll = !!options.includeAll;
+  const force = !!options.force;
+  const limit = Math.max(0, Math.floor(options.limit ?? 0));
+  const onlyIncomplete = !!options.onlyIncomplete;
+  const log = options.log ?? ((message: string) => process.stdout.write(message));
 
   // 화면(증권사별 최신 리포트)에만 AI 요약이 노출되므로 기본은 그 집합만 백필.
-  // --all 이면 전체 리포트(히스토리 포함).
-  const source = includeAll
-    ? "consensus_reports"
-    : "v_latest_broker_target";
-  const rows = await allRows<Row>(`SELECT report_id, ai_summary FROM ${source} ORDER BY report_date DESC`, [], db);
-  const targets = limit > 0 ? rows.slice(0, limit) : rows;
+  // includeAll 이면 전체 리포트(히스토리 포함).
+  const source = includeAll ? "consensus_reports" : "v_latest_broker_target";
+  const where = onlyIncomplete
+    ? "WHERE ai_summary IS NULL OR ai_summary = '' OR ai_summary NOT LIKE '%**%'"
+    : "";
+  const limitSql = limit > 0 ? `LIMIT ${limit}` : "";
+  const targets = await allRows<Row>(
+    `SELECT report_id, ai_summary FROM ${source} ${where} ORDER BY report_date DESC ${limitSql}`,
+    [],
+    db,
+  );
 
-  process.stdout.write(
-    `대상 ${targets.length}건 (${includeAll ? "전체" : "노출=증권사별 최신"})${force ? " · force" : ""} 백필 시작\n`,
+  log(
+    `대상 ${targets.length}건 (${includeAll ? "전체" : "노출=증권사별 최신"})${force ? " · force" : ""}${onlyIncomplete ? " · incomplete-only" : ""} 백필 시작\n`,
   );
 
   let updated = 0;
@@ -46,7 +58,7 @@ async function main() {
   for (let i = 0; i < targets.length; i++) {
     const r = targets[i];
     // 이미 상세 API 의 전체 요약(라이트 마크다운: `- **헤더**`)이면 상세 호출 생략 — 멱등.
-    // 피드의 짧은 요약은 평문(볼드 `**` 없음)이라 항상 백필 대상. --force 면 무시.
+    // 피드의 짧은 요약은 평문(볼드 `**` 없음)이라 항상 백필 대상. force 면 무시.
     if (!force && r.ai_summary && r.ai_summary.includes("**")) {
       skipped++;
       continue;
@@ -55,11 +67,11 @@ async function main() {
       const detail = await butler.reportDetail(r.report_id);
       const full = detail?.aiSummary?.trim();
       if (full && full !== r.ai_summary) {
-        await query("UPDATE consensus_reports SET ai_summary = $1, ingested_at = $2 WHERE report_id = $3", [
-          full,
-          nowIso(),
-          r.report_id,
-        ], db);
+        await query(
+          "UPDATE consensus_reports SET ai_summary = $1, ingested_at = $2 WHERE report_id = $3",
+          [full, nowIso(), r.report_id],
+          db,
+        );
         updated++;
       } else {
         skipped++;
@@ -68,22 +80,35 @@ async function main() {
       failed++;
     }
     if ((i + 1) % 100 === 0 || i + 1 === targets.length) {
-      process.stdout.write(
-        `  ${i + 1}/${targets.length} — 갱신 ${updated} · 스킵 ${skipped} · 실패 ${failed}\n`,
-      );
+      log(`  ${i + 1}/${targets.length} — 갱신 ${updated} · 스킵 ${skipped} · 실패 ${failed}\n`);
     }
   }
 
-  process.stdout.write(`✅ 완료: 갱신 ${updated} · 스킵 ${skipped} · 실패 ${failed}\n`);
+  log(`✅ 완료: 갱신 ${updated} · 스킵 ${skipped} · 실패 ${failed}\n`);
+  return { targeted: targets.length, updated, skipped, failed };
 }
 
-main()
-  .then(async () => {
-    await closeDb();
-    process.exit(0);
-  })
-  .catch(async (e) => {
-    console.error(e);
-    await closeDb();
-    process.exit(1);
-  });
+async function main() {
+  const args = process.argv.slice(2);
+  const includeAll = args.includes("--all");
+  const force = args.includes("--force");
+  const onlyIncomplete = args.includes("--incomplete-only");
+  const limIdx = args.indexOf("--limit");
+  const limit = limIdx >= 0 ? Number(args[limIdx + 1]) : 0;
+
+  const db = getDb();
+  await migrate(db);
+  await backfillConsensusSummaries(db, { includeAll, force, limit, onlyIncomplete });
+}
+
+if (process.argv[1]?.endsWith("backfill-summaries.ts"))
+  main()
+    .then(async () => {
+      await closeDb();
+      process.exit(0);
+    })
+    .catch(async (e) => {
+      console.error(e);
+      await closeDb();
+      process.exit(1);
+    });

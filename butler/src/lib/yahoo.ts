@@ -259,7 +259,7 @@ async function fetchYahooSummary(
 }
 
 async function candidates(db: Queryable, limit: number, options: YahooNasdaqBackfillOptions): Promise<NasdaqCandidate[]> {
-  const where = ["active = 1", "market = 'NASDAQ'", "source = 'nasdaq'"];
+  const where = ["active = 1", "source = 'nasdaq'"];
   const params: unknown[] = [];
   const push = (v: unknown) => {
     params.push(v);

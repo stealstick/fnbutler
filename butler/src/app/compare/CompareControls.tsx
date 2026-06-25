@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { MAX_COMPARE_CODES } from "@/lib/compare-codes";
 
 interface Hit {
   corp_code: string;
@@ -18,9 +19,10 @@ export default function CompareControls({ codes }: { codes: string[] }) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
+  const atMax = codes.length >= MAX_COMPARE_CODES;
 
   useEffect(() => {
-    if (!q.trim()) {
+    if (!q.trim() || atMax) {
       setHits([]);
       return;
     }
@@ -31,7 +33,7 @@ export default function CompareControls({ codes }: { codes: string[] }) {
       setOpen(true);
     }, 200);
     return () => clearTimeout(t);
-  }, [q]);
+  }, [atMax, q]);
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
@@ -42,7 +44,7 @@ export default function CompareControls({ codes }: { codes: string[] }) {
   }, []);
 
   function add(code: string) {
-    if (codes.includes(code)) return;
+    if (codes.includes(code) || atMax) return;
     setQ("");
     setHits([]);
     setOpen(false);
@@ -75,6 +77,7 @@ export default function CompareControls({ codes }: { codes: string[] }) {
           className="input search"
           placeholder="기업 추가 (기업명·종목코드)"
           value={q}
+          disabled={atMax}
           onChange={(e) => setQ(e.target.value)}
           onFocus={() => hits.length && setOpen(true)}
         />
@@ -86,7 +89,7 @@ export default function CompareControls({ codes }: { codes: string[] }) {
                 <button
                   key={h.corp_code}
                   className="cmp-suggest-item"
-                  disabled={already}
+                  disabled={already || atMax}
                   onClick={() => add(h.corp_code)}
                 >
                   <strong>{h.name}</strong>

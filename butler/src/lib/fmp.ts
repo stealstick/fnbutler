@@ -133,7 +133,7 @@ async function candidates(
   kind: "estimates" | "targets",
   options: Pick<FmpNasdaqBackfillOptions, "corpCode" | "symbol">,
 ): Promise<NasdaqCandidate[]> {
-  const where = ["active = 1", "market = 'NASDAQ'", "source = 'nasdaq'"];
+  const where = ["active = 1", "source = 'nasdaq'"];
   const params: unknown[] = [];
   const push = (v: unknown) => {
     params.push(v);

@@ -27,6 +27,5 @@ export function normalizeEstimateProvider(raw: string | null | undefined): Estim
 }
 
 export function estimateProviderOrder(provider: string | null | undefined): string[] {
-  const first = normalizeEstimateProvider(provider);
-  return [first, ...ESTIMATE_PROVIDERS.filter((p) => p !== first)];
+  return [normalizeEstimateProvider(provider)];
 }

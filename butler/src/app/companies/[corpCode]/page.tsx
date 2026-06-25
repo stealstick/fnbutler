@@ -20,6 +20,7 @@ import WatchStar from "@/components/WatchStar";
 import CompanyViewTracker from "@/components/CompanyViewTracker";
 import TargetPricePanel from "./TargetPricePanel";
 import { normalizeCompanyRouteParam } from "@/lib/company-code";
+import { DEFAULT_ESTIMATE_PROVIDER, DEFAULT_GLOBAL_ESTIMATE_PROVIDER } from "@/lib/estimate-provider";
 
 export const dynamic = "force-dynamic";
 
@@ -35,13 +36,15 @@ export default async function CompanyPage({
 
   const user = await getSessionUser((await cookies()).get(SESSION_COOKIE)?.value);
   const watched = user ? await userStore.isWatched(user.id, corpCode) : false;
+  const initialEstimateProvider =
+    company.source === "nasdaq" ? DEFAULT_GLOBAL_ESTIMATE_PROVIDER : DEFAULT_ESTIMATE_PROVIDER;
 
   const [brokers, brokerHistory, targetMonthly, quarterly, annual, valuations, changes, news] = await Promise.all([
     getBrokerTargets(corpCode),
     getBrokerTargetHistory(corpCode),
     getTargetMonthly(corpCode),
-    getFinancials(corpCode, "Q"),
-    getFinancials(corpCode, "A"),
+    getFinancials(corpCode, "Q", initialEstimateProvider),
+    getFinancials(corpCode, "A", initialEstimateProvider),
     getValuationSeries(corpCode),
     getChanges(corpCode, 40),
     getCompanyNews(corpCode, 8),
@@ -138,7 +141,7 @@ export default async function CompanyPage({
       {/* ---------- 최근 뉴스 ---------- */}
       <div className="panel">
         <h2>
-          최근 뉴스 <span className="sub">국내는 네이버, NASDAQ은 StockAnalysis 기반 기사</span>
+          최근 뉴스 <span className="sub">국내는 네이버, 미국 상장사는 StockAnalysis 기반 기사</span>
         </h2>
         {news.length === 0 ? (
           <div className="empty">아직 수집된 뉴스가 없습니다.</div>

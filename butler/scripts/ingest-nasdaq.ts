@@ -1,10 +1,10 @@
 /**
- * Nasdaq 상장 시가총액 상위 기업 적재.
+ * 미국 상장 시가총액 상위 기업 적재.
  *
  *   tsx scripts/ingest-nasdaq.ts
  *   tsx scripts/ingest-nasdaq.ts --limit 500
  *
- * Nasdaq screener 공개 JSON에서 종목/현재가/등락률/시총/섹터를 가져오고,
+ * Nasdaq screener 공개 JSON에서 NASDAQ/NYSE/AMEX 거래소별 상위 종목·현재가·등락률·시총·섹터를 가져오고,
  * 시총은 USD/KRW 환율로 원화 환산해 기존 국내 기업과 같은 정렬 기준으로 저장한다.
  */
 import { closeDb, getDb, migrate, query, nowIso } from "../src/lib/db";

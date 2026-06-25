@@ -34,7 +34,7 @@ keystone 는 `butler.works` 데이터를 자체 정규화 DB로 모아 기업/�
 | 호스팅 | Cloud Run service + Cloud Run Job |
 | 스케줄 | Cloud Scheduler |
 | 알림 | Telegram Bot API |
-| 뉴스 | 국내 NAVER Search API, NASDAQ StockAnalysis 기사 피드 |
+| 뉴스 | 국내 NAVER Search API, 미국 상장기업 StockAnalysis 기사 피드 |
 
 ## 주요 명령
 
@@ -75,7 +75,7 @@ npm run postgres:import:cloud
 
 - `ingestNewReports`: 피드 최신순으로 읽다가 이미 가진 `report_id` 를 만나면 중단한다.
 - `refreshCompanyQuote`: 실제 값이 바뀐 경우에만 UPDATE 한다.
-- `backfill-company-news`: 국내 기업은 네이버 뉴스 API, NASDAQ 기업은 StockAnalysis 기사 피드로 최신 뉴스를 회전 저장한다.
+- `backfill-company-news`: 국내 기업은 네이버 뉴스 API, 미국 상장기업은 StockAnalysis 기사 피드로 최신 뉴스를 회전 저장한다.
 - `backfill:changes`: 원본 리포트일 기준으로 변경 로그를 재생성한다.
 - `import:har`: 로그인 HAR로 공개 API에서 마스킹되는 최신 재무를 보강한다.
 

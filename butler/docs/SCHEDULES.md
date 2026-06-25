@@ -10,9 +10,9 @@ production cron source.
 
 | Scheduler job | Schedule (KST) | Cron | Target Cloud Run Job | Command | Purpose | Retry policy |
 |---|---:|---|---|---|---|---|
-| `fnbutler-refresh-weekdays` | Daily 18:30 | `30 18 * * *` | `fnbutler-refresh` | `npx tsx scripts/refresh-daily.ts --no-stockanalysis-nasdaq-estimates` | Daily company/report/quote refresh. Runs regular domestic refresh plus non-StockAnalysis NASDAQ enrichments. StockAnalysis is excluded to avoid duplicate calls. | Cloud Scheduler `--max-retry-attempts 1`; Cloud Run Job `--max-retries 0`, `--task-timeout 7200` |
-| `fnbutler-stockanalysis-backfill-6h` | Daily 02:10, 08:10, 14:10, 20:10 | `10 2,8,14,20 * * *` | `fnbutler-stockanalysis-backfill` | `npx tsx scripts/backfill-stockanalysis-nasdaq-estimates.ts` | Slow NASDAQ StockAnalysis backfill for actual/estimated financials, valuation fields, target consensus, and broker targets. Default 20 symbols per run, about 80 per day. | Cloud Scheduler `--max-retry-attempts 0`; Cloud Run Job `--max-retries 0`, `--task-timeout 1800` |
-| `fnbutler-news-refresh-2h` | Daily 07:15-23:15 every 2h | `15 7-23/2 * * *` | `fnbutler-news-refresh` | `npx tsx scripts/backfill-company-news.ts` | Rotating company news refresh. Korean companies use NAVER Search when credentials are configured; NASDAQ companies use StockAnalysis article feeds. Default 80 companies/run, 8 articles/company, 2h stale window. | Cloud Scheduler `--max-retry-attempts 0`; Cloud Run Job `--max-retries 0`, `--task-timeout 1800` |
+| `fnbutler-refresh-weekdays` | Daily 18:30 | `30 18 * * *` | `fnbutler-refresh` | `npx tsx scripts/refresh-daily.ts --no-stockanalysis-nasdaq-estimates` | Daily company/report/quote refresh. Runs regular domestic refresh plus non-StockAnalysis US-listed enrichments. StockAnalysis is excluded to avoid duplicate calls. | Cloud Scheduler `--max-retry-attempts 1`; Cloud Run Job `--max-retries 0`, `--task-timeout 7200` |
+| `fnbutler-stockanalysis-backfill-6h` | Daily 02:10, 08:10, 14:10, 20:10 | `10 2,8,14,20 * * *` | `fnbutler-stockanalysis-backfill` | `npx tsx scripts/backfill-stockanalysis-nasdaq-estimates.ts` | Slow US-listed StockAnalysis backfill for actual/estimated financials, valuation fields, target consensus, and broker targets. Default 20 symbols per run, about 80 per day. | Cloud Scheduler `--max-retry-attempts 0`; Cloud Run Job `--max-retries 0`, `--task-timeout 1800` |
+| `fnbutler-news-refresh-2h` | Daily 07:15-23:15 every 2h | `15 7-23/2 * * *` | `fnbutler-news-refresh` | `npx tsx scripts/backfill-company-news.ts` | Rotating company news refresh. Korean companies use NAVER Search when credentials are configured; US-listed companies use StockAnalysis article feeds. Default 80 companies/run, 8 articles/company, 2h stale window. | Cloud Scheduler `--max-retry-attempts 0`; Cloud Run Job `--max-retries 0`, `--task-timeout 1800` |
 | `fnbutler-calendar-weekly` | Saturday 08:00 | `0 8 * * 6` | `fnbutler-calendar-refresh` | `npx tsx scripts/refresh-daily.ts --calendar-only` | Weekly calendar refresh, including NASDAQ earnings calendar and DART provisional earnings notices when `DART_API_KEY` is configured. | Cloud Scheduler `--max-retry-attempts 1`; Cloud Run Job `--max-retries 0`, `--task-timeout 7200` |
 
 Notes:
@@ -24,7 +24,7 @@ Notes:
 - `scripts/gcloud-postgres-bootstrap.sh` mirrors the same schedule definitions
   for one-shot stack bootstrap. Keep it in sync with `.github/workflows/deploy.yml`.
 - If `NAVER_CLIENT_ID`/`NAVER_CLIENT_SECRET` are absent, Korean company news is
-  skipped and the news job still refreshes NASDAQ StockAnalysis news.
+  skipped and the news job still refreshes US-listed StockAnalysis news.
 
 ## Manual Backfill Workflow
 
@@ -41,10 +41,10 @@ Available modes:
 | `dart-financials`, `dart-2024-financials`, `dart-2025-financials` | `fnbutler-refresh` with DART financial backfill args |
 | `fnguide-estimates` | `fnbutler-refresh` with FnGuide estimates backfill args |
 | `wisereport-estimates` | `fnbutler-refresh` with WiseReport estimates backfill args |
-| `nasdaq-companies` | `fnbutler-refresh` with NASDAQ company ingest args |
-| `fmp-nasdaq-estimates` | `fnbutler-refresh` with FMP NASDAQ estimates args |
-| `seekingalpha-nasdaq-estimates` | `fnbutler-refresh` with Seeking Alpha NASDAQ estimates args |
-| `yahoo-nasdaq-estimates` | `fnbutler-refresh` with Yahoo NASDAQ estimates args |
+| `nasdaq-companies` | `fnbutler-refresh` with US-listed company ingest args (historical mode name) |
+| `fmp-nasdaq-estimates` | `fnbutler-refresh` with FMP US-listed estimates args |
+| `seekingalpha-nasdaq-estimates` | `fnbutler-refresh` with Seeking Alpha US-listed estimates args |
+| `yahoo-nasdaq-estimates` | `fnbutler-refresh` with Yahoo US-listed estimates args |
 | `company-news` | `fnbutler-news-refresh` |
 
 ## Source Files

@@ -12,6 +12,12 @@ const NASDAQ_HEADERS: Record<string, string> = {
 };
 
 const FALLBACK_USD_KRW = Number(process.env.USD_KRW_FALLBACK || "1400");
+const US_EXCHANGES = ["nasdaq", "nyse", "amex"] as const;
+const EXCHANGE_MARKET: Record<(typeof US_EXCHANGES)[number], string> = {
+  nasdaq: "NASDAQ",
+  nyse: "NYSE",
+  amex: "AMEX",
+};
 
 type NasdaqRow = {
   symbol?: string;
@@ -28,6 +34,7 @@ type NasdaqRow = {
 export interface NasdaqCompany {
   symbol: string;
   name: string;
+  exchange: string;
   priceUsd: number | null;
   pctChange: number | null;
   marketCapUsd: number;
@@ -97,29 +104,38 @@ export async function fetchUsdKrwRate(): Promise<number> {
   }
 }
 
-export async function fetchNasdaqTopCompanies(limit = 500): Promise<NasdaqCompany[]> {
-  const url = "https://api.nasdaq.com/api/screener/stocks?tableonly=true&download=true&exchange=nasdaq";
+async function fetchNasdaqScreenerCompanies(exchange: (typeof US_EXCHANGES)[number]): Promise<NasdaqCompany[]> {
+  const url = `https://api.nasdaq.com/api/screener/stocks?tableonly=true&download=true&exchange=${exchange}`;
   const json = await fetchJson<{ data?: { rows?: NasdaqRow[] } }>(url);
   const rows = json.data?.rows ?? [];
-  return rows
-    .map((row) => {
-      const symbol = cleanText(row.symbol)?.toUpperCase() ?? "";
-      const name = cleanText(row.name) ?? symbol;
-      const marketCapUsd = parseNumber(row.marketCap) ?? 0;
-      return {
-        symbol,
-        name,
-        priceUsd: parseNumber(row.lastsale),
-        pctChange: parseNumber(row.pctchange),
-        marketCapUsd,
-        country: cleanText(row.country),
-        sector: cleanText(row.sector),
-        industry: cleanText(row.industry),
-      };
-    })
-    .filter((row) => isTradableCompany(row, row.marketCapUsd))
-    .sort((a, b) => b.marketCapUsd - a.marketCapUsd)
-    .slice(0, limit);
+  return rows.map((row) => {
+    const symbol = cleanText(row.symbol)?.toUpperCase() ?? "";
+    const name = cleanText(row.name) ?? symbol;
+    const marketCapUsd = parseNumber(row.marketCap) ?? 0;
+    return {
+      symbol,
+      name,
+      exchange: EXCHANGE_MARKET[exchange],
+      priceUsd: parseNumber(row.lastsale),
+      pctChange: parseNumber(row.pctchange),
+      marketCapUsd,
+      country: cleanText(row.country),
+      sector: cleanText(row.sector),
+      industry: cleanText(row.industry),
+    };
+  });
+}
+
+export async function fetchNasdaqTopCompanies(limit = 500): Promise<NasdaqCompany[]> {
+  const batches = await Promise.all(
+    US_EXCHANGES.map(async (exchange) =>
+      (await fetchNasdaqScreenerCompanies(exchange))
+        .filter((row) => isTradableCompany(row, row.marketCapUsd))
+        .sort((a, b) => b.marketCapUsd - a.marketCapUsd)
+        .slice(0, limit),
+    ),
+  );
+  return batches.flat().sort((a, b) => b.marketCapUsd - a.marketCapUsd);
 }
 
 export async function ingestNasdaqTopCompanies(
@@ -137,7 +153,7 @@ export async function ingestNasdaqTopCompanies(
 
   for (const c of companies) {
     const sector = classifyNasdaqSector(c.sector, c.industry);
-    const corpCode = `NASDAQ:${c.symbol}`;
+    const corpCode = `${c.exchange}:${c.symbol}`;
     await query(
       `INSERT INTO companies
          (corp_code, stock_code, name, name_eng, market, sector, sector_code, sector_name,
@@ -145,10 +161,10 @@ export async function ingestNasdaqTopCompanies(
           eps, feps, bps, dps, dividend_yield, has_consensus, cover_securities,
           target_price_avg, target_return_rate, currency, country, active, source, created_at, updated_at)
        VALUES
-         ($1, $2, $3, $4, 'NASDAQ', $5, $6, $7,
-          $8, $9, $10, $11, $12, NULL, NULL, NULL,
+         ($1, $2, $3, $4, $5, $6, $7, $8,
+          $9, $10, $11, $12, $13, NULL, NULL, NULL,
           NULL, NULL, NULL, NULL, NULL, 0, NULL,
-          NULL, NULL, 'USD', $13, 1, 'nasdaq', $14, $14)
+          NULL, NULL, 'USD', $14, 1, 'nasdaq', $15, $15)
        ON CONFLICT(corp_code) DO UPDATE SET
           stock_code = excluded.stock_code,
           name = excluded.name,
@@ -184,6 +200,7 @@ export async function ingestNasdaqTopCompanies(
         c.symbol,
         c.name,
         c.name,
+        c.exchange,
         c.industry ?? c.sector ?? null,
         sector.code,
         sector.name,
@@ -200,6 +217,6 @@ export async function ingestNasdaqTopCompanies(
     upserted++;
   }
 
-  log(`Nasdaq TOP${limit} 수집 완료 — selected=${companies.length} upserted=${upserted} usdKrw=${usdKrw}\n`);
+  log(`US-listed TOP${limit}/exchange 수집 완료 — selected=${companies.length} upserted=${upserted} usdKrw=${usdKrw}\n`);
   return { fetched: companies.length, selected: companies.length, upserted, usdKrw };
 }

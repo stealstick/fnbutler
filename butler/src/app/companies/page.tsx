@@ -3,16 +3,23 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { MAX_COMPARE_CODES } from "@/lib/compare-codes";
 import { won, num, pct, price as stockPrice, signClass } from "@/lib/format";
 import type { GrowthBundle, GrowthByMetric, GrowthMetric } from "@/lib/compare-growth";
 import type { CompanyRow, SectorAgg } from "@/lib/repo";
 import EstimateProviderToggle, { useEstimateProvider } from "@/components/EstimateProviderToggle";
 
-const MAX_COMPARE = 10;
 const GROWTH_METRICS: Array<{ key: GrowthMetric; label: string }> = [
   { key: "REVENUE", label: "매출액" },
   { key: "OPERATING_PROFIT", label: "영업이익" },
   { key: "NET_INCOME", label: "당기순이익" },
+];
+const MARKETS: Array<{ value: string; label: string }> = [
+  { value: "KOSPI", label: "코스피" },
+  { value: "KOSDAQ", label: "코스닥" },
+  { value: "NASDAQ", label: "NASDAQ" },
+  { value: "NYSE", label: "NYSE" },
+  { value: "AMEX", label: "AMEX" },
 ];
 const GROWTH_SORT_KEYS = new Set(["epsGrowth", "qoqPrevCur", "qoqCurNext", "yoyPrevThis", "yoyThisNext", "yoyNextNext2"]);
 type GrowthSortKey = "epsGrowth" | keyof GrowthBundle;
@@ -43,7 +50,7 @@ function compareNullableNumber(a: number | null, b: number | null, dir: Dir) {
 export default function CompaniesPage() {
   const router = useRouter();
   const [q, setQ] = useState("");
-  const [market, setMarket] = useState("");
+  const [market, setMarket] = useState<string[]>([]);
   const [sector, setSector] = useState("");
   const [industry, setIndustry] = useState("");
   const [onlyConsensus, setOnlyConsensus] = useState(false);
@@ -63,12 +70,15 @@ export default function CompaniesPage() {
   const apiSort = growthSort ? "market_cap" : sort;
   const apiDir = growthSort ? "desc" : dir;
 
+  const toggleMarket = (m: string) =>
+    setMarket((prev) => (prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]));
+
   const selCodes = new Set(sel.map((s) => s.code));
   const toggleSel = (c: CompanyListRow) =>
     setSel((prev) =>
       prev.some((s) => s.code === c.corp_code)
         ? prev.filter((s) => s.code !== c.corp_code)
-        : prev.length >= MAX_COMPARE
+        : prev.length >= MAX_COMPARE_CODES
           ? prev
           : [...prev, { code: c.corp_code, name: c.name }],
     );
@@ -85,7 +95,7 @@ export default function CompaniesPage() {
     setLoading(true);
     const sp = new URLSearchParams({
       q,
-      market,
+      market: market.join(","),
       sort: apiSort,
       dir: apiDir,
       limit: String(limit),
@@ -187,12 +197,25 @@ export default function CompaniesPage() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
-        <select className="input" value={market} onChange={(e) => setMarket(e.target.value)}>
-          <option value="">전체 시장</option>
-          <option value="KOSPI">KOSPI</option>
-          <option value="KOSDAQ">KOSDAQ</option>
-          <option value="NASDAQ">NASDAQ</option>
-        </select>
+        <span className="toggle" role="group" aria-label="시장 필터 (복수 선택)">
+          <button
+            className={market.length === 0 ? "on" : ""}
+            onClick={() => setMarket([])}
+            aria-pressed={market.length === 0}
+          >
+            전체 시장
+          </button>
+          {MARKETS.map((m) => (
+            <button
+              key={m.value}
+              className={market.includes(m.value) ? "on" : ""}
+              onClick={() => toggleMarket(m.value)}
+              aria-pressed={market.includes(m.value)}
+            >
+              {m.label}
+            </button>
+          ))}
+        </span>
         <select
           className="input"
           value={sort}
@@ -325,7 +348,7 @@ export default function CompaniesPage() {
                     type="checkbox"
                     className="cmp-check"
                     checked={selCodes.has(c.corp_code)}
-                    disabled={!selCodes.has(c.corp_code) && sel.length >= MAX_COMPARE}
+                    disabled={!selCodes.has(c.corp_code) && sel.length >= MAX_COMPARE_CODES}
                     onChange={() => toggleSel(c)}
                     aria-label={`${c.name} 비교 선택`}
                   />
@@ -384,7 +407,7 @@ export default function CompaniesPage() {
         <div className="cmp-actionbar">
           <strong style={{ whiteSpace: "nowrap" }}>
             비교 {sel.length}
-            {sel.length >= MAX_COMPARE ? ` (최대 ${MAX_COMPARE})` : ""}
+            {sel.length >= MAX_COMPARE_CODES ? ` (최대 ${MAX_COMPARE_CODES})` : ""}
           </strong>
           <div className="chips">
             {sel.map((s) => (

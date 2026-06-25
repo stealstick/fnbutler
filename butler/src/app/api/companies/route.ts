@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const opts: ListOpts = {
     q: sp.get("q") ?? undefined,
-    market: sp.get("market") ?? undefined,
+    market: sp.get("market")?.split(",").filter(Boolean) ?? undefined,
     sector: sp.get("sector") ?? undefined,
     industry: sp.get("industry") ?? undefined,
     onlyConsensus: sp.get("consensus") === "1",

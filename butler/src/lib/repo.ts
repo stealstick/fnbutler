@@ -297,7 +297,7 @@ function companyForwardPerJoins(providerParam: string) {
 
 export interface ListOpts {
   q?: string;
-  market?: string;
+  market?: string | string[];
   sector?: string;
   industry?: string;
   onlyConsensus?: boolean;
@@ -319,7 +319,8 @@ export async function listCompanies(opts: ListOpts = {}): Promise<{ total: numbe
     const p = push(`%${opts.q}%`);
     where.push(`(name ILIKE ${p} OR name_eng ILIKE ${p} OR stock_code ILIKE ${p} OR corp_code ILIKE ${p})`);
   }
-  if (opts.market) where.push(`market = ${push(opts.market)}`);
+  const markets = Array.isArray(opts.market) ? opts.market : opts.market ? [opts.market] : [];
+  if (markets.length) where.push(`market IN (${markets.map((m) => push(m)).join(", ")})`);
   if (opts.sector) where.push(`sector_code = ${push(opts.sector)}`);
   if (opts.industry) where.push(`sector = ${push(opts.industry)}`);
   if (opts.onlyConsensus) where.push("has_consensus = 1");
