@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listCompanies, type ListOpts } from "@/lib/repo";
 import { epsGrowth } from "@/lib/compare-growth";
-import { normalizeEstimateProvider } from "@/lib/estimate-provider";
+import { normalizeDomesticEstimateProvider, normalizeEstimateProvider, normalizeGlobalEstimateProvider } from "@/lib/estimate-provider";
 
 /** 기업 목록 (검색/필터/정렬/페이지네이션) — 로컬 DB. */
 export async function GET(req: NextRequest) {
@@ -17,6 +17,8 @@ export async function GET(req: NextRequest) {
     limit: sp.get("limit") ? Number(sp.get("limit")) : 50,
     offset: sp.get("offset") ? Number(sp.get("offset")) : 0,
     estimateProvider: normalizeEstimateProvider(sp.get("provider")),
+    domesticEstimateProvider: normalizeDomesticEstimateProvider(sp.get("domesticProvider") ?? sp.get("provider")),
+    globalEstimateProvider: normalizeGlobalEstimateProvider(sp.get("globalProvider") ?? sp.get("provider")),
   };
   const { total, rows } = await listCompanies(opts);
   const results = rows.map((r) => ({

@@ -7,7 +7,8 @@ import { MAX_COMPARE_CODES } from "@/lib/compare-codes";
 import { won, num, pct, price as stockPrice, signClass } from "@/lib/format";
 import type { GrowthBundle, GrowthByMetric, GrowthMetric } from "@/lib/compare-growth";
 import type { CompanyRow, SectorAgg } from "@/lib/repo";
-import EstimateProviderToggle, { useEstimateProvider } from "@/components/EstimateProviderToggle";
+import EstimateProviderToggle, { useEstimateProvider, useGlobalEstimateProvider } from "@/components/EstimateProviderToggle";
+import { DOMESTIC_ESTIMATE_PROVIDERS, GLOBAL_ESTIMATE_PROVIDERS } from "@/lib/estimate-provider";
 
 const GROWTH_METRICS: Array<{ key: GrowthMetric; label: string }> = [
   { key: "REVENUE", label: "매출액" },
@@ -61,7 +62,8 @@ export default function CompaniesPage() {
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(false);
   const [metric, setMetric] = useState<GrowthMetric>("REVENUE");
-  const [estimateProvider, setEstimateProvider] = useEstimateProvider();
+  const [domesticEstimateProvider, setDomesticEstimateProvider] = useEstimateProvider();
+  const [globalEstimateProvider, setGlobalEstimateProvider] = useGlobalEstimateProvider();
   const [growthByCode, setGrowthByCode] = useState<Record<string, GrowthByMetric>>({});
   // 비교 선택 — 페이지/필터가 바뀌어도 유지(코드+이름을 들고 다님)
   const [sel, setSel] = useState<{ code: string; name: string }[]>([]);
@@ -100,7 +102,8 @@ export default function CompaniesPage() {
       dir: apiDir,
       limit: String(limit),
       offset: String(page * limit),
-      provider: estimateProvider,
+      domesticProvider: domesticEstimateProvider,
+      globalProvider: globalEstimateProvider,
     });
     if (sector) sp.set("sector", sector);
     if (industry) sp.set("industry", industry);
@@ -108,7 +111,7 @@ export default function CompaniesPage() {
     const r = await fetch(`/api/companies?${sp}`);
     setData(await r.json());
     setLoading(false);
-  }, [q, market, sector, industry, apiSort, apiDir, onlyConsensus, page, estimateProvider]);
+  }, [q, market, sector, industry, apiSort, apiDir, onlyConsensus, page, domesticEstimateProvider, globalEstimateProvider]);
 
   useEffect(() => {
     const t = setTimeout(load, 200);
@@ -125,7 +128,11 @@ export default function CompaniesPage() {
 
     const controller = new AbortController();
     setGrowthByCode({});
-    const sp = new URLSearchParams({ codes: pageCodes, provider: estimateProvider });
+    const sp = new URLSearchParams({
+      codes: pageCodes,
+      domesticProvider: domesticEstimateProvider,
+      globalProvider: globalEstimateProvider,
+    });
     fetch(`/api/companies/growth?${sp.toString()}`, { signal: controller.signal })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`growth ${r.status}`))))
       .then((d) => setGrowthByCode(d.results ?? {}))
@@ -134,7 +141,7 @@ export default function CompaniesPage() {
       });
 
     return () => controller.abort();
-  }, [pageCodes, estimateProvider]);
+  }, [pageCodes, domesticEstimateProvider, globalEstimateProvider]);
 
   function clickSort(key: string, defaultDir: Dir = "desc") {
     if (sort === key) setDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -311,7 +318,18 @@ export default function CompaniesPage() {
         <span className="muted growth-hint">
           종목 옆에서 QoQ·YoY 성장률을 바로 확인
         </span>
-        <EstimateProviderToggle provider={estimateProvider} onChange={setEstimateProvider} />
+        <EstimateProviderToggle
+          provider={domesticEstimateProvider}
+          onChange={setDomesticEstimateProvider}
+          providers={DOMESTIC_ESTIMATE_PROVIDERS}
+          label="국내 추정치"
+        />
+        <EstimateProviderToggle
+          provider={globalEstimateProvider}
+          onChange={setGlobalEstimateProvider}
+          providers={GLOBAL_ESTIMATE_PROVIDERS}
+          label="해외 추정치"
+        />
       </div>
 
       <div className="scrollx">
@@ -391,8 +409,7 @@ export default function CompaniesPage() {
       </div>
       <p className="note">
         성장률 컬럼은 선택한 지표 기준입니다. QoQ는 분기 대비, YoY는 연간 대비입니다. PER 추정치는 현재가 ÷ 연간 EPS
-        컨센서스로 계산하며, 추정 EPS가 없는 연도는 - 로 표시합니다. 추정치 기준은 브라우저에 저장되고, 선택한
-        제공자에 값이 없으면 다른 제공자로 자동 보완합니다.
+        컨센서스로 계산하며, 추정 EPS가 없는 연도는 - 로 표시합니다. 추정치 기준은 국내와 해외를 나눠 브라우저에 저장합니다.
       </p>
 
       {pages > 1 && (

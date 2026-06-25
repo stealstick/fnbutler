@@ -1,6 +1,7 @@
 import { all, one, value } from "./db";
 import {
   DEFAULT_ESTIMATE_PROVIDER,
+  DEFAULT_GLOBAL_ESTIMATE_PROVIDER,
   estimateProviderOrder,
   type EstimateProvider,
 } from "./estimate-provider";
@@ -179,14 +180,38 @@ function rankedFinancialsCte(codeWhereSql: string, providerParam: string) {
      u AS (SELECT * FROM ranked WHERE rn = 1)`;
 }
 
+function rankedFinancialsByMarketCte(codeWhereSql: string, domesticProviderParam: string, globalProviderParam: string) {
+  const providerArray = companyEstimateProviderArray(domesticProviderParam, globalProviderParam);
+  return `WITH ranked AS (
+       SELECT f.corp_code, f.metric, f.raw_label, f.period_type, f.fiscal_year, f.quarter,
+              f.value, f.is_estimate, f.date_label, f.source,
+              ROW_NUMBER() OVER (
+                PARTITION BY f.corp_code, f.metric, f.period_type, f.fiscal_year, f.quarter, f.is_estimate
+                ORDER BY CASE
+                           WHEN f.is_estimate = 0 THEN ${ACTUAL_SOURCE_RANK_SQL}
+                           ELSE COALESCE(array_position(${providerArray}, f.source), 99)
+                         END,
+                         f.source
+              ) AS rn
+       FROM financials f
+       JOIN companies c ON c.corp_code = f.corp_code
+       WHERE ${codeWhereSql}
+         AND f.value IS NOT NULL
+         AND (f.is_estimate = 0 OR f.source = ANY(${providerArray}))
+     ),
+     u AS (SELECT * FROM ranked WHERE rn = 1)`;
+}
+
 export async function getCompareGrowth(
   codes: string[],
-  estimateProvider: EstimateProvider = DEFAULT_ESTIMATE_PROVIDER,
+  domesticEstimateProvider: EstimateProvider = DEFAULT_ESTIMATE_PROVIDER,
+  globalEstimateProvider: EstimateProvider = DEFAULT_GLOBAL_ESTIMATE_PROVIDER,
 ): Promise<CompareGrowthRow[]> {
   if (codes.length === 0) return [];
-  const providerParam = `$${codes.length + 1}`;
+  const domesticProviderParam = `$${codes.length + 1}`;
+  const globalProviderParam = `$${codes.length + 2}`;
   return all<CompareGrowthRow>(
-    `${rankedFinancialsCte(`f.corp_code IN (${placeholders(codes)})`, providerParam)}
+    `${rankedFinancialsByMarketCte(`f.corp_code IN (${placeholders(codes)})`, domesticProviderParam, globalProviderParam)}
      SELECT u.corp_code, u.metric, u.period_type, u.fiscal_year, u.quarter, u.value, u.is_estimate, u.source,
             CASE WHEN u.period_type = 'Q' AND pq.value <> 0
                  THEN ROUND(((u.value - pq.value) / ABS(pq.value) * 100.0)::numeric, 1)::double precision
@@ -211,7 +236,7 @@ export async function getCompareGrowth(
      AND py.fiscal_year = u.fiscal_year - 1
      AND (u.period_type = 'A' OR py.quarter = u.quarter)
      ORDER BY u.corp_code, u.metric, u.period_type, u.fiscal_year, u.quarter`,
-    [...codes, estimateProviderOrder(estimateProvider)],
+    [...codes, estimateProviderOrder(domesticEstimateProvider), estimateProviderOrder(globalEstimateProvider)],
   );
 }
 
@@ -251,7 +276,15 @@ const COMPANY_WITH_FORWARD_PER_SELECT = `
   CASE WHEN c.price IS NOT NULL AND eps_y2.value > 0 THEN ROUND((c.price / eps_y2.value)::numeric, 1)::double precision END AS forward_per_y2
 `;
 
-function companyForwardPerJoins(providerParam: string) {
+function companyEstimateProviderArray(domesticProviderParam: string, globalProviderParam: string) {
+  return `CASE
+      WHEN c.source = 'nasdaq' OR c.market IN ('NASDAQ', 'NYSE', 'AMEX') THEN ${globalProviderParam}::text[]
+      ELSE ${domesticProviderParam}::text[]
+    END`;
+}
+
+function companyForwardPerJoins(domesticProviderParam: string, globalProviderParam: string) {
+  const providerArray = companyEstimateProviderArray(domesticProviderParam, globalProviderParam);
   return `
   LEFT JOIN LATERAL (
     SELECT value
@@ -262,8 +295,8 @@ function companyForwardPerJoins(providerParam: string) {
       AND f.is_estimate = 1
       AND f.fiscal_year = EXTRACT(YEAR FROM CURRENT_DATE)::int
       AND f.value IS NOT NULL
-      AND f.source = ANY(${providerParam}::text[])
-    ORDER BY COALESCE(array_position(${providerParam}::text[], f.source), 99), f.source
+      AND f.source = ANY(${providerArray})
+    ORDER BY COALESCE(array_position(${providerArray}, f.source), 99), f.source
     LIMIT 1
   ) eps_y0 ON TRUE
   LEFT JOIN LATERAL (
@@ -275,8 +308,8 @@ function companyForwardPerJoins(providerParam: string) {
       AND f.is_estimate = 1
       AND f.fiscal_year = EXTRACT(YEAR FROM CURRENT_DATE)::int + 1
       AND f.value IS NOT NULL
-      AND f.source = ANY(${providerParam}::text[])
-    ORDER BY COALESCE(array_position(${providerParam}::text[], f.source), 99), f.source
+      AND f.source = ANY(${providerArray})
+    ORDER BY COALESCE(array_position(${providerArray}, f.source), 99), f.source
     LIMIT 1
   ) eps_y1 ON TRUE
   LEFT JOIN LATERAL (
@@ -288,8 +321,8 @@ function companyForwardPerJoins(providerParam: string) {
       AND f.is_estimate = 1
       AND f.fiscal_year = EXTRACT(YEAR FROM CURRENT_DATE)::int + 2
       AND f.value IS NOT NULL
-      AND f.source = ANY(${providerParam}::text[])
-    ORDER BY COALESCE(array_position(${providerParam}::text[], f.source), 99), f.source
+      AND f.source = ANY(${providerArray})
+    ORDER BY COALESCE(array_position(${providerArray}, f.source), 99), f.source
     LIMIT 1
   ) eps_y2 ON TRUE
 `;
@@ -306,6 +339,8 @@ export interface ListOpts {
   limit?: number;
   offset?: number;
   estimateProvider?: EstimateProvider;
+  domesticEstimateProvider?: EstimateProvider;
+  globalEstimateProvider?: EstimateProvider;
 }
 
 export async function listCompanies(opts: ListOpts = {}): Promise<{ total: number; rows: CompanyRow[] }> {
@@ -329,14 +364,16 @@ export async function listCompanies(opts: ListOpts = {}): Promise<{ total: numbe
   const dir = opts.dir === "asc" ? "ASC" : "DESC";
   const limit = Math.min(opts.limit ?? 50, 500);
   const offset = opts.offset ?? 0;
-  const providerOrder = estimateProviderOrder(opts.estimateProvider);
+  const domesticProviderOrder = estimateProviderOrder(opts.domesticEstimateProvider ?? opts.estimateProvider ?? DEFAULT_ESTIMATE_PROVIDER);
+  const globalProviderOrder = estimateProviderOrder(opts.globalEstimateProvider ?? opts.estimateProvider ?? DEFAULT_GLOBAL_ESTIMATE_PROVIDER);
 
   const total = Number(await value("SELECT COUNT(*)::int AS c FROM companies " + w, params));
-  const providerOrderParam = push(providerOrder);
+  const domesticProviderOrderParam = push(domesticProviderOrder);
+  const globalProviderOrderParam = push(globalProviderOrder);
   const rows = await all<CompanyRow>(
     `SELECT ${COMPANY_WITH_FORWARD_PER_SELECT}
      FROM companies c
-     ${companyForwardPerJoins(providerOrderParam)}
+     ${companyForwardPerJoins(domesticProviderOrderParam, globalProviderOrderParam)}
      ${w}
      ORDER BY ${col} ${dir} NULLS LAST LIMIT ${push(limit)} OFFSET ${push(offset)}`,
     params,
@@ -581,16 +618,17 @@ export async function getSectorAgg(code: string): Promise<SectorAgg | undefined>
 export async function getSectorCompanies(
   code: string,
   sort = "market_cap",
-  estimateProvider: EstimateProvider = DEFAULT_ESTIMATE_PROVIDER,
+  domesticEstimateProvider: EstimateProvider = DEFAULT_ESTIMATE_PROVIDER,
+  globalEstimateProvider: EstimateProvider = DEFAULT_GLOBAL_ESTIMATE_PROVIDER,
 ): Promise<CompanyRow[]> {
   const order = sort === "target_return_rate" ? "target_return_rate DESC" : "market_cap DESC";
   return all<CompanyRow>(
     `SELECT ${COMPANY_WITH_FORWARD_PER_SELECT}
      FROM companies c
-     ${companyForwardPerJoins("$2")}
+     ${companyForwardPerJoins("$2", "$3")}
      WHERE active = 1 AND sector_code = $1
      ORDER BY ${order} NULLS LAST`,
-    [code, estimateProviderOrder(estimateProvider)],
+    [code, estimateProviderOrder(domesticEstimateProvider), estimateProviderOrder(globalEstimateProvider)],
   );
 }
 

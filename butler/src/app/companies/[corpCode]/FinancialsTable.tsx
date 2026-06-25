@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { num, pct, signClass, metricLabel, parseDateLabel } from "@/lib/format";
 import type { GrowthRow } from "@/lib/repo";
-import EstimateProviderToggle, { useEstimateProvider } from "@/components/EstimateProviderToggle";
+import EstimateProviderToggle, { useEstimateProvider, useGlobalEstimateProvider } from "@/components/EstimateProviderToggle";
 import {
   DEFAULT_ESTIMATE_PROVIDER,
   DEFAULT_GLOBAL_ESTIMATE_PROVIDER,
@@ -32,10 +32,13 @@ export default function FinancialsTable({
   isNasdaq: boolean;
 }) {
   const [mode, setMode] = useState<"Q" | "A">("Q");
-  const [estimateProvider, setEstimateProvider] = useEstimateProvider();
+  const [domesticEstimateProvider, setDomesticEstimateProvider] = useEstimateProvider();
+  const [globalEstimateProvider, setGlobalEstimateProvider] = useGlobalEstimateProvider();
   const providers: readonly EstimateProvider[] = isNasdaq ? GLOBAL_ESTIMATE_PROVIDERS : DOMESTIC_ESTIMATE_PROVIDERS;
-  const activeEstimateProvider = providers.includes(estimateProvider)
-    ? estimateProvider
+  const selectedEstimateProvider = isNasdaq ? globalEstimateProvider : domesticEstimateProvider;
+  const setSelectedEstimateProvider = isNasdaq ? setGlobalEstimateProvider : setDomesticEstimateProvider;
+  const activeEstimateProvider = providers.includes(selectedEstimateProvider)
+    ? selectedEstimateProvider
     : isNasdaq
       ? DEFAULT_GLOBAL_ESTIMATE_PROVIDER
       : DEFAULT_ESTIMATE_PROVIDER;
@@ -104,7 +107,7 @@ export default function FinancialsTable({
       <h2>
         실적 추이 <span className="sub">단위: 억원 · 분기=QoQ · 연도=YoY · 기울임=컨센서스 추정</span>
         <span style={{ marginLeft: "auto", display: "inline-flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          <EstimateProviderToggle provider={activeEstimateProvider} onChange={setEstimateProvider} providers={providers} />
+          <EstimateProviderToggle provider={activeEstimateProvider} onChange={setSelectedEstimateProvider} providers={providers} />
           <span className="toggle">
             <button className={mode === "Q" ? "on" : ""} onClick={() => setMode("Q")}>
               분기별
