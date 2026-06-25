@@ -268,6 +268,17 @@ async function candidates(
   );
 }
 
+async function markSeekingAlphaAttempt(db: Queryable, corpCode: string, observedAt: string): Promise<void> {
+  await query(
+    `UPDATE companies
+     SET seekingalpha_estimates_at = $2,
+         updated_at = $2
+     WHERE corp_code = $1`,
+    [corpCode, observedAt],
+    db,
+  );
+}
+
 async function insertFinancial(
   db: Queryable,
   c: NasdaqCandidate,
@@ -414,6 +425,14 @@ export async function backfillSeekingAlphaNasdaqEstimates(
 
       if (mappedBatch.length === 0) {
         fail += batch.length;
+        const observedAt = nowIso();
+        for (const c of batch) {
+          try {
+            await markSeekingAlphaAttempt(db, c.corp_code, observedAt);
+          } catch (markError) {
+            log(`  seekingalpha ${c.stock_code} attempt mark failed ${(markError as Error).message}\n`);
+          }
+        }
         log(`  seekingalpha batch ${batchIndex + 1} no ticker ids for ${symbols.join(",")}\n`);
         continue;
       }
@@ -438,6 +457,14 @@ export async function backfillSeekingAlphaNasdaqEstimates(
       if (missing > 0) {
         fail += missing;
         const missingSymbols = symbols.filter((symbol) => !idBySymbol.has(symbol));
+        const observedAt = nowIso();
+        for (const c of batch.filter((candidate) => !idBySymbol.has(candidate.stock_code.toUpperCase()))) {
+          try {
+            await markSeekingAlphaAttempt(db, c.corp_code, observedAt);
+          } catch (markError) {
+            log(`  seekingalpha ${c.stock_code} attempt mark failed ${(markError as Error).message}\n`);
+          }
+        }
         log(`  seekingalpha missing ticker ids: ${missingSymbols.join(",")}\n`);
       }
     } catch (e) {
@@ -447,6 +474,14 @@ export async function backfillSeekingAlphaNasdaqEstimates(
         break;
       }
       fail += batch.length;
+      const observedAt = nowIso();
+      for (const c of batch) {
+        try {
+          await markSeekingAlphaAttempt(db, c.corp_code, observedAt);
+        } catch (markError) {
+          log(`  seekingalpha ${c.stock_code} attempt mark failed ${(markError as Error).message}\n`);
+        }
+      }
       log(`  seekingalpha batch ${batchIndex + 1} ERROR ${(e as Error).message}\n`);
     } finally {
       if (callDelayMs > 0) await sleep(callDelayMs);

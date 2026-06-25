@@ -154,6 +154,17 @@ async function candidates(
   );
 }
 
+async function markFmpEstimateAttempt(db: Queryable, corpCode: string, observedAt: string): Promise<void> {
+  await query(
+    `UPDATE companies
+     SET fmp_estimates_at = $2,
+         updated_at = $2
+     WHERE corp_code = $1`,
+    [corpCode, observedAt],
+    db,
+  );
+}
+
 async function upsertEstimateRows(
   db: Queryable,
   corpCode: string,
@@ -353,6 +364,11 @@ export async function backfillFmpNasdaqEstimates(
       log(`  estimates [${i + 1}/${estimateTargets.length}] ${c.stock_code} ok\n`);
     } catch (e) {
       estimateFail++;
+      try {
+        await markFmpEstimateAttempt(db, c.corp_code, nowIso());
+      } catch (markError) {
+        log(`  estimates [${i + 1}/${estimateTargets.length}] ${c.stock_code} attempt mark failed ${(markError as Error).message}\n`);
+      }
       log(`  estimates [${i + 1}/${estimateTargets.length}] ${c.stock_code} ERROR ${(e as Error).message}\n`);
     } finally {
       usedEstimateCalls++;
