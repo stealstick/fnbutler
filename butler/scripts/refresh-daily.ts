@@ -36,6 +36,7 @@ import { backfillDartFinancials } from "./backfill-dart-financials";
 import { backfillFnGuideEstimates } from "./backfill-fnguide-estimates";
 import { backfillConsensusSummaries } from "./backfill-summaries";
 import { backfillWiseReportEstimates } from "./backfill-wisereport-estimates";
+import { skipIfSchedulerDisabled } from "../src/lib/scheduler-control";
 
 const has = (f: string) => process.argv.includes(`--${f}`);
 const argOf = (f: string) => {
@@ -61,6 +62,8 @@ async function main() {
   const today = runStart.slice(0, 10);
   const scope = argOf("scope") ?? "all";
   const calendarOnly = has("calendar-only");
+  const schedulerJobId = calendarOnly ? "fnbutler-calendar-weekly" : "fnbutler-refresh-weekdays";
+  if (await skipIfSchedulerDisabled(schedulerJobId, calendarOnly ? "캘린더 전용 갱신" : "일일 갱신", db)) return;
 
   let nasdaqMsg = "skip";
   if (!calendarOnly && !has("no-nasdaq")) {

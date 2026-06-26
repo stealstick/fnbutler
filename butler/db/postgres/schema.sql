@@ -250,6 +250,13 @@ CREATE TABLE IF NOT EXISTS ingest_runs (
     note        TEXT
 );
 
+CREATE TABLE IF NOT EXISTS scheduler_controls (
+    job_id     TEXT PRIMARY KEY,
+    enabled    INTEGER NOT NULL DEFAULT 1,
+    updated_at TEXT NOT NULL,
+    updated_by TEXT
+);
+
 CREATE TABLE IF NOT EXISTS provider_sessions (
     provider     TEXT NOT NULL,
     session_key  TEXT NOT NULL,

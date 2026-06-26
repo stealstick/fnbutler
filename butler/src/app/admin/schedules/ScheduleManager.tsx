@@ -9,8 +9,8 @@ export default function ScheduleManager({ initialData }: { initialData: Schedule
   const [err, setErr] = useState<string | null>(null);
 
   const totals = useMemo(() => {
-    const enabled = data.jobs.filter((job) => job.state === "ENABLED").length;
-    const paused = data.jobs.filter((job) => job.state === "PAUSED").length;
+    const enabled = data.jobs.filter((job) => job.controlEnabled).length;
+    const paused = data.jobs.filter((job) => !job.controlEnabled).length;
     const blocked = data.jobs.filter((job) => job.error).length;
     return { enabled, paused, blocked, total: data.jobs.length };
   }, [data.jobs]);
@@ -41,6 +41,9 @@ export default function ScheduleManager({ initialData }: { initialData: Schedule
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "스케줄 변경 실패");
+      if (json.cloudError) {
+        setErr(`웹 스위치는 반영됐지만 Cloud Scheduler 상태 변경은 실패했습니다: ${json.cloudError}`);
+      }
       setData(json.dashboard);
     } catch (error) {
       setErr(error instanceof Error ? error.message : String(error));
@@ -91,19 +94,19 @@ export default function ScheduleManager({ initialData }: { initialData: Schedule
 
             <div className="schedule-controls">
               <button
-                className={`schedule-switch ${job.state === "ENABLED" ? "on" : ""}`}
+                className={`schedule-switch ${job.controlEnabled ? "on" : ""}`}
                 type="button"
-                aria-pressed={job.state === "ENABLED"}
-                disabled={busy !== null || job.state === "UNKNOWN" || job.state === "DISABLED"}
-                onClick={() => act(job, job.state === "ENABLED" ? "pause" : "resume")}
+                aria-pressed={job.controlEnabled}
+                disabled={busy !== null}
+                onClick={() => act(job, job.controlEnabled ? "pause" : "resume")}
               >
                 <span className="knob" />
-                <span>{job.state === "ENABLED" ? "ON" : "OFF"}</span>
+                <span>{job.controlEnabled ? "ON" : "OFF"}</span>
               </button>
               <button
                 className="btn ghost"
                 type="button"
-                disabled={busy !== null || Boolean(job.error)}
+                disabled={busy !== null || Boolean(job.error) || !job.controlEnabled}
                 onClick={() => act(job, "run")}
               >
                 지금 실행
@@ -112,7 +115,9 @@ export default function ScheduleManager({ initialData }: { initialData: Schedule
 
             <div className="schedule-meta">
               <Meta label="주기" value={job.cadence} />
+              <Meta label="웹 스위치" value={job.controlEnabled ? "ON" : `OFF · ${fmt(job.controlUpdatedAt)}`} />
               <Meta label="Cron" value={job.schedule} mono />
+              <Meta label="Scheduler" value={job.state} mono />
               <Meta label="대상" value={job.targetJob} mono />
               <Meta label="명령" value={job.command} mono />
               <Meta label="예산" value={job.runBudget} />
@@ -147,6 +152,7 @@ function Meta({ label, value, mono = false }: { label: string; value: string | n
 }
 
 function stateLabel(job: ManagedScheduleJob): string {
+  if (!job.controlEnabled) return "OFF";
   if (job.error) return "확인 필요";
   if (job.state === "ENABLED") return "ON";
   if (job.state === "PAUSED") return "OFF";
@@ -156,6 +162,7 @@ function stateLabel(job: ManagedScheduleJob): string {
 }
 
 function stateTone(job: ManagedScheduleJob): string {
+  if (!job.controlEnabled) return "paused";
   if (job.error || job.state === "UPDATE_FAILED") return "bad";
   if (job.state === "ENABLED") return "good";
   if (job.state === "PAUSED") return "paused";

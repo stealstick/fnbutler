@@ -115,9 +115,11 @@ GitHub의 `.github/workflows/refresh.yml` 은 같은 Job들을 수동 실행하�
 스케줄 트리거는 없으며, DB 파일을 내려받거나 이미지를 다시 굽지 않는다.
 
 관리자 웹 UI `/admin/schedules` 에서 운영 Cloud Scheduler Job을 볼 수 있고, 각 Job을
-일시중지/재개/즉시실행할 수 있다. 이 기능은 Cloud Run 런타임 서비스 계정
-`fnbutler-runner`가 `roles/cloudscheduler.admin` 권한을 가져야 동작한다. 배포 workflow와
-bootstrap 스크립트는 이 권한을 best-effort로 부여한다.
+ON/OFF/즉시실행할 수 있다. ON/OFF는 Postgres `scheduler_controls`에 저장되며, OFF 상태인
+Job은 Cloud Scheduler가 Cloud Run을 호출해도 스크립트 시작 지점에서 즉시 종료한다. Cloud Run
+런타임 서비스 계정 `fnbutler-runner`가 `roles/cloudscheduler.admin` 권한을 가지면 UI가
+Cloud Scheduler pause/resume/run도 함께 시도한다. 배포 workflow와 bootstrap 스크립트는 이
+권한을 best-effort로 부여한다.
 
 FMP 무료 플랜은 250 calls/day 기준이다. 일일 Job은 기본적으로 `FMP_DAILY_CALL_BUDGET=240`만 쓰고
 `FMP_CALL_DELAY_MS=2500`으로 천천히 호출해 분당 rate limit도 피한다.

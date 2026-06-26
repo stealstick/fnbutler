@@ -8,6 +8,7 @@
  */
 import { backfillCompanyNews } from "../src/lib/news";
 import { closeDb, getDb, migrate, nowIso, query } from "../src/lib/db";
+import { skipIfSchedulerDisabled } from "../src/lib/scheduler-control";
 
 const has = (f: string) => process.argv.includes(`--${f}`);
 const argOf = (f: string) => {
@@ -33,6 +34,7 @@ async function main() {
   const db = getDb();
   await migrate(db);
   const started = nowIso();
+  if (await skipIfSchedulerDisabled("fnbutler-news-refresh-2h", "기업 뉴스 백필", db)) return;
   const corpCode = argOf("corp") || argOf("corp-code");
   const force = has("force") || !!corpCode;
   const summary = await backfillCompanyNews(db, {

@@ -1,3 +1,5 @@
+import { getSchedulerControlMap, setSchedulerControl } from "./scheduler-control";
+
 export const SCHEDULER_PROJECT =
   process.env.SCHEDULER_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || process.env.GCP_PROJECT || "protein-test-469413";
 export const SCHEDULER_LOCATION = process.env.SCHEDULER_LOCATION || process.env.REGION || "asia-northeast3";
@@ -69,6 +71,9 @@ export type SchedulerAction = "pause" | "resume" | "run";
 export interface ManagedScheduleJob extends ManagedScheduleDefinition {
   fullName: string;
   state: string;
+  controlEnabled: boolean;
+  controlUpdatedAt: string | null;
+  controlUpdatedBy: string | null;
   schedule: string;
   timeZone: string;
   nextRunAt: string | null;
@@ -112,6 +117,7 @@ export function isManagedScheduleId(id: string): id is ManagedScheduleId {
 
 export async function getSchedulerDashboard(): Promise<SchedulerDashboard> {
   const checkedAt = new Date().toISOString();
+  const controls = await getSchedulerControlMap();
   const tokenResult = await getCloudAccessToken().then(
     (token) => ({ token, error: null as string | null }),
     (error: unknown) => ({ token: null as string | null, error: errorMessage(error) }),
@@ -124,13 +130,15 @@ export async function getSchedulerDashboard(): Promise<SchedulerDashboard> {
       checkedAt,
       manageable: false,
       accessError: tokenResult.error,
-      jobs: MANAGED_SCHEDULES.map((definition) => emptyJob(definition, tokenResult.error)),
+      jobs: MANAGED_SCHEDULES.map((definition) => emptyJob(definition, tokenResult.error, controls)),
     };
   }
 
   const jobs = await Promise.all(
     MANAGED_SCHEDULES.map((definition) =>
-      readSchedulerJob(definition, tokenResult.token!).catch((error: unknown) => emptyJob(definition, errorMessage(error))),
+      readSchedulerJob(definition, tokenResult.token!, controls).catch((error: unknown) =>
+        emptyJob(definition, errorMessage(error), controls),
+      ),
     ),
   );
 
@@ -144,22 +152,34 @@ export async function getSchedulerDashboard(): Promise<SchedulerDashboard> {
   };
 }
 
-export async function mutateSchedulerJob(id: ManagedScheduleId, action: SchedulerAction): Promise<ManagedScheduleJob> {
-  const definition = getManagedScheduleDefinition(id);
-  if (!definition) throw new Error(`관리 대상 스케줄이 아닙니다: ${id}`);
+export async function setSchedulerJobControl(id: ManagedScheduleId, enabled: boolean, updatedBy: string | null): Promise<void> {
+  await setSchedulerControl(id, enabled, updatedBy);
+}
+
+export async function mutateCloudSchedulerJob(id: ManagedScheduleId, action: SchedulerAction): Promise<void> {
+  if (!getManagedScheduleDefinition(id)) throw new Error(`관리 대상 스케줄이 아닙니다: ${id}`);
 
   const token = await getCloudAccessToken();
   const path = `${jobResourcePath(id)}:${action}`;
   await schedulerFetch(path, token, { method: "POST", body: "{}" });
-  return readSchedulerJob(definition, token);
 }
 
-async function readSchedulerJob(definition: ManagedScheduleDefinition, token: string): Promise<ManagedScheduleJob> {
+type ControlMap = Map<string, { enabled: number; updated_at: string; updated_by: string | null }>;
+
+async function readSchedulerJob(
+  definition: ManagedScheduleDefinition,
+  token: string,
+  controls: ControlMap,
+): Promise<ManagedScheduleJob> {
   const job = await schedulerFetch<CloudSchedulerJob>(jobResourcePath(definition.id), token);
+  const control = controls.get(definition.id);
   return {
     ...definition,
     fullName: job.name || jobFullName(definition.id),
     state: job.state || "UNKNOWN",
+    controlEnabled: control ? Number(control.enabled) === 1 : true,
+    controlUpdatedAt: control?.updated_at || null,
+    controlUpdatedBy: control?.updated_by || null,
     schedule: job.schedule || definition.cron,
     timeZone: job.timeZone || "Asia/Seoul",
     nextRunAt: job.scheduleTime || null,
@@ -170,11 +190,15 @@ async function readSchedulerJob(definition: ManagedScheduleDefinition, token: st
   };
 }
 
-function emptyJob(definition: ManagedScheduleDefinition, error: string | null): ManagedScheduleJob {
+function emptyJob(definition: ManagedScheduleDefinition, error: string | null, controls: ControlMap): ManagedScheduleJob {
+  const control = controls.get(definition.id);
   return {
     ...definition,
     fullName: jobFullName(definition.id),
     state: "UNKNOWN",
+    controlEnabled: control ? Number(control.enabled) === 1 : true,
+    controlUpdatedAt: control?.updated_at || null,
+    controlUpdatedBy: control?.updated_by || null,
     schedule: definition.cron,
     timeZone: "Asia/Seoul",
     nextRunAt: null,

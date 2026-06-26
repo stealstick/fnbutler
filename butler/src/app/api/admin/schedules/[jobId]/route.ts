@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ensureConfiguredAdminUser, getSessionUser, isAdminUser, SESSION_COOKIE } from "@/lib/auth";
-import { getSchedulerDashboard, isManagedScheduleId, mutateSchedulerJob, type SchedulerAction } from "@/lib/cloud-scheduler";
+import {
+  getSchedulerDashboard,
+  isManagedScheduleId,
+  mutateCloudSchedulerJob,
+  setSchedulerJobControl,
+  type SchedulerAction,
+} from "@/lib/cloud-scheduler";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -23,8 +29,17 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ jobId: str
   }
 
   try {
-    const job = await mutateSchedulerJob(jobId, action);
-    return NextResponse.json({ ok: true, job, dashboard: await getSchedulerDashboard() });
+    let cloudError: string | null = null;
+    if (action === "pause" || action === "resume") {
+      await setSchedulerJobControl(jobId, action === "resume", user.email);
+      await mutateCloudSchedulerJob(jobId, action).catch((error: unknown) => {
+        cloudError = error instanceof Error ? error.message : String(error);
+      });
+      return NextResponse.json({ ok: true, cloudError, dashboard: await getSchedulerDashboard() });
+    }
+
+    await mutateCloudSchedulerJob(jobId, action);
+    return NextResponse.json({ ok: true, dashboard: await getSchedulerDashboard() });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return NextResponse.json({ error: message }, { status: 500 });

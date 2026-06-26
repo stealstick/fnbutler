@@ -8,6 +8,7 @@
  */
 import { backfillStockAnalysisNasdaqEstimates } from "../src/lib/stockanalysis";
 import { closeDb, getDb, migrate, nowIso, query } from "../src/lib/db";
+import { skipIfSchedulerDisabled } from "../src/lib/scheduler-control";
 
 const has = (f: string) => process.argv.includes(`--${f}`);
 const argOf = (f: string) => {
@@ -19,6 +20,7 @@ async function main() {
   const db = getDb();
   await migrate(db);
   const started = nowIso();
+  if (await skipIfSchedulerDisabled("fnbutler-stockanalysis-backfill-6h", "StockAnalysis NASDAQ 백필", db)) return;
   const summary = await backfillStockAnalysisNasdaqEstimates(db, {
     limit: Number(argOf("limit") || process.env.STOCKANALYSIS_NASDAQ_LIMIT || "12"),
     corpCode: argOf("corp"),

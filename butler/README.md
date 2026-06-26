@@ -11,7 +11,7 @@
 - **기업**: 증권사별 목표주가, 분기/연간 재무, PER/PBR, 변경 이력, AI 요약
 - **관심목록/알림**: 목표주가 변경 시 텔레그램 알림
 - **일일 갱신**: Postgres에 직접 증분·멱등 업데이트. DB 파일 업로드/재배포 없음
-- **운영 스케줄 관리**: `/admin/schedules`에서 Cloud Scheduler Job을 조회하고 개별 ON/OFF·즉시실행
+- **운영 스케줄 관리**: `/admin/schedules`에서 Cloud Scheduler Job을 조회하고 개별 ON/OFF·즉시실행. OFF 상태는 DB에 저장되어 배치 시작 시 즉시 스킵된다.
 
 ## 빠른 시작
 
@@ -144,6 +144,7 @@ src/lib/ingest.ts           async upsert + 변경 감지
 - `company_news`: 기업별 최신 뉴스 캐시. 국내는 `naver`, 미국 상장기업은 `stockanalysis` provider로 저장
 - `users`, `sessions`, `watchlist`, `notifications`: Postgres 유저 저장소
 - `calendar_events`, `calendar_prefs`: Postgres 캘린더 저장소
+- `scheduler_controls`: 관리자 UI에서 제어하는 운영 스케줄 ON/OFF 상태
 
 운영/로컬 모두 Postgres를 단일 저장소로 쓴다. 캘린더는 크론/수동 refresh로
 `calendar_events`를 전량 교체하므로 중복 없이 재생성된다.
