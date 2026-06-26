@@ -19,6 +19,9 @@ export default async function AdminPage() {
       <div className="panel">
         <h2>
           관리자 <span className="sub">회사 조회 히스토리 · 브라우저 UUID 기준 사용자 관심도</span>
+          <Link href="/admin/schedules" className="btn ghost panel-title-action">
+            운영 스케줄
+          </Link>
         </h2>
         <div className="stat-row">
           <Stat n={data.totals.views} l="전체 조회" />

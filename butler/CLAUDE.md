@@ -9,6 +9,7 @@ keystone 는 `butler.works` 데이터를 자체 정규화 DB로 모아 기업/�
 - 런타임은 **Cloud Run + Cloud SQL(Postgres)** 이다.
 - 일일 갱신은 **Cloud Scheduler -> Cloud Run Job -> Postgres 직접 업데이트** 흐름이다.
 - 기업 뉴스는 별도 **Cloud Scheduler -> `fnbutler-news-refresh` Job** 으로 회전 수집한다.
+- 운영 스케줄은 `/admin/schedules`에서 조회·일시중지·재개·즉시실행할 수 있다. 런타임 서비스 계정에는 `roles/cloudscheduler.admin`이 필요하다.
 - 운영 스케줄의 source of truth는 `docs/SCHEDULES.md` 다.
 - 스케줄/cron 변경 시 `.github/workflows/deploy.yml`, `scripts/gcloud-postgres-bootstrap.sh`,
   `docs/SCHEDULES.md`, `DEPLOYMENT.md`, `CLAUDE.md`, 루트 `AGENTS.md` 를 같이 맞춘다.

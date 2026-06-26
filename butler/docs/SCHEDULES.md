@@ -21,6 +21,9 @@ Notes:
   day, not weekdays only.
 - All schedules use `Asia/Seoul`.
 - The deploy workflow creates or updates these Cloud Scheduler jobs.
+- `/admin/schedules` shows these jobs in the web UI and lets an admin pause,
+  resume, or run each job. The Cloud Run runtime service account needs
+  `roles/cloudscheduler.admin` for those controls.
 - `scripts/gcloud-postgres-bootstrap.sh` mirrors the same schedule definitions
   for one-shot stack bootstrap. Keep it in sync with `.github/workflows/deploy.yml`.
 - If `NAVER_CLIENT_ID`/`NAVER_CLIENT_SECRET` are absent, Korean company news is

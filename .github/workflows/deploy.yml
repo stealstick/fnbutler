@@ -91,6 +91,19 @@ jobs:
           fi
           echo "Seeking Alpha Nasdaq estimates use public JSON by default; optional SEEKING_ALPHA_COOKIE Secret Manager secret is only needed if Cloud Run gets blocked."
 
+      - name: Ensure runtime scheduler management role
+        run: |
+          set +e
+          gcloud projects add-iam-policy-binding "$PROJECT" \
+            --member "serviceAccount:${RUN_SA}@${PROJECT}.iam.gserviceaccount.com" \
+            --role roles/cloudscheduler.admin \
+            --quiet >/dev/null
+          IAM_STATUS=$?
+          set -e
+          if [ "$IAM_STATUS" -ne 0 ]; then
+            echo "::warning::Could not grant roles/cloudscheduler.admin to ${RUN_SA}; /admin/schedules will be read-only or unavailable until the runtime service account can manage Cloud Scheduler."
+          fi
+
       - name: Build & push images
         run: |
           APP_IMG="${REGION}-docker.pkg.dev/${PROJECT}/cloud-run-source-deploy/${SERVICE}:${GITHUB_SHA::12}"

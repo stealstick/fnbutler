@@ -11,6 +11,7 @@
 - **기업**: 증권사별 목표주가, 분기/연간 재무, PER/PBR, 변경 이력, AI 요약
 - **관심목록/알림**: 목표주가 변경 시 텔레그램 알림
 - **일일 갱신**: Postgres에 직접 증분·멱등 업데이트. DB 파일 업로드/재배포 없음
+- **운영 스케줄 관리**: `/admin/schedules`에서 Cloud Scheduler Job을 조회하고 개별 ON/OFF·즉시실행
 
 ## 빠른 시작
 
@@ -127,6 +128,8 @@ src/lib/ingest.ts           async upsert + 변경 감지
 | `COMPANY_NEWS_DISPLAY` | 기업당 저장 후보 기사 수(기본 8) |
 | `COMPANY_NEWS_STALE_HOURS` | 재수집 간격 기준 시간(기본 2) |
 | `COMPANY_NEWS_CALL_DELAY_MS` | 뉴스 수집 호출 간격(기본 500ms) |
+| `SCHEDULER_PROJECT` / `SCHEDULER_LOCATION` | `/admin/schedules` Cloud Scheduler 관리 대상(기본 운영 project/region) |
+| `CLOUD_SCHEDULER_ACCESS_TOKEN` | 로컬에서 `/admin/schedules`를 테스트할 때 선택적으로 쓰는 OAuth access token |
 
 ## 데이터 모델
 

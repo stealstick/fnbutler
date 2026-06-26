@@ -64,7 +64,7 @@ echo "==> Ensuring service account"
 if ! gcloud iam service-accounts describe "$SA_EMAIL" --project "$PROJECT" >/dev/null 2>&1; then
   gcloud iam service-accounts create "$SA_NAME" --display-name "FnButler runtime" --project "$PROJECT"
 fi
-for role in roles/cloudsql.client roles/run.developer roles/run.invoker roles/iam.serviceAccountUser roles/secretmanager.secretAccessor; do
+for role in roles/cloudsql.client roles/run.developer roles/run.invoker roles/iam.serviceAccountUser roles/secretmanager.secretAccessor roles/cloudscheduler.admin; do
   gcloud projects add-iam-policy-binding "$PROJECT" \
     --member "serviceAccount:${SA_EMAIL}" \
     --role "$role" \
