@@ -143,10 +143,10 @@ Yahoo 실패 시 운영 플랜:
 
 StockAnalysis 미국 상장기업 백필은 공식 API가 아닌 공개 페이지 기반이므로 별도 Cloud Run Job
 `fnbutler-stockanalysis-backfill`로 분리해서 천천히 회전한다. 운영 기본값은
-`STOCKANALYSIS_NASDAQ_LIMIT=20`, `STOCKANALYSIS_CALL_DELAY_MS=7000`,
+`STOCKANALYSIS_NASDAQ_LIMIT=45`, `STOCKANALYSIS_CALL_DELAY_MS=7000`,
 `STOCKANALYSIS_JITTER_MS=3000`, `STOCKANALYSIS_BROKER_TARGETS=1`이며,
 Cloud Scheduler가 02:10/08:10/14:10/20:10 KST에 실행한다.
-하루 약 80종목만 요청하므로 미국 상장기업 유니버스는 오래된 순서로 천천히 채워지고, 이미 처리한 종목은
+하루 약 180종목을 요청하므로 현재 미국 상장기업 유니버스는 약 7일 안에 한 바퀴 회전한다. 이미 처리한 종목은
 `stockanalysis_estimates_at`이 갱신되어 오래된 순서로 자연스럽게 다음 회차로 밀린다.
 일일 refresh Job은 `--no-stockanalysis-nasdaq-estimates`로 실행해 중복 호출을 피한다.
 

@@ -76,6 +76,7 @@ npm run postgres:import:cloud
 - `ingestNewReports`: 피드 최신순으로 읽다가 이미 가진 `report_id` 를 만나면 중단한다.
 - `refreshCompanyQuote`: 실제 값이 바뀐 경우에만 UPDATE 한다.
 - `backfill-company-news`: 국내 기업은 네이버 뉴스 API, 미국 상장기업은 StockAnalysis 기사 피드로 최신 뉴스를 회전 저장한다.
+- `fnbutler-stockanalysis-backfill`: 일일 refresh와 분리된 Cloud Run Job으로 02:10/08:10/14:10/20:10 KST에 돌며, 기본 45 symbols/run으로 현재 미국 상장기업 유니버스를 약 7일 안에 한 바퀴 회전한다.
 - `backfill:changes`: 원본 리포트일 기준으로 변경 로그를 재생성한다.
 - `import:har`: 로그인 HAR로 공개 API에서 마스킹되는 최신 재무를 보강한다.
 
