@@ -14,6 +14,10 @@ export default function ScheduleManager({ initialData }: { initialData: Schedule
     const blocked = data.jobs.filter((job) => job.error).length;
     return { enabled, paused, blocked, total: data.jobs.length };
   }, [data.jobs]);
+  const sharedJobError =
+    data.accessError && data.jobs.length > 0 && data.jobs.every((job) => job.error === data.accessError)
+      ? data.accessError
+      : null;
 
   async function refresh() {
     setErr(null);
@@ -74,7 +78,12 @@ export default function ScheduleManager({ initialData }: { initialData: Schedule
           <Stat n={totals.paused} l="OFF" />
           <Stat n={totals.blocked} l="확인 필요" />
         </div>
-        {data.accessError ? <div className="schedule-alert down">{data.accessError}</div> : null}
+        {data.accessError ? (
+          <div className="schedule-alert down">
+            <strong>Cloud Scheduler 권한 확인 필요</strong>
+            <div>{data.accessError}</div>
+          </div>
+        ) : null}
         {err ? <div className="schedule-alert down">{err}</div> : null}
       </div>
 
@@ -125,7 +134,7 @@ export default function ScheduleManager({ initialData }: { initialData: Schedule
               <Meta label="최근 시도" value={fmt(job.lastAttemptAt)} mono />
             </div>
 
-            {job.error ? <div className="schedule-job-error">{job.error}</div> : null}
+            {job.error && job.error !== sharedJobError ? <div className="schedule-job-error">{job.error}</div> : null}
           </section>
         ))}
       </div>

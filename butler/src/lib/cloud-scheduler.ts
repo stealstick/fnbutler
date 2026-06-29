@@ -3,6 +3,10 @@ import { getSchedulerControlMap, setSchedulerControl } from "./scheduler-control
 export const SCHEDULER_PROJECT =
   process.env.SCHEDULER_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || process.env.GCP_PROJECT || "protein-test-469413";
 export const SCHEDULER_LOCATION = process.env.SCHEDULER_LOCATION || process.env.REGION || "asia-northeast3";
+export const SCHEDULER_RUNTIME_SERVICE_ACCOUNT =
+  process.env.SCHEDULER_RUNTIME_SERVICE_ACCOUNT ||
+  process.env.RUN_SERVICE_ACCOUNT ||
+  `fnbutler-runner@${SCHEDULER_PROJECT}.iam.gserviceaccount.com`;
 
 const SCHEDULER_BASE = "https://cloudscheduler.googleapis.com/v1";
 
@@ -137,17 +141,21 @@ export async function getSchedulerDashboard(): Promise<SchedulerDashboard> {
   const jobs = await Promise.all(
     MANAGED_SCHEDULES.map((definition) =>
       readSchedulerJob(definition, tokenResult.token!, controls).catch((error: unknown) =>
-        emptyJob(definition, errorMessage(error), controls),
+        emptyJob(definition, formatSchedulerError(error), controls),
       ),
     ),
   );
+  const sharedAccessError =
+    jobs.length > 0 && jobs.every((job) => job.error)
+      ? uniqueNonEmpty(jobs.map((job) => job.error))[0] || "Cloud Scheduler 상태를 확인할 수 없습니다."
+      : null;
 
   return {
     project: SCHEDULER_PROJECT,
     location: SCHEDULER_LOCATION,
     checkedAt,
     manageable: jobs.some((job) => !job.error),
-    accessError: null,
+    accessError: sharedAccessError,
     jobs,
   };
 }
@@ -221,7 +229,7 @@ async function schedulerFetch<T = unknown>(path: string, token: string, init: Re
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`Cloud Scheduler ${res.status}: ${body || res.statusText}`);
+    throw new Error(formatSchedulerErrorText(`Cloud Scheduler ${res.status}: ${body || res.statusText}`));
   }
   return (await res.json()) as T;
 }
@@ -251,4 +259,30 @@ function jobFullName(id: string): string {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+export function formatSchedulerError(error: unknown): string {
+  return formatSchedulerErrorText(errorMessage(error));
+}
+
+function formatSchedulerErrorText(message: string): string {
+  if (message.includes("PERMISSION_DENIED") || message.includes("lacks IAM permission") || message.includes("Cloud Scheduler 403")) {
+    const needsRead = message.includes("cloudscheduler.jobs.get");
+    const needsWrite =
+      message.includes("cloudscheduler.jobs.pause") ||
+      message.includes("cloudscheduler.jobs.resume") ||
+      message.includes("cloudscheduler.jobs.run");
+    if (needsRead) {
+      return `Cloud Scheduler 조회 권한이 없습니다. ${SCHEDULER_RUNTIME_SERVICE_ACCOUNT}에 roles/cloudscheduler.admin 권한이 필요합니다. 웹 ON/OFF 스위치는 DB에 저장되어 계속 동작하지만 Scheduler 상태, 다음 실행, 최근 시도, 즉시 실행은 권한 부여 전까지 제한됩니다.`;
+    }
+    if (needsWrite) {
+      return `Cloud Scheduler 실행/일시정지 권한이 없습니다. ${SCHEDULER_RUNTIME_SERVICE_ACCOUNT}에 roles/cloudscheduler.admin 권한이 필요합니다. 웹 ON/OFF 스위치는 DB에는 반영됩니다.`;
+    }
+    return `Cloud Scheduler 접근 권한이 없습니다. ${SCHEDULER_RUNTIME_SERVICE_ACCOUNT}에 roles/cloudscheduler.admin 권한을 부여해야 웹에서 Scheduler 상태를 조회하고 제어할 수 있습니다.`;
+  }
+  return message;
+}
+
+function uniqueNonEmpty(values: Array<string | null>): string[] {
+  return Array.from(new Set(values.filter((value): value is string => Boolean(value))));
 }

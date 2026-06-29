@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ensureConfiguredAdminUser, getSessionUser, isAdminUser, SESSION_COOKIE } from "@/lib/auth";
 import {
+  formatSchedulerError,
   getSchedulerDashboard,
   isManagedScheduleId,
   mutateCloudSchedulerJob,
@@ -33,7 +34,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ jobId: str
     if (action === "pause" || action === "resume") {
       await setSchedulerJobControl(jobId, action === "resume", user.email);
       await mutateCloudSchedulerJob(jobId, action).catch((error: unknown) => {
-        cloudError = error instanceof Error ? error.message : String(error);
+        cloudError = formatSchedulerError(error);
       });
       return NextResponse.json({ ok: true, cloudError, dashboard: await getSchedulerDashboard() });
     }
@@ -41,7 +42,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ jobId: str
     await mutateCloudSchedulerJob(jobId, action);
     return NextResponse.json({ ok: true, dashboard: await getSchedulerDashboard() });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = formatSchedulerError(error);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
