@@ -24,7 +24,7 @@
  *  - Postgres가 영속 저장소이므로 GCS DB 업로드/이미지 재배포는 하지 않는다.
  */
 import { all, closeDb, getDb, migrate, nowIso, query } from "../src/lib/db";
-import { ingestNewReports, refreshCompanyQuote } from "../src/lib/ingest";
+import { fillTargetMonthlyConsensus, ingestNewReports, refreshCompanyQuote } from "../src/lib/ingest";
 import { recordDailySnapshot, dispatchAlerts } from "../src/lib/poll";
 import { ingestCalendar } from "../src/lib/calendar";
 import { ingestNasdaqTopCompanies } from "../src/lib/nasdaq";
@@ -113,6 +113,7 @@ async function main() {
     try {
       const nr = await ingestNewReports(db, cc);
       const q = await refreshCompanyQuote(db, cc);
+      await fillTargetMonthlyConsensus(db, cc);
       await recordDailySnapshot(db, cc, today);
       newReports += nr;
       if (q === "updated") quoteUpdated++;

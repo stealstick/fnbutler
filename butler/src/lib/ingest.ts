@@ -203,6 +203,7 @@ export async function ingestDetail(
   }
 
   const reports = await ingestConsensusReports(db, corpCode, feedPages);
+  await fillTargetMonthlyConsensus(db, corpCode);
 
   await query(
     "UPDATE companies SET detail_ingested_at = $1, has_consensus = $2, updated_at = $3 WHERE corp_code = $4",
@@ -335,6 +336,61 @@ export async function upsertTargetPriceMonthly(
       db,
     );
   }
+}
+
+/**
+ * butler 월별 목표가 차트는 최근 몇 달의 월말 주가(price)는 주지만 컨센서스
+ * 목표가 평균/고저(tp_avg/min/max)는 비워서 보낸다. 그래서 "월별 목표가 추이"
+ * 평균선이 최근 달에서 끊긴다. 우리가 자체 보유한 consensus_reports 로 그 빈 달을
+ * 각 월말 기준 활성 커버리지(증권사별 최신 목표가, 12개월 이내)로 다시 채운다.
+ *
+ * - butler 가 채운 달(source='butler', tp_avg NOT NULL)은 건드리지 않는다.
+ * - 우리가 채운 달(source='consensus-fill')은 새 리포트가 들어오면 매번 갱신한다.
+ * - 활성 증권사가 3곳 미만인 달은 노이즈라 비워둔다.
+ */
+export async function fillTargetMonthlyConsensus(db: Queryable, corpCode: string): Promise<number> {
+  const res = await query(
+    `WITH gap AS (
+       SELECT month,
+         (to_date('20' || substr(month, 1, 2) || substr(month, 4, 2) || '01', 'YYYYMMDD')
+            + interval '1 month' - interval '1 day')::date AS mend
+       FROM target_price_monthly
+       WHERE corp_code = $1
+         AND price IS NOT NULL
+         AND (tp_avg IS NULL OR source = 'consensus-fill')
+     ),
+     calc AS (
+       SELECT g.month,
+         ROUND(AVG(lt.target_price)::numeric)::double precision AS avg,
+         MIN(lt.target_price) AS min,
+         MAX(lt.target_price) AS max,
+         COUNT(*)::int AS cnt
+       FROM gap g
+       JOIN LATERAL (
+         SELECT DISTINCT ON (r.broker_id) r.broker_id, r.target_price
+         FROM consensus_reports r
+         WHERE r.corp_code = $1
+           AND r.target_price IS NOT NULL
+           AND r.report_date::date <= g.mend
+           AND r.report_date::date > g.mend - interval '12 months'
+         ORDER BY r.broker_id, r.report_date::date DESC, r.report_id DESC
+       ) lt ON true
+       GROUP BY g.month
+     )
+     UPDATE target_price_monthly t
+        SET tp_avg = calc.avg,
+            tp_min = calc.min,
+            tp_max = calc.max,
+            cover_securities = calc.cnt,
+            source = 'consensus-fill'
+       FROM calc
+      WHERE t.corp_code = $1
+        AND t.month = calc.month
+        AND calc.cnt >= 3`,
+    [corpCode],
+    db,
+  );
+  return res.rowCount ?? 0;
 }
 
 /** 분기 실적(quarter) + 연간 실적(accumulated Q4) + 컨센서스 추정치 저장. */
@@ -650,6 +706,7 @@ export async function ingestTargetsOnly(
     /* 커버리지 없음 */
   }
   const reports = await ingestNewReports(db, corpCode, feedPages);
+  await fillTargetMonthlyConsensus(db, corpCode);
   await query(
     "UPDATE companies SET detail_ingested_at = $1, has_consensus = $2, updated_at = $3 WHERE corp_code = $4",
     [now, reports > 0 || cover > 0 ? 1 : 0, now, corpCode],
