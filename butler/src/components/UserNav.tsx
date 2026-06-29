@@ -36,6 +36,7 @@ export default function UserNav() {
   return (
     <span style={{ display: "inline-flex", gap: 12, alignItems: "center" }}>
       {me.user.is_admin === 1 ? <Link href="/admin">관리자</Link> : null}
+      {me.user.is_admin === 1 ? <Link href="/admin/schedules">스케줄</Link> : null}
       <Link href="/watchlist">관심목록</Link>
       <Link href="/settings" className="muted" style={{ fontSize: 12 }}>
         {me.user.email}

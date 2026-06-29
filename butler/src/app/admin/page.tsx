@@ -16,6 +16,17 @@ export default async function AdminPage() {
 
   return (
     <>
+      <div className="toolbar" style={{ justifyContent: "space-between" }}>
+        <div className="toggle">
+          <Link href="/admin" className="btn" style={{ borderRadius: 0, boxShadow: "none" }}>
+            조회 로그
+          </Link>
+          <Link href="/admin/schedules" className="btn ghost" style={{ borderRadius: 0, boxShadow: "none" }}>
+            운영 스케줄
+          </Link>
+        </div>
+      </div>
+
       <div className="panel">
         <h2>
           관리자 <span className="sub">회사 조회 히스토리 · 브라우저 UUID 기준 사용자 관심도</span>
