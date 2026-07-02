@@ -380,16 +380,16 @@ async function candidates(
   if (options.corpCode) where.push(`corp_code = ${push(options.corpCode)}`);
   if (options.symbol) where.push(`stock_code = ${push(options.symbol.toUpperCase())}`);
   params.push(limit);
+  // 순수 라운드로빈: 한 번도 안 한(=NULL) 종목이 먼저, 그다음 가장 오래된 순.
+  // 이전엔 valuation 미완(per/pbr/dps 등 NULL)을 최우선으로 뒀는데, 무배당주·ADR은
+  // dps/dividend_yield 가 구조적으로 NULL 이라 매 회전 같은 종목만 재처리되고 나머지
+  // 유니버스(NYSE 중형주 등)가 영원히 안 걸리는 기아(starvation)가 있었다. valuation 은
+  // 어느 종목이든 처리될 때 함께 채워지므로, 스케줄은 신선도만 기준으로 돌린다.
   return all<NasdaqCandidate>(
     `SELECT corp_code, stock_code, price, target_price_avg
      FROM companies
      WHERE ${where.join(" AND ")}
      ORDER BY
-       CASE WHEN per IS NULL OR pbr IS NULL OR fper IS NULL OR bps IS NULL OR eps IS NULL OR dps IS NULL OR dividend_yield IS NULL
-            THEN 0 ELSE 1 END,
-       CASE WHEN per IS NULL OR pbr IS NULL OR fper IS NULL OR bps IS NULL OR eps IS NULL OR dps IS NULL OR dividend_yield IS NULL
-            THEN market_cap END DESC NULLS LAST,
-       CASE WHEN stockanalysis_estimates_at IS NULL THEN 0 ELSE 1 END,
        stockanalysis_estimates_at ASC NULLS FIRST,
        market_cap DESC NULLS LAST
      LIMIT $${params.length}`,
