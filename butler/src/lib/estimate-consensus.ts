@@ -1,7 +1,47 @@
 import { query, type Queryable } from "./db";
+import { logChange } from "./ingest";
 
 export type EstimateMetric = "REVENUE" | "OPERATING_PROFIT" | "NET_INCOME" | "EPS";
 export type EstimatePeriodType = "Q" | "A";
+
+/**
+ * 연간(E) 추정치가 의미 있게 바뀌면 변경 이력(change_logs)에 남긴다.
+ * - 연간만: 분기 추정 리비전은 노이즈가 커 헤드라인(연도별 E)만 기록한다.
+ * - ±1% 미만은 반올림/재계산 노이즈로 보고 건너뛴다.
+ */
+export async function logEstimateRevision(
+  db: Queryable,
+  input: {
+    corpCode: string;
+    provider: "fnguide" | "wisereport";
+    metric: EstimateMetric;
+    label: string;
+    fiscalYear: number;
+    periodType: EstimatePeriodType;
+    oldValue: number | null | undefined;
+    newValue: number | null | undefined;
+  },
+): Promise<void> {
+  if (input.periodType !== "A") return;
+  const oldValue = cleanEstimateNumber(input.oldValue);
+  const newValue = cleanEstimateNumber(input.newValue);
+  if (oldValue == null || newValue == null || oldValue === 0) return;
+  const deltaPct = ((newValue - oldValue) / Math.abs(oldValue)) * 100;
+  if (Math.abs(deltaPct) < 1) return;
+  const providerLabel = input.provider === "fnguide" ? "FnGuide" : "WiseReport";
+  await logChange(db, {
+    corp_code: input.corpCode,
+    entity_type: "estimate",
+    entity_key: `${providerLabel} ${input.fiscalYear}E ${input.label}`,
+    field: input.metric,
+    old_value: oldValue,
+    new_value: newValue,
+    delta: newValue - oldValue,
+    delta_pct: deltaPct,
+    change_kind: deltaPct > 0 ? "up" : "down",
+    note: `${providerLabel} ${input.fiscalYear}E ${input.label} 컨센서스 ${deltaPct > 0 ? "상향" : "하향"}`,
+  });
+}
 
 export interface EstimateConsensusInput {
   corpCode: string;

@@ -228,6 +228,7 @@ function labelEntity(t: string) {
       target_price: "목표주가",
       consensus_avg: "평균목표가",
       financial: "실적",
+      estimate: "추정치",
       valuation: "밸류",
       price: "주가",
       report: "리포트",

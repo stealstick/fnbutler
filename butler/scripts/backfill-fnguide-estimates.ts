@@ -9,8 +9,8 @@
  *   tsx scripts/backfill-fnguide-estimates.ts --stock 005930
  *   tsx scripts/backfill-fnguide-estimates.ts --limit 50
  */
-import { all, closeDb, getDb, migrate, nowIso, query, type Queryable } from "../src/lib/db";
-import { upsertEstimateConsensus } from "../src/lib/estimate-consensus";
+import { all, closeDb, getDb, migrate, nowIso, one, query, type Queryable } from "../src/lib/db";
+import { logEstimateRevision, upsertEstimateConsensus } from "../src/lib/estimate-consensus";
 import { sleep } from "../src/lib/butler";
 
 type Metric = "REVENUE" | "OPERATING_PROFIT" | "NET_INCOME" | "EPS";
@@ -196,6 +196,11 @@ export async function fetchFnGuideEstimates(stockCode: string): Promise<FnGuideE
 }
 
 async function upsertEstimate(db: Queryable, corpCode: string, row: FnGuideEstimateRow) {
+  const prev = await one<{ value: number }>(
+    "SELECT value FROM financials WHERE corp_code=$1 AND metric=$2 AND fiscal_year=$3 AND quarter=$4 AND period_type=$5 AND is_estimate=1 AND source='fnguide'",
+    [corpCode, row.metric, row.fiscalYear, row.quarter, row.periodType],
+    db,
+  );
   await query(
     `INSERT INTO financials
        (corp_code, metric, raw_label, fiscal_year, quarter, period_type, value, is_estimate, date_label, source)
@@ -218,6 +223,16 @@ async function upsertEstimate(db: Queryable, corpCode: string, row: FnGuideEstim
     dateLabel: row.dateLabel,
     source: "fnguide",
     updatedAt: nowIso(),
+  });
+  await logEstimateRevision(db, {
+    corpCode,
+    provider: "fnguide",
+    metric: row.metric,
+    label: row.label,
+    fiscalYear: row.fiscalYear,
+    periodType: row.periodType,
+    oldValue: prev?.value,
+    newValue: row.value,
   });
 }
 

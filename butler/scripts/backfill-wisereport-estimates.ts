@@ -9,8 +9,8 @@
  *   tsx scripts/backfill-wisereport-estimates.ts --stock 005930
  *   tsx scripts/backfill-wisereport-estimates.ts --limit 50
  */
-import { all, closeDb, getDb, migrate, nowIso, query, type Queryable } from "../src/lib/db";
-import { upsertEstimateConsensus } from "../src/lib/estimate-consensus";
+import { all, closeDb, getDb, migrate, nowIso, one, query, type Queryable } from "../src/lib/db";
+import { logEstimateRevision, upsertEstimateConsensus } from "../src/lib/estimate-consensus";
 import { sleep } from "../src/lib/butler";
 
 type Metric = "REVENUE" | "OPERATING_PROFIT" | "NET_INCOME";
@@ -205,6 +205,11 @@ export async function fetchWiseReportEstimates(stockCode: string): Promise<WiseE
 }
 
 async function upsertEstimate(db: Queryable, corpCode: string, row: WiseEstimateRow) {
+  const prev = await one<{ value: number }>(
+    "SELECT value FROM financials WHERE corp_code=$1 AND metric=$2 AND fiscal_year=$3 AND quarter=$4 AND period_type=$5 AND is_estimate=1 AND source='wisereport'",
+    [corpCode, row.metric, row.fiscalYear, row.quarter, row.periodType],
+    db,
+  );
   await query(
     `INSERT INTO financials
        (corp_code, metric, raw_label, fiscal_year, quarter, period_type, value, is_estimate, date_label, source)
@@ -227,6 +232,16 @@ async function upsertEstimate(db: Queryable, corpCode: string, row: WiseEstimate
     dateLabel: row.dateLabel,
     source: "wisereport",
     updatedAt: nowIso(),
+  });
+  await logEstimateRevision(db, {
+    corpCode,
+    provider: "wisereport",
+    metric: row.metric,
+    label: row.label,
+    fiscalYear: row.fiscalYear,
+    periodType: row.periodType,
+    oldValue: prev?.value,
+    newValue: row.value,
   });
 }
 

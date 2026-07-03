@@ -9,6 +9,7 @@ const FILTERS = [
   { k: "target_price", label: "목표주가" },
   { k: "consensus_avg", label: "평균목표가" },
   { k: "financial", label: "실적 QoQ/YoY" },
+  { k: "estimate", label: "추정치" },
 ];
 const KIND_FILTERS = [
   { k: "", label: "전체 방향" },
@@ -140,7 +141,7 @@ function S({ n, l }: { n: number; l: string }) {
 }
 function labelEntity(t: string) {
   return (
-    { target_price: "목표주가", consensus_avg: "평균목표가", financial: "실적", report: "리포트" } as Record<
+    { target_price: "목표주가", consensus_avg: "평균목표가", financial: "실적", estimate: "추정치", report: "리포트" } as Record<
       string,
       string
     >
