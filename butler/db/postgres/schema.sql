@@ -124,6 +124,22 @@ ALTER TABLE target_price_monthly ALTER COLUMN tp_avg TYPE DOUBLE PRECISION USING
 ALTER TABLE target_price_monthly ALTER COLUMN tp_min TYPE DOUBLE PRECISION USING tp_min::double precision;
 ALTER TABLE target_price_monthly ALTER COLUMN price TYPE DOUBLE PRECISION USING price::double precision;
 
+-- 과거 미국주 행이 'YYYY-MM' 포맷으로 저장돼 국내 'YY.MM'과 섞였다.
+-- 'YY.MM'으로 병합/정규화한다 (idempotent: 변환 후에는 매칭 행이 없다).
+INSERT INTO target_price_monthly (corp_code, month, full_date, tp_max, tp_avg, tp_min, price, cover_securities, return_ratio, source)
+SELECT corp_code, substr(month, 3, 2) || '.' || substr(month, 6, 2), full_date, tp_max, tp_avg, tp_min, price, cover_securities, return_ratio, source
+FROM target_price_monthly
+WHERE month ~ '^20[0-9]{2}-[0-9]{2}$'
+ON CONFLICT (corp_code, month) DO UPDATE SET
+  full_date = COALESCE(excluded.full_date, target_price_monthly.full_date),
+  tp_max = COALESCE(excluded.tp_max, target_price_monthly.tp_max),
+  tp_avg = COALESCE(excluded.tp_avg, target_price_monthly.tp_avg),
+  tp_min = COALESCE(excluded.tp_min, target_price_monthly.tp_min),
+  price = COALESCE(excluded.price, target_price_monthly.price),
+  cover_securities = COALESCE(excluded.cover_securities, target_price_monthly.cover_securities),
+  return_ratio = COALESCE(excluded.return_ratio, target_price_monthly.return_ratio);
+DELETE FROM target_price_monthly WHERE month ~ '^20[0-9]{2}-[0-9]{2}$';
+
 CREATE TABLE IF NOT EXISTS financials (
     corp_code   TEXT NOT NULL REFERENCES companies(corp_code),
     metric      TEXT NOT NULL,

@@ -24,6 +24,7 @@
     "backfill:seekingalpha-nasdaq-estimates": "tsx scripts/backfill-seekingalpha-nasdaq-estimates.ts",
     "backfill:yahoo-nasdaq-estimates": "tsx scripts/backfill-yahoo-nasdaq-estimates.ts",
     "backfill:stockanalysis-nasdaq-estimates": "tsx scripts/backfill-stockanalysis-nasdaq-estimates.ts",
+    "backfill:us-target-monthly": "tsx scripts/backfill-us-target-monthly.ts",
     "backfill:company-news": "tsx scripts/backfill-company-news.ts",
     "backfill:summaries": "tsx scripts/backfill-summaries.ts",
     "import:har": "tsx scripts/import-har.ts",

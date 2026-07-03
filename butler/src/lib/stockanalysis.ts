@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { all, nowIso, one, query, tx, type Queryable } from "./db";
 import { normalizeEstimateValue, upsertEstimateConsensus } from "./estimate-consensus";
-import { logChange } from "./ingest";
+import { fillTargetMonthlyConsensus, logChange } from "./ingest";
 import { fetchUsdKrwRate } from "./nasdaq";
 
 const STOCK_ANALYSIS_BASE = "https://stockanalysis.com/stocks";
@@ -661,7 +661,8 @@ async function upsertParsedForecast(
   valuationWrites += hasStats ? (companyRes.rowCount ?? 0) : 0;
 
   if (shouldUpdateTarget) {
-    const month = now.slice(0, 7);
+    // 국내(butler) 행과 동일한 'YY.MM' 포맷. (과거 'YYYY-MM' 행은 schema.sql 마이그레이션이 병합)
+    const month = now.slice(2, 7).replace("-", ".");
     const res = await query(
       `INSERT INTO target_price_monthly
          (corp_code, month, full_date, tp_max, tp_avg, tp_min, price, cover_securities, return_ratio, source)
@@ -697,6 +698,9 @@ async function upsertParsedForecast(
       reportWrites += await insertBrokerTarget(db, c, currentPrice, r);
     }
   }
+
+  // 축적된 브로커 리포트로 과거 달의 빈 tp_avg/min/max 를 채워 목표가선을 잇는다.
+  await fillTargetMonthlyConsensus(db, c.corp_code);
 
   return {
     writes: actualWrites + estimateWrites + valuationWrites + targetWrites + reportWrites,

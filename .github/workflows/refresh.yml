@@ -9,7 +9,7 @@ on:
         description: "refresh mode"
         type: choice
         default: full
-        options: [full, calendar-only, dart-financials, dart-2024-financials, dart-2025-financials, fnguide-estimates, wisereport-estimates, nasdaq-companies, fmp-nasdaq-estimates, seekingalpha-nasdaq-estimates, yahoo-nasdaq-estimates, stockanalysis-nasdaq-estimates, company-news]
+        options: [full, calendar-only, dart-financials, dart-2024-financials, dart-2025-financials, fnguide-estimates, wisereport-estimates, nasdaq-companies, fmp-nasdaq-estimates, seekingalpha-nasdaq-estimates, yahoo-nasdaq-estimates, stockanalysis-nasdaq-estimates, us-target-monthly, company-news]
       wait:
         description: "wait for job completion"
         type: boolean
@@ -90,6 +90,16 @@ jobs:
           fi
           if [ "$MODE" = "company-news" ]; then
             TARGET_JOB="$NEWS_JOB"
+          fi
+          if [ "$MODE" = "us-target-monthly" ]; then
+            US_TM_ARGS="tsx,scripts/backfill-us-target-monthly.ts"
+            if [ -n "$STOCKANALYSIS_LIMIT" ]; then
+              US_TM_ARGS="${US_TM_ARGS},--limit,${STOCKANALYSIS_LIMIT}"
+            fi
+            if [ -n "$STOCKANALYSIS_SYMBOL" ]; then
+              US_TM_ARGS="${US_TM_ARGS},--symbol,${STOCKANALYSIS_SYMBOL}"
+            fi
+            EXTRA_ARGS=(--args "$US_TM_ARGS")
           fi
           if [ "$MODE" = "dart-financials" ]; then
             EXTRA_ARGS=(--args tsx,scripts/backfill-dart-financials.ts,--latest)

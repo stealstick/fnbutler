@@ -43,6 +43,7 @@ Available modes:
 | `full` | `fnbutler-refresh` with the job's default args |
 | `calendar-only` | `fnbutler-calendar-refresh` |
 | `stockanalysis-nasdaq-estimates` | `fnbutler-stockanalysis-backfill`; supports `stockanalysis_limit`, `stockanalysis_symbol`, `stockanalysis_call_delay_ms`, `stockanalysis_jitter_ms` |
+| `us-target-monthly` | `fnbutler-refresh` with `scripts/backfill-us-target-monthly.ts` — one-shot 12-month US target-price chart backfill (Yahoo monthly closes + FMP price-target history when the plan allows); reuses `stockanalysis_limit`/`stockanalysis_symbol` inputs |
 | `dart-financials`, `dart-2024-financials`, `dart-2025-financials` | `fnbutler-refresh` with DART financial backfill args |
 | `fnguide-estimates` | `fnbutler-refresh` with FnGuide estimates backfill args |
 | `wisereport-estimates` | `fnbutler-refresh` with WiseReport estimates backfill args |
