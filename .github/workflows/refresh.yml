@@ -138,3 +138,12 @@ jobs:
             --region "$REGION" \
             "${EXTRA_ARGS[@]}" \
             $WAIT_FLAG
+
+          # wait 모드에서는 잡 stdout/stderr 를 워크플로 로그로 끌어와 원격 디버깅을 가능하게 한다.
+          if [ "$WAIT" = "true" ]; then
+            echo "===== Cloud Run job logs ($TARGET_JOB, last 15m) ====="
+            gcloud logging read \
+              "resource.type=cloud_run_job AND resource.labels.job_name=$TARGET_JOB" \
+              --project "$PROJECT" --freshness=15m --limit 300 \
+              --format 'value(textPayload)' | sed '/^$/d' | head -200 || true
+          fi
