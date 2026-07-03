@@ -47,8 +47,29 @@ function monthEndDate(d: Date): string {
   return end.toISOString().slice(0, 10);
 }
 
+/** StockAnalysis 월봉 종가 (1Y). 잡 환경(GCP)에서 Yahoo가 차단돼도 SA는 열려 있다. */
+async function fetchStockAnalysisMonthlyCloses(
+  symbol: string,
+): Promise<Array<{ month: string; fullDate: string; close: number }>> {
+  const url = `https://api.stockanalysis.com/api/symbol/s/${encodeURIComponent(symbol.toLowerCase())}/history?range=1Y&period=Monthly`;
+  const res = await fetch(url, { headers: UA });
+  if (!res.ok) throw new Error(`stockanalysis history ${symbol} HTTP ${res.status}`);
+  const data = (await res.json()) as { data?: Array<{ t?: string; c?: number | null }> };
+  const out: Array<{ month: string; fullDate: string; close: number }> = [];
+  for (const r of data.data ?? []) {
+    if (!r.t || r.c == null || !Number.isFinite(r.c)) continue;
+    const d = new Date(`${r.t}T00:00:00Z`);
+    if (Number.isNaN(d.getTime())) continue;
+    out.push({ month: monthKeyOf(d), fullDate: monthEndDate(d), close: r.c });
+  }
+  if (out.length === 0) throw new Error(`stockanalysis history ${symbol} empty`);
+  return out;
+}
+
 /** Yahoo 월봉 종가 (range=1y). 429는 백오프 후 재시도, 실패 시 query2 폴백. */
-async function fetchMonthlyCloses(symbol: string): Promise<Array<{ month: string; fullDate: string; close: number }>> {
+async function fetchYahooMonthlyCloses(
+  symbol: string,
+): Promise<Array<{ month: string; fullDate: string; close: number }>> {
   let lastErr: Error | null = null;
   for (const host of ["query1", "query2", "query1"]) {
     try {
@@ -80,6 +101,15 @@ async function fetchMonthlyCloses(symbol: string): Promise<Array<{ month: string
     }
   }
   throw lastErr ?? new Error(`yahoo ${symbol} failed`);
+}
+
+/** 월봉 종가: StockAnalysis 우선, 실패 시 Yahoo 폴백. */
+async function fetchMonthlyCloses(symbol: string): Promise<Array<{ month: string; fullDate: string; close: number }>> {
+  try {
+    return await fetchStockAnalysisMonthlyCloses(symbol);
+  } catch {
+    return fetchYahooMonthlyCloses(symbol);
+  }
 }
 
 interface FmpTargetNews {
