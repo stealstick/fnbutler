@@ -217,8 +217,11 @@ async function main() {
   const fmpKey = process.env.FMP_API_KEY || "";
   let fmpEnabled = Boolean(fmpKey) && !has("no-fmp");
 
+  // 주의: has_consensus 로 거르지 않는다 — 운영에서 미국주는 커버리지가 있어도
+  // has_consensus=0 인 행이 많다(플래그는 국내 butler ingest 기준). 주가선은 전
+  // 미국주에 필요하고, tp_* 는 어차피 브로커 3곳 이상일 때만 채워진다.
   const params: unknown[] = [];
-  const where = ["active = 1", "source = 'nasdaq'", "has_consensus = 1"];
+  const where = ["active = 1", "source = 'nasdaq'"];
   if (symbol) {
     params.push(symbol);
     where.push(`stock_code = $${params.length}`);
