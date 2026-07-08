@@ -37,6 +37,71 @@ keystone 는 `butler.works` 데이터를 자체 정규화 DB로 모아 기업/�
 | 알림 | Telegram Bot API |
 | 뉴스 | 국내 NAVER Search API, 미국 상장기업 StockAnalysis 기사 피드 |
 
+## 개발 규칙 (아키텍처·코드 관례)
+
+### 3계층 구조 — UI는 DB를 직접 만지지 않는다
+
+데이터 흐름은 항상 **클라이언트 컴포넌트 → API 라우트 → repo(데이터 계층)** 다.
+새 필터/컬럼/화면을 붙일 때 세 층을 함께 고친다(예: 시장 복수선택 = `companies/page.tsx`
++ `api/companies/route.ts` + `lib/repo.ts`).
+
+1. **클라이언트** `src/app/**/page.tsx` (`"use client"`)
+   - 필터·정렬·페이지 상태는 `useState`. `URLSearchParams` 를 만들어 `/api/*` 를 `fetch`.
+   - 조회는 `useCallback` 로 묶은 `load` 를 debounce(`setTimeout` ~200ms)로 호출하고,
+     필터가 바뀌면 `setPage(0)` 로 리셋한다.
+   - 필터 UI는 `globals.css` 공용 클래스(`.toolbar`, `.input`, `.toggle`, `.tab`)를 재사용한다.
+     복수 선택은 `.toggle` 버튼 그룹으로 만들고 **아무것도 안 고르면 전체** 규칙을 따른다.
+2. **API 라우트** `src/app/api/**/route.ts`
+   - 쿼리 파라미터를 파싱해 repo 의 `Opts` 객체로 넘기고 결과를 `NextResponse.json` 한다.
+     SQL·비즈니스 로직을 라우트에 두지 않는다.
+   - 다중 값 필터는 **콤마 구분** 규약: `market=KOSPI,NASDAQ`
+     → `sp.get("market")?.split(",").filter(Boolean)`.
+3. **데이터 계층** `src/lib/repo.ts` (+ `src/lib/db.ts`)
+   - 기업/섹터/컨센서스 SQL 은 전부 여기 모은다. 타입 계약은 `ListOpts`, `CompanyRow` 등.
+
+### DB 접근
+
+- 모든 쿼리는 `src/lib/db.ts` 헬퍼(`all` / `one` / `value` / `query` / `tx`)로. `pg` Pool
+  기반 async 이니 **`await` 필수**.
+- 값은 반드시 파라미터 바인딩. repo 안의 `push(v)` 헬퍼가 `$1,$2…` 를 만든다.
+  사용자 입력을 문자열로 이어붙이지 말 것.
+- 다중 값은 `IN (${vals.map((v) => push(v)).join(", ")})` 패턴.
+- 저장소는 Postgres 하나뿐(운영/로컬/유저·세션·관심목록·캘린더 전부). sqlite·DB 파일 굽기
+  흐름으로 되돌리지 말 것.
+
+### 표시/포맷
+
+- 숫자·통화·등락은 항상 `src/lib/format.ts`(`won`, `num`, `price`, `pct`, `signClass`).
+  즉석 포맷을 만들지 말 것.
+- UI 는 한국어. **상승=빨강, 하락=파랑**(한국식) — 색은 `signClass()` → `up`/`down`/`flat` 로 처리.
+
+### 타입·품질 게이트
+
+- TypeScript strict. `any` 로 때우지 말고 repo 타입을 확장한다(예: `ListOpts.market: string | string[]`).
+- 끝내기 전 `npx tsc --noEmit`(또는 `npm run build`) 통과 확인 + `npm run lint`(next lint).
+- 순수 로직(파싱, 코드 정규화, 성장률 계산)은 `src/lib/*.test.ts` 로 테스트를 붙인다
+  (`node:test` + `node:assert/strict`). 실행: `npx tsx --test src/lib/<x>.test.ts`.
+- 배포 게이트는 CI 의 Docker `next build`.
+
+### 배포 트리거
+
+- `main` 브랜치에 `butler/**`(단 `*.md` 제외) 변경을 push 하면 `.github/workflows/deploy.yml`
+  이 이미지 빌드 → DB 마이그레이션 → Cloud Run 배포까지 자동 수행한다.
+- **문서(`*.md`)만 바꾸면 배포가 트리거되지 않는다.**
+
+### 수집/배치
+
+- `tsx scripts/*` 로 돌리고 **멱등**하게: 피드는 아는 `report_id` 만나면 중단, 시세/값은 실제
+  변화가 있을 때만 UPDATE.
+
+### Git 작업 방침
+
+- 기본 브랜치는 `main`. PR 게이트가 없다. 작업이 끝나고 품질 게이트(`tsc`/`build` + `lint`)를
+  통과하면 **묻지 말고 `main` 에 바로 커밋·푸시**한다.
+- `butler/**`(단 `*.md` 제외) 변경을 push 하면 배포가 트리거되므로, 코드 변경은 게이트
+  통과를 확인한 뒤 커밋한다. 문서(`*.md`)만 바꾸면 배포는 안 돈다.
+- 커밋 메시지는 관련 변경을 한 커밋으로 묶고, 끝에 `Co-Authored-By` 트레일러를 붙인다.
+
 ## 주요 명령
 
 ```bash
